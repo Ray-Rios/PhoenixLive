@@ -1,0 +1,26 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Weltmeister Level Editor</title>
+  <link rel="stylesheet" href="lib/weltmeister/weltmeister.css">
+  <script src="lib/impact/impact.js"></script>
+  <script src="lib/impact/impact-debug.js"></script>
+  <script src="lib/impact/impact-animation.js"></script>
+  <script src="lib/impact/impact-entity.js"></script>
+
+  <!-- Weltmeister Core -->
+  <script src="lib/weltmeister/config.js"></script>
+  <script src="lib/weltmeister/api.js"></script>
+  <script src="lib/weltmeister/level.js"></script>
+  <script src="lib/weltmeister/main.js"></script>
+</head>
+<body>
+  <div id="wm-container"></div>
+  <script>
+    window.onload = function() {
+      wm.init('wm-container');
+    }
+  </script>
+</body>
+</html>
