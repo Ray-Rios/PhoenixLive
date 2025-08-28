@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Quest Level Editor</title>
+    <script src="/impact/lib/impact/impact.js"></script>
+    <script src="/impact/lib/weltmeister/weltmeister.js"></script>
+    <link rel="stylesheet" href="/impact/lib/weltmeister/weltmeister.css">
+  </head>
+  <body>
+    <div id="weltmeister-container"></div>
+    <script>
+      // Initialize Weltmeister
+      window.onload = function() {
+        WM.init({
+          canvas: document.getElementById('weltmeister-container'),
+          gameFolder: '/impact/',
+          levelFolder: '/impact/levels/'
+        });
+      };
+    </script>
+  </body>
+</html>

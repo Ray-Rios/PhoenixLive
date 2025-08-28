@@ -1,0 +1,83 @@
+# Sensitive configuration files
+.env
+.env.local
+.env.production
+config/dev.secret.exs
+config/prod.secret.exs
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated secrets
+priv/cert/
+priv/static/assets/
+
+# Logs
+*.log
+logs/
+log/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+deps/
+_build/
+
+# Coverage directory used by tools like istanbul
+coverage/
+cover/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Elixir releases
+_build/
+deps/
+*.ez
+
+# Phoenix artifacts
+priv/static/assets/
+priv/static/cache_manifest.json
+
+# Temporary files
+tmp/
+temp/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# SSL certificates (if storing locally)
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+
+# Config files with secrets
+config/runtime.exs.backup

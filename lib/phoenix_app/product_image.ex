@@ -1,0 +1,36 @@
+defmodule PhoenixApp.ProductImage do
+  use Arc.Definition
+  use Arc.Ecto.Definition
+
+  @versions [:original, :thumb, :medium]
+  @extension_whitelist ~w(.jpg .jpeg .gif .png .webp)
+
+  def validate({file, _}) do
+    file_extension = file.file_name |> Path.extname() |> String.downcase()
+    Enum.member?(@extension_whitelist, file_extension)
+  end
+
+  def transform(:thumb, _) do
+    {:convert, "-strip -thumbnail 150x150^ -gravity center -extent 150x150 -format png", :png}
+  end
+
+  def transform(:medium, _) do
+    {:convert, "-strip -resize 400x400> -format png", :png}
+  end
+
+  def filename(version, {_file, scope}) do
+    "#{scope.id}_#{version}"
+  end
+
+  def storage_dir(_version, {_file, scope}) do
+    "uploads/products/#{scope.id}"
+  end
+
+  def default_url(:thumb) do
+    "/images/default_product.png"
+  end
+
+  def default_url(_version) do
+    "/images/default_product.png"
+  end
+end
