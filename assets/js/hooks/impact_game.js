@@ -5,7 +5,6 @@ Hooks.ImpactGame = {
     const canvas = this.el;
     this.players = JSON.parse(canvas.dataset.players);
     this.currentPlayerId = canvas.dataset.currentPlayer;
-    this.levelPath = canvas.dataset.level.replace("/impact/levels/", "").replace(".js", "");
 
     const jumpVelocity = -10;
     const gravity = 0.5;
@@ -13,12 +12,21 @@ Hooks.ImpactGame = {
     const floorY = 584;
     const playerRadius = 8;
 
+
+    const rawLevel = canvas.dataset.level;
+    if (rawLevel) {
+      this.levelPath = rawLevel.replace("/impact/levels/", "").replace(".js", "");
+    } else {
+      console.warn("No data-level provided on canvas, using default");
+      this.levelPath = "default"; // safe fallback
+    }
+
     // Track chat messages with timestamps
     this.chatMessages = {};
 
     // Initialize ImpactJS game
     ig.module('game.main')
-      .requires('impact.game', 'impact.entities', 'impact.levels.' + this.levelPath)
+      .requires('impact.game', 'impact.entities', 'impact.levels.' + levelPath)
       .defines(() => {
         MyGame = ig.Game.extend({
           players: this.players,

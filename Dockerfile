@@ -1,4 +1,4 @@
-FROM elixir:1.15.7-otp-26
+FROM elixir:latest
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -47,6 +47,7 @@ RUN mix deps.get
 WORKDIR /app/assets
 RUN npm install
 RUN npm install @tailwindcss/forms --save-dev
+RUN npx update-browserslist-db@latest
 
 # Build frontend assets
 WORKDIR /app

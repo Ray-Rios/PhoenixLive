@@ -22,11 +22,6 @@ defmodule PhoenixAppWeb.PageLive.Index do
     |> assign(page_title: "New Page")
   end
 
-  defp apply_action(socket, :edit, %{"id" => id}) do
-    socket
-    |> assign(page_title: "Edit Page")
-  end
-
   def render(assigns) do
     ~H"""
     <div class="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">

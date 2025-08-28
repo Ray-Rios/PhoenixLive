@@ -1,13 +1,10 @@
 defmodule PhoenixAppWeb.Router do
   use PhoenixAppWeb, :router
   import Phoenix.LiveView.Router
-  import PhoenixAppWeb.UserAuth
 
-  #
   # --------------------
   # Browser Pipeline
   # --------------------
-  #
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -17,27 +14,16 @@ defmodule PhoenixAppWeb.Router do
     plug :put_secure_browser_headers
   end
 
-  #
-  # --------------------
-  # Admin Pipeline
-  # --------------------
-  #
-  pipeline :admin do
-    plug :browser
-    plug PhoenixAppWeb.UserAuth, :require_admin
-  end
-
-  #
   # --------------------
   # Public LiveViews
   # --------------------
-  #
   scope "/", PhoenixAppWeb do
     pipe_through :browser
 
     live_session :browser,
       on_mount: {PhoenixAppWeb.UserAuth, :default},
       session: %{} do
+
       live "/", HomeLive, :index
       live "/login", AuthLive, :login
       live "/register", AuthLive, :register
@@ -64,14 +50,13 @@ defmodule PhoenixAppWeb.Router do
     end
   end
 
-  #
   # --------------------
   # Authenticated LiveViews
   # --------------------
-  #
   live_session :authenticated,
     on_mount: {PhoenixAppWeb.UserAuth, :require_authenticated_user},
     session: %{} do
+
     scope "/", PhoenixAppWeb do
       pipe_through :browser
 
@@ -85,11 +70,9 @@ defmodule PhoenixAppWeb.Router do
     end
   end
 
-  #
   # --------------------
   # Auth Controller Actions (non-Live)
   # --------------------
-  #
   scope "/", PhoenixAppWeb do
     pipe_through :browser
 
@@ -100,17 +83,16 @@ defmodule PhoenixAppWeb.Router do
     post "/auth/2fa/setup", AuthController, :setup_2fa
   end
 
-  #
   # --------------------
   # Admin LiveViews
   # --------------------
-  #
   scope "/admin", PhoenixAppWeb do
-    pipe_through [:browser, :admin]
+    pipe_through :browser
 
     live_session :admin,
       on_mount: {PhoenixAppWeb.UserAuth, :require_admin_user},
       session: %{} do
+
       live "/", AdminDashboardLive, :index
       live "/users", AdminUserLive, :index
       live "/users/:id", AdminUserLive, :show
@@ -127,11 +109,9 @@ defmodule PhoenixAppWeb.Router do
     put "/levels/:name", PageController, :save_level
   end
 
-  #
   # --------------------
   # Quest Level Editor
   # --------------------
-  #
   scope "/", PhoenixAppWeb do
     pipe_through :browser
 

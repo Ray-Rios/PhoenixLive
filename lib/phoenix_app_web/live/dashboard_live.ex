@@ -4,7 +4,8 @@ defmodule PhoenixAppWeb.DashboardLive do
   
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
   
-  defp get_csrf_token, do: csrf_token_value()
+  
+  defp _get_csrf_token, do: csrf_token_value()
 
   def mount(_params, _session, socket) do
     current_user = socket.assigns[:current_user]
@@ -62,7 +63,7 @@ defmodule PhoenixAppWeb.DashboardLive do
                 </div>
                 <h3 class="text-xl font-bold text-white mb-2"><%= title %></h3>
                 <p class="text-gray-300 mb-4"><%= desc %></p>
-                <.link navigate={~p(/path)} class={"bg-#{color}-600 hover:bg-#{color}-700 text-white px-4 py-2 rounded-lg transition-colors duration-300"}>
+                <.link navigate={~p(/blog)} class={"bg-#{color}-600 hover:bg-#{color}-700 text-white px-4 py-2 rounded-lg transition-colors duration-300"}>
                   <%= if title == "Blog", do: "Read Blog", else: "Go" %>
                 </.link>
               </div>

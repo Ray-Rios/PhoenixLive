@@ -199,13 +199,4 @@ defmodule PhoenixAppWeb.BlogLive do
     </script>
     """
   end
-
-  defp format_content(content) do
-    content
-    |> String.replace("\n", "<br>")
-    |> String.replace("**", "<strong>", global: false)
-    |> String.replace("**", "</strong>", global: false)
-    |> String.replace("*", "<em>", global: false)
-    |> String.replace("*", "</em>", global: false)
-  end
 end

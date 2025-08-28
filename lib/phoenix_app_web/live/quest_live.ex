@@ -138,7 +138,7 @@ defmodule PhoenixAppWeb.QuestLive do
           const levelPath = canvas.dataset.level;
 
         ig.module('game.main')
-          .requires('impact.game','impact.entities','impact.levels.' + this.levelPath)
+          .requires('impact.game','impact.entities','impact.levels.' + levelPath)
           .defines(function(){
             MyGame = ig.Game.extend({
               players: players,
