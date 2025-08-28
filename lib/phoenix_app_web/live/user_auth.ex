@@ -7,7 +7,6 @@ defmodule PhoenixAppWeb.UserAuth do
   import Phoenix.LiveView
 
   alias PhoenixApp.Accounts
-  alias PhoenixAppWeb.Router.Helpers, as: Routes
 
   @doc """
   LiveView `on_mount` hook.
@@ -28,7 +27,7 @@ defmodule PhoenixAppWeb.UserAuth do
     if socket.assigns.current_user do
       {:cont, socket}
     else
-      {:halt, push_navigate(socket, to: Routes.auth_path(socket, :login))}
+      {:halt, push_navigate(socket, to: "/login")}
     end
   end
 
@@ -37,14 +36,28 @@ defmodule PhoenixAppWeb.UserAuth do
 
     cond do
       socket.assigns.current_user == nil ->
-        {:halt, push_navigate(socket, to: Routes.auth_path(socket, :login))}
+        {:halt, push_navigate(socket, to: "/login")}
 
       not socket.assigns.current_user.is_admin ->
-        {:halt, push_navigate(socket, to: Routes.page_path(socket, :index))}
+        {:halt, push_navigate(socket, to: "/")}
 
       true ->
         {:cont, socket}
     end
+  end
+
+  @doc """
+  Logs out the current user from a LiveView.
+
+  - Clears `:user_id` from the session
+  - Removes `:current_user`
+  - Redirects to `/login`
+  """
+  def logout(socket) do
+    socket
+    |> Phoenix.LiveView.push_event("clear-session", %{}) # JS hook can clear local storage if used
+    |> assign(:current_user, nil)
+    |> Phoenix.LiveView.push_navigate(to: "/login")
   end
 
   # --- Helpers ---

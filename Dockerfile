@@ -19,6 +19,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
 RUN mix local.hex --force && \
     mix local.rebar --force
 
+# Install PowerShell
+RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" -O packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb \
+    && apt-get update \
+    && apt-get install -y powershell \
+    && rm packages-microsoft-prod.deb
+
+
 # Set working directory
 WORKDIR /app
 
@@ -35,14 +43,23 @@ RUN chmod +x /usr/local/bin/start.sh
 # Install dependencies (this will generate mix.lock)
 RUN mix deps.get
 
+# Install frontend dependencies (npm)
+WORKDIR /app/assets
+RUN npm install
+RUN npm install @tailwindcss/forms --save-dev
+
+# Build frontend assets
+WORKDIR /app
+RUN npm run --prefix ./assets build
+
 # Create necessary directories
 RUN mkdir -p priv/static/assets
 
-# Copy assets over
-COPY assets priv/static/assets
-
 # Compile the application
 RUN mix compile
+
+# Build frontend assets (JS/CSS) into priv/static
+RUN mix assets.build
 
 # Expose ports
 EXPOSE 4000

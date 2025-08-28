@@ -18,7 +18,7 @@ Hooks.ImpactGame = {
 
     // Initialize ImpactJS game
     ig.module('game.main')
-      .requires('impact.game', 'impact.entities', 'impact.levels.' + levelPath)
+      .requires('impact.game', 'impact.entities', 'impact.levels.' + this.levelPath)
       .defines(() => {
         MyGame = ig.Game.extend({
           players: this.players,

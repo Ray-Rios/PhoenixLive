@@ -28,6 +28,10 @@ mix ecto.create
 echo "Running migrations..."
 mix ecto.migrate
 
+# Build assets using npm/Tailwind
+echo "Building assets..."
+npm run --prefix ./assets build
+
 # Start the Phoenix server
 echo "Starting Phoenix server..."
-exec mix phx.server
+mix phx.server
