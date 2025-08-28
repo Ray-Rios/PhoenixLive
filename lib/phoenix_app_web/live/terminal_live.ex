@@ -107,52 +107,34 @@ defmodule PhoenixAppWeb.TerminalLive do
 
   @impl true
   def render(assigns) do
-    ~H"""
-    <div class="terminal-container" style="font-family: monospace; color: lime; background: black; padding: 1rem; min-height: 80vh;">
-      <h3><%= @page_title %></h3>
+  ~H"""
+  <div id="terminal-container" class="terminal-container">
+    <!-- Terminal Output -->
+    <pre id="terminal-output" class="terminal-output">
+      <%= for line <- @output do %>
+        <%= line %>
+      <% end %>
+    </pre>
 
-      <div id="terminal-output" style="overflow-y: auto; max-height: 60vh; margin-bottom: 1rem;">
-        <%= for line <- @output do %>
-          <div><%= line %></div>
-        <% end %>
-      </div>
+    <!-- Terminal Input -->
+    <form id="terminal-form" phx-submit="execute_command" class="terminal-input-form">
+      <input
+        id="terminal-input"
+        phx-change="update_input"
+        phx-hook="TerminalInputHook"
+        type="text"
+        name="command"
+        value={@input}
+        autocomplete="off"
+        autofocus
+      />
+    </form>
 
-      <form phx-submit="execute_command" phx-change="update_input" autocomplete="off">
-        <span>PS&gt; </span>
-        <input type="text"
-               name="command"
-               value={@input}
-               phx-hook="TerminalHooks"
-               autofocus
-               style="background: black; color: lime; border: none; width: 70%;"/>
-        <button type="submit">Run</button>
-        <button type="button" phx-click="clear_terminal">Clear</button>
-      </form>
+    <!-- Terminal Controls -->
+    <div id="terminal-controls" class="terminal-controls">
+      <button type="button" phx-click="clear_terminal">Clear</button>
     </div>
-
-    <script>
-      // Scroll terminal to bottom on update
-      let outputDiv = document.getElementById("terminal-output")
-      const observer = new MutationObserver(() => { outputDiv.scrollTop = outputDiv.scrollHeight })
-      observer.observe(outputDiv, { childList: true })
-
-      // Arrow key support via phx-hook
-      let hooks = {}
-      hooks.TerminalHooks = {
-        mounted() {
-          this.el.addEventListener("keydown", e => {
-            if (e.key === "ArrowUp") {
-              e.preventDefault()
-              this.pushEvent("history_up", {})
-            } else if (e.key === "ArrowDown") {
-              e.preventDefault()
-              this.pushEvent("history_down", {})
-            }
-          })
-        }
-      }
-      window.TerminalHooks = hooks
-    </script>
-    """
+  </div>
+  """
   end
 end
