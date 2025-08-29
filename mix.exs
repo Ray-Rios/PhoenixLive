@@ -63,7 +63,8 @@ defmodule PhoenixApp.MixProject do
       # Caching
       {:cachex, "~> 3.4"},
       # Additional utilities
-      {:uuid, "~> 1.1"}
+      {:uuid, "~> 1.1"},
+      {:bcrypt_elixir, "~> 3.0"}
     ]
   end
 

@@ -1,8 +1,14 @@
 defmodule PhoenixApp.Accounts do
   alias PhoenixApp.Repo
   alias PhoenixApp.Accounts.User
-  import Ecto.Changeset
-  import Comeonin.Bcrypt, only: [hashpwsalt: 1, checkpw: 2]
+  alias Bcrypt
+   
+   # ---------------------
+   # Get User by id
+   # ---------------------
+   def get_user(id) when is_binary(id) do
+    Repo.get(User, id)
+  end
 
   # ---------------------
   # Register a new user
@@ -24,6 +30,6 @@ defmodule PhoenixApp.Accounts do
   # Check user password
   # ---------------------
   def check_password(%User{password_hash: hash}, password) when is_binary(password) do
-    checkpw(password, hash)
+    Bcrypt.verify_pass(password, hash)
   end
 end

@@ -1,61 +1,7 @@
 defmodule PhoenixApp.Accounts.User do
-  alias PhoenixApp.Repo
-  alias PhoenixApp.Accounts.User
   use Ecto.Schema
   import Ecto.Changeset
-  import Comeonin.Bcrypt, only: [hashpwsalt: 1, checkpw: 2]
-
-  schema "users" do
-    field :email, :string
-    field :name, :string
-    field :password_hash, :string
-    field :password, :string, virtual: true
-    field :is_admin, :boolean, default: false
-
-    timestamps()
-  end
-
-  # ---------------------
-  # Registration changeset
-  # ---------------------
-  def registration_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:email, :name, :password])
-    |> validate_required([:email, :password])
-    |> unique_constraint(:email)
-    |> put_password_hash()
-  end
-
-  defp put_password_hash(changeset) do
-    if pwd = get_change(changeset, :password) do
-      put_change(changeset, :password_hash, Comeonin.Bcrypt.hashpwsalt(pwd))
-    else
-      changeset
-    end
-  end
-
-  # ---------------------
-  # Register a new user
-  # ---------------------
-  def register_user(attrs) do
-    %User{}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
-  end
-
-  # ---------------------
-  # Get user by email
-  # ---------------------
-  def get_user_by_email(email) when is_binary(email) do
-    Repo.get_by(User, email: email)
-  end
-
-  # ---------------------
-  # Check user password
-  # ---------------------
-  def check_password(%User{password_hash: hash}, password) when is_binary(password) do
-    checkpw(password, hash)
-  end
+  alias Comeonin.Bcrypt
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -87,140 +33,19 @@ defmodule PhoenixApp.Accounts.User do
     timestamps(type: :utc_datetime)
   end
 
-  def changeset(user, attrs) do
+  def registration_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :password, :name, :avatar_shape, :avatar_color, :status])
-    |> put_name_from_email()
-    |> validate_required([:email, :password, :name])
-    |> validate_email()
-    |> validate_password()
-    |> validate_length(:name, min: 1, max: 20)
-    |> validate_inclusion(:status, ["active", "disabled"])
-    |> maybe_hash_password()
-  end
-
-  def profile_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:name, :avatar_shape, :avatar_color, :avatar_url])
-    |> cast_attachments(attrs, [:avatar_file])
-    |> validate_required([:name])
-    |> validate_length(:name, min: 1, max: 20)
-  end
-
-  def password_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:password])
-    |> validate_required([:password])
-    |> validate_confirmation(:password, message: "does not match password")
-    |> validate_password()
-    |> maybe_hash_password()
-  end
-
-  def two_factor_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:two_factor_secret, :two_factor_enabled, :two_factor_backup_codes])
-  end
-
-  def position_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:position_x, :position_y])
-    |> validate_number(:position_x, greater_than_or_equal_to: 0)
-    |> validate_number(:position_y, greater_than_or_equal_to: 0)
-  end
-
-  def admin_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:is_admin, :status])
-    |> validate_inclusion(:status, ["active", "disabled"])
-  end
-
-  def confirm_changeset(user) do
-    user
-    |> change(confirmed_at: DateTime.utc_now() |> DateTime.truncate(:second))
-  end
-
-  def avatar_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:avatar_shape, :avatar_color])
-    |> validate_required([:avatar_shape, :avatar_color])
-  end
-
-  def online_changeset(user, is_online) do
-    user
-    |> change(is_online: is_online, last_activity: DateTime.utc_now())
-  end
-
-  defp put_name_from_email(changeset) do
-    case get_change(changeset, :name) do
-      nil ->
-        email = get_change(changeset, :email) || get_field(changeset, :email)
-        if email, do: put_change(changeset, :name, email), else: changeset
-      _ -> changeset
-    end
-  end
-
-  defp validate_email(changeset) do
-    changeset
-    |> validate_required([:email])
-    |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/, message: "must have the @ sign and no spaces")
-    |> validate_length(:email, max: 160)
-    |> unsafe_validate_unique(:email, PhoenixApp.Repo)
+    |> cast(attrs, [:email, :name, :password])
+    |> validate_required([:email, :password])
     |> unique_constraint(:email)
+    |> put_password_hash()
   end
 
-  defp validate_password(changeset) do
-    changeset
-    |> validate_required([:password])
-    |> validate_length(:password, min: 8, max: 72)
-    |> validate_format(:password, ~r/[a-z]/, message: "at least one lower case character")
-    |> validate_format(:password, ~r/[A-Z]/, message: "at least one upper case character")
-    |> validate_format(:password, ~r/[!?@#$%^&*_0-9]/, message: "at least one digit or punctuation character")
-  end
-
-  defp maybe_hash_password(changeset) do
-    password = get_change(changeset, :password)
-
-    if password && changeset.valid? do
-      changeset
-      |> validate_length(:password, min: 8, max: 72)
-      |> put_change(:password_hash, Bcrypt.hash_pwd_salt(password))
-      |> delete_change(:password)
+  defp put_password_hash(changeset) do
+    if pwd = get_change(changeset, :password) do
+      put_change(changeset, :password_hash, Bcrypt.hash_pwd_salt(pwd))
     else
       changeset
-    end
-  end
-
-  def valid_password?(%PhoenixApp.Accounts.User{password_hash: password_hash}, password)
-      when is_binary(password_hash) and byte_size(password) > 0 do
-    Bcrypt.verify_pass(password, password_hash)
-  end
-
-  def valid_password?(_, _) do
-    Bcrypt.no_user_verify()
-    false
-  end
-
-  def validate_current_password(changeset, password) do
-    if valid_password?(changeset.data, password) do
-      changeset
-    else
-      add_error(changeset, :current_password, "is not valid")
-    end
-  end
-
-  def generate_two_factor_secret do
-    :pot.hotp_secret_base32()
-  end
-
-  def generate_backup_codes do
-    for _ <- 1..10, do: :crypto.strong_rand_bytes(8) |> Base.encode32(padding: false)
-  end
-
-  def verify_two_factor_token(user, token) do
-    if user.two_factor_enabled and user.two_factor_secret do
-      :pot.valid_totp(token, user.two_factor_secret, window: 1)
-    else
-      false
     end
   end
 end
