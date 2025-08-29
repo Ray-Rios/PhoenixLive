@@ -133,7 +133,7 @@ defmodule PhoenixAppWeb.Router do
   end
 
   # --------------------
-  # Unreal Game API System
+  # Game API System - login/register and profile creation
   # --------------------
   scope "/api/game", PhoenixAppWeb do
     pipe_through :api

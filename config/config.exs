@@ -1,5 +1,7 @@
 import Config
 
+config :elixir, :time_zone_database, Tz.TimeZoneDatabase
+
 config :phoenix_app,
   ecto_repos: [PhoenixApp.Repo],
   generators: [timestamp_type: :utc_datetime]

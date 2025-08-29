@@ -8,7 +8,11 @@ defmodule PhoenixAppWeb.GameAuthController do
   def login(conn, %{"email" => email, "password" => password}) do
     case Accounts.authenticate_user(email, password) do
       {:ok, user} ->
-        {:ok, token} = GameAuth.generate_jwt(user)
+        case GameAuth.generate_jwt(user) do
+          {:ok, token, _claims} -> {user, token}
+          {:ok, token} -> {user, token}  # Fallback for different return format
+          {:error, error} -> {:error, error}
+        end
         
         conn
         |> put_status(:ok)
@@ -18,7 +22,7 @@ defmodule PhoenixAppWeb.GameAuthController do
           user: %{
             id: user.id,
             email: user.email,
-            game_username: user.name || user.email,  # Use 'name' field
+            game_username: user.name || user.email,
             avatar_shape: user.avatar_shape,
             avatar_color: user.avatar_color
           }
@@ -37,15 +41,28 @@ defmodule PhoenixAppWeb.GameAuthController do
     user_params = %{
       email: email,
       password: password,
-      name: game_username,  # Use 'name' field instead of 'game_username'
+      name: game_username,
       avatar_shape: Map.get(params, "avatar_shape", "circle"),
       avatar_color: Map.get(params, "avatar_color", "#3B82F6")
     }
     
-    case Accounts.create_user(user_params) do
-      {:ok, user} ->
-        {:ok, token} = GameAuth.generate_jwt(user)
-        
+    # Wrap in transaction to prevent partial creates
+    result = PhoenixApp.Repo.transaction(fn ->
+      case Accounts.create_user(user_params) do
+        {:ok, user} ->
+          case GameAuth.generate_jwt(user) do
+            {:ok, token} ->
+              {user, token}
+            {:error, jwt_error} ->
+              PhoenixApp.Repo.rollback({:jwt_error, jwt_error})
+          end
+        {:error, changeset} ->
+          PhoenixApp.Repo.rollback({:user_error, changeset})
+      end
+    end)
+    
+    case result do
+      {:ok, {user, token}} ->
         conn
         |> put_status(:created)
         |> json(%{
@@ -54,18 +71,26 @@ defmodule PhoenixAppWeb.GameAuthController do
           user: %{
             id: user.id,
             email: user.email,
-            game_username: user.name,  # Use 'name' field
+            game_username: user.name,
             avatar_shape: user.avatar_shape,
             avatar_color: user.avatar_color
           }
         })
         
-      {:error, changeset} ->
+      {:error, {:user_error, changeset}} ->
         conn
         |> put_status(:unprocessable_entity)
         |> json(%{
           success: false,
           errors: format_changeset_errors(changeset)
+        })
+        
+      {:error, {:jwt_error, jwt_error}} ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          success: false,
+          error: "Failed to generate authentication token"
         })
     end
   end
@@ -80,11 +105,16 @@ defmodule PhoenixAppWeb.GameAuthController do
             |> json(%{success: false, error: "User not found"})
             
           user ->
-            {:ok, new_token} = GameAuth.generate_jwt(user)
-            
-            conn
-            |> put_status(:ok)
-            |> json(%{success: true, token: new_token})
+            case GameAuth.generate_jwt(user) do
+              {:ok, new_token} ->
+                conn
+                |> put_status(:ok)
+                |> json(%{success: true, token: new_token})
+              {:error, _jwt_error} ->
+                conn
+                |> put_status(:internal_server_error)
+                |> json(%{success: false, error: "Failed to generate authentication token"})
+            end
         end
         
       {:error, _reason} ->
