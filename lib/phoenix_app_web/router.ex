@@ -15,6 +15,20 @@ defmodule PhoenixAppWeb.Router do
   end
 
   # --------------------
+  # API Pipeline
+  # --------------------
+  pipeline :api do
+    plug :accepts, ["json"]
+  end
+
+  # --------------------
+  # Game Auth Pipeline
+  # --------------------
+  pipeline :game_auth do
+    plug PhoenixAppWeb.Plugs.GameAuthPlug
+  end
+
+  # --------------------
   # Public LiveViews
   # --------------------
   scope "/", PhoenixAppWeb do
@@ -116,5 +130,28 @@ defmodule PhoenixAppWeb.Router do
     pipe_through :browser
 
     get "/quest/editor", QuestController, :editor
+  end
+
+  # --------------------
+  # Unreal Game API System
+  # --------------------
+  scope "/api/game", PhoenixAppWeb do
+    pipe_through :api
+
+    # Game Authentication (public endpoints)
+    post "/login", GameAuthController, :login
+    post "/register", GameAuthController, :register
+    post "/refresh_token", GameAuthController, :refresh_token
+  
+    # Protected game routes (require JWT)
+    pipe_through :game_auth
+  
+    # Player Data
+    get "/player/profile", GamePlayerController, :profile
+    put "/player/profile", GamePlayerController, :update_profile
+    get "/player/avatar", GamePlayerController, :avatar
+    put "/player/avatar", GamePlayerController, :update_avatar
+    get "/player/stats", GamePlayerController, :stats
+    put "/player/stats", GamePlayerController, :update_stats
   end
 end
