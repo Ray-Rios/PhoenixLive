@@ -1,107 +1,107 @@
 defmodule PhoenixAppWeb.AuthLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
+  import Phoenix.LiveView.Helpers
 
+  # ----------------
+  # Mount
+  # ----------------
   def mount(_params, session, socket) do
-    # Check if user is already logged in via session
-    current_user = case session["user_id"] do
-      nil -> nil
-      user_id -> Accounts.get_user(user_id)
-    end
-    
-    if current_user do
-      {:ok, redirect(socket, to: ~p"/dashboard")}
-    else
-      {:ok, assign(socket, form: to_form(%{}, as: "user"), errors: [], current_user: nil)}
-    end
+    current_user = maybe_fetch_user(session["user_id"])
+
+    {:ok,
+     assign(socket,
+       current_user: current_user,
+       form: to_form(%{}, as: "user"),
+       errors: [],
+       action: :login
+     )}
   end
 
+  # ----------------
+  # Handle URL params
+  # ----------------
   def handle_params(_params, uri, socket) do
-    action = case URI.parse(uri).path do
-      "/register" -> :register
-      "/login" -> :login
-      _ -> :login
-    end
-    
-    page_title = case action do
-      :register -> "Register"
-      :login -> "Sign In"
-    end
-    
+    action =
+      case URI.parse(uri).path do
+        "/register" -> :register
+        "/login" -> :login
+        _ -> :login
+      end
+
+    page_title = if action == :login, do: "Sign In", else: "Register"
+
     {:noreply, assign(socket, action: action, page_title: page_title)}
   end
 
+  # ----------------
+  # Handle submit
+  # ----------------
   def handle_event("submit", %{"user" => user_params}, socket) do
     case socket.assigns.action do
-      :login -> handle_login(user_params, socket)
-      :register -> handle_register(user_params, socket)
+      :login -> do_login(socket, user_params)
+      :register -> do_register(socket, user_params)
     end
   end
 
-  defp handle_login(%{"email" => email, "password" => password}, socket) do
+  # ----------------
+  # Login
+  # ----------------
+  defp do_login(socket, %{"email" => email, "password" => password} = _params) do
     case Accounts.authenticate_user(email, password) do
       {:ok, user} ->
-        # Redirect to a controller action that can set the session
         {:noreply,
          socket
          |> put_flash(:info, "Welcome back, #{user.email}!")
          |> redirect(external: "/auth/login_success?user_id=#{user.id}")}
 
-      {:error, :invalid_credentials} ->
+      {:error, _reason} ->
+        # Preserve entered email, clear password
+        form = to_form(%{"email" => email}, as: "user")
+
         {:noreply,
          socket
          |> put_flash(:error, "Invalid email or password")
-         |> assign(errors: ["Invalid email or password"])}
-         
-      {:error, :invalid_email} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Invalid email or password")
-         |> assign(errors: ["Invalid email or password"])}
-         
-      {:error, :invalid_password} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Invalid email or password")
-         |> assign(errors: ["Invalid email or password"])}
-         
-      {:error, :account_disabled} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "GTFO")
-         |> assign(errors: ["GTFO"])}
+         |> assign(form: form, errors: ["Invalid email or password"])}
     end
   end
 
-  defp handle_register(user_params, socket) do
-    # Add name field if not provided
+  # ----------------
+  # Register
+  # ----------------
+  defp do_register(socket, user_params) do
     user_params = Map.put_new(user_params, "name", user_params["email"])
-    
+
     case Accounts.register_user(user_params) do
       {:ok, user} ->
-        # Redirect to a controller action that can set the session
         {:noreply,
          socket
          |> put_flash(:info, "Account created successfully! Welcome, #{user.email}!")
          |> redirect(external: "/auth/login_success?user_id=#{user.id}")}
 
       {:error, changeset} ->
-        errors = Enum.map(changeset.errors, fn {field, {msg, opts}} -> 
-          # Handle interpolation for count-based messages
-          formatted_msg = case opts[:count] do
-            nil -> msg
-            count -> String.replace(msg, "%{count}", to_string(count))
-          end
-          "#{String.capitalize(to_string(field))} #{formatted_msg}"
-        end)
-        
+        errors =
+          Enum.map(changeset.errors, fn {field, {msg, opts}} ->
+            msg = if opts[:count], do: String.replace(msg, "%{count}", to_string(opts[:count])), else: msg
+            "#{String.capitalize(to_string(field))} #{msg}"
+          end)
+
         {:noreply,
          socket
-         |> assign(errors: errors)
-         |> put_flash(:error, "Please fix the errors below")}
+         |> put_flash(:error, "Please fix the errors below")
+         |> assign(errors: errors)}
     end
   end
 
+  # ----------------
+  # Helper
+  # ----------------
+  defp maybe_fetch_user(nil), do: nil
+  defp maybe_fetch_user(user_id), do: Accounts.get_user(user_id)
+
+  # ----------------
+  # Render
+  # ----------------
   def render(assigns) do
     ~H"""
     <.navbar current_user={@current_user} />
@@ -134,6 +134,7 @@ defmodule PhoenixAppWeb.AuthLive do
               <input 
                 type="email" 
                 name="user[email]" 
+                value={@form.data["email"] || ""}
                 required
                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                 placeholder="Enter your email"
@@ -179,8 +180,6 @@ defmodule PhoenixAppWeb.AuthLive do
         </div>
       </div>
     </div>
-    
-
     """
   end
 end

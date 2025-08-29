@@ -29,16 +29,14 @@ services:
   web:
     build: .
     ports:
-      - "4000:4000"
+      - "80:4000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
-      - .env
-    volumes:
-      - .:/app
+      - .env.prod
 
   # Mail server for email authentication
   mailhog:

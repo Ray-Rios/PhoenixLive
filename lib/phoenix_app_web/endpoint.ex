@@ -17,7 +17,7 @@ defmodule PhoenixAppWeb.Endpoint do
     at: "/",
     from: :phoenix_app,
     gzip: false,
-    only: ~w(assets fonts images favicon.ico robots.txt)
+    only: ~w(css js fonts images favicon.ico robots.txt)
 
   if code_reloading? do
     socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket

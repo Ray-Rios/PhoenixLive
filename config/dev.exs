@@ -57,3 +57,8 @@ config :phoenix_app, PhoenixApp.Mailer,
   password: nil,
   tls: :never,
   retries: 1
+
+# Dev Mode Watcher
+watchers: [
+  npm: ["run", "watch", "--prefix", "assets"]
+]
