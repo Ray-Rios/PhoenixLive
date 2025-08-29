@@ -1,7 +1,7 @@
 defmodule PhoenixApp.Accounts.User do
   use Ecto.Schema
   import Ecto.Changeset
-  alias Comeonin.Bcrypt
+  alias Bcrypt
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -33,6 +33,7 @@ defmodule PhoenixApp.Accounts.User do
     timestamps(type: :utc_datetime)
   end
 
+  # Registration (new user)
   def registration_changeset(user, attrs) do
     user
     |> cast(attrs, [:email, :name, :password])
@@ -41,6 +42,25 @@ defmodule PhoenixApp.Accounts.User do
     |> put_password_hash()
   end
 
+  # Update profile (email/name)
+  def profile_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:name, :email])
+    |> validate_required([:name, :email])
+    |> validate_format(:email, ~r/@/)
+    |> unique_constraint(:email)
+  end
+
+  # Update password only
+  def password_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:password])
+    |> validate_required([:password])
+    |> validate_length(:password, min: 6)
+    |> put_password_hash()
+  end
+
+  # Internal helper
   defp put_password_hash(changeset) do
     if pwd = get_change(changeset, :password) do
       put_change(changeset, :password_hash, Bcrypt.hash_pwd_salt(pwd))

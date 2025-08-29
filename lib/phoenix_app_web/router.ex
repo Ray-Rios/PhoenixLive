@@ -2,9 +2,6 @@ defmodule PhoenixAppWeb.Router do
   use PhoenixAppWeb, :router
   import Phoenix.LiveView.Router
 
-  # --------------------
-  # Browser Pipeline
-  # --------------------
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -14,16 +11,10 @@ defmodule PhoenixAppWeb.Router do
     plug :put_secure_browser_headers
   end
 
-  # --------------------
-  # API Pipeline
-  # --------------------
   pipeline :api do
     plug :accepts, ["json"]
   end
 
-  # --------------------
-  # Game Auth Pipeline
-  # --------------------
   pipeline :game_auth do
     plug PhoenixAppWeb.Plugs.GameAuthPlug
   end
@@ -32,47 +23,51 @@ defmodule PhoenixAppWeb.Router do
   # Public LiveViews
   # --------------------
   scope "/", PhoenixAppWeb do
-    pipe_through :browser
+  pipe_through :browser
 
-    live_session :browser,
-      on_mount: {PhoenixAppWeb.UserAuth, :default},
-      session: %{} do
+  live_session :browser,
+    on_mount: {PhoenixAppWeb.UserAuth, :default},
+    session: %{} do
 
-      live "/", HomeLive, :index
-      live "/login", AuthLive, :login
-      live "/register", AuthLive, :register
-      live "/blog", BlogLive, :index
-      live "/blog/:slug", BlogLive, :show
-      live "/shop", ShopLive, :index
-      live "/shop/category/:slug", ShopLive, :category
-      live "/shop/product/:id", ShopLive, :product
-      live "/cart", CartLive, :index
-      live "/checkout", CheckoutLive, :index
-      live "/chat", ChatLive, :index
-      live "/chat/:channel_id", ChatLive, :channel
-      live "/quest", QuestLive, :index
-      live "/unreal", UnrealLive, :index
-      live "/desktop", DesktopLive, :index
-      live "/terminal", TerminalLive, :index
+    # Homepage is always public
+    live "/", HomeLive, :index
 
-      # Pages
-      live "/pages", PageLive.Index, :index
-      live "/pages/new", PageLive.Index, :new
-      live "/pages/:id/edit", PageLive.Index, :edit
-      live "/pages/:id", PageLive.Show, :show
-      live "/pages/:id/show/edit", PageLive.Show, :edit
-    end
+    # Public auth routes
+    live "/login", AuthLive, :login
+    live "/register", AuthLive, :register
+
+    # Public blog/shop/chat/etc.
+    live "/blog", BlogLive, :index
+    live "/blog/:slug", BlogLive, :show
+    live "/shop", ShopLive, :index
+    live "/shop/category/:slug", ShopLive, :category
+    live "/shop/product/:id", ShopLive, :product
+    live "/cart", CartLive, :index
+    live "/checkout", CheckoutLive, :index
+    live "/chat", ChatLive, :index
+    live "/chat/:channel_id", ChatLive, :channel
+    live "/quest", QuestLive, :index
+    live "/unreal", UnrealLive, :index
+    live "/desktop", DesktopLive, :index
+    live "/terminal", TerminalLive, :index
+
+    # Pages
+    live "/pages", PageLive.Index, :index
+    live "/pages/new", PageLive.Index, :new
+    live "/pages/:id/edit", PageLive.Index, :edit
+    live "/pages/:id", PageLive.Show, :show
+    live "/pages/:id/show/edit", PageLive.Show, :edit
+  end
   end
 
   # --------------------
   # Authenticated LiveViews
   # --------------------
-  live_session :authenticated,
-    on_mount: {PhoenixAppWeb.UserAuth, :require_authenticated_user},
-    session: %{} do
+  scope "/", PhoenixAppWeb do
+    pipe_through :browser
 
-    scope "/", PhoenixAppWeb do
-      pipe_through :browser
+    live_session :authenticated,
+      on_mount: {PhoenixAppWeb.UserAuth, :require_authenticated_user} do
 
       live "/dashboard", DashboardLive, :index
       live "/profile", ProfileLive, :index
@@ -104,8 +99,7 @@ defmodule PhoenixAppWeb.Router do
     pipe_through :browser
 
     live_session :admin,
-      on_mount: {PhoenixAppWeb.UserAuth, :require_admin_user},
-      session: %{} do
+      on_mount: {PhoenixAppWeb.UserAuth, :require_admin_user} do
 
       live "/", AdminDashboardLive, :index
       live "/users", AdminUserLive, :index
@@ -133,7 +127,7 @@ defmodule PhoenixAppWeb.Router do
   end
 
   # --------------------
-  # Game API System - login/register and profile creation
+  # Game API
   # --------------------
   scope "/api/game", PhoenixAppWeb do
     pipe_through :api
@@ -142,11 +136,10 @@ defmodule PhoenixAppWeb.Router do
     post "/login", GameAuthController, :login
     post "/register", GameAuthController, :register
     post "/refresh_token", GameAuthController, :refresh_token
-  
-    # Protected game routes (require JWT)
+
+    # Protected game routes
     pipe_through :game_auth
-  
-    # Player Data
+
     get "/player/profile", GamePlayerController, :profile
     put "/player/profile", GamePlayerController, :update_profile
     get "/player/avatar", GamePlayerController, :avatar
