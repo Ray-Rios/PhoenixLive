@@ -14,6 +14,10 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
 
 config :logger, level: :info
 
+config :phoenix_app, PhoenixApp.Auth.Guardian,
+  issuer: "phoenix_app",
+  secret_key: "iTYKvanE1HgOWaWB3lu_SAcTBxeYJXBnY_lNMHzEAP3Wrpz9z0l98-V3DxJcJiQk" # replace with `mix guardian.gen.secret`
+
 config :phoenix_app, PhoenixApp.Repo,
   url: System.get_env("DATABASE_URL"),
   pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),

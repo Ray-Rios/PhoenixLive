@@ -12,16 +12,21 @@ defmodule PhoenixApp.Schema.ContentTypes do
     field :updated_at, :string
   end
 
-  object :user do
-    field :id, :id
-    field :email, :string
-    field :name, :string
-    field :avatar_shape, :string
-    field :avatar_color, :string
-    field :is_online, :boolean
-    field :is_admin, :boolean
-    field :inserted_at, :string
-  end
+object :user do
+  field :id, :id
+  field :email, :string
+  field :name, :string
+  field :avatar_shape, :string
+  field :avatar_color, :string
+  field :avatar_url, :string
+  field :is_online, :boolean
+  field :is_admin, :boolean
+  field :status, :string
+  field :position_x, :float
+  field :position_y, :float
+  field :last_activity, :naive_datetime
+  field :confirmed_at, :naive_datetime
+end
 
   object :auth_payload do
     field :token, :string
@@ -39,6 +44,18 @@ defmodule PhoenixApp.Schema.ContentTypes do
     field :user_id, :id
     field :status, :string
     field :user, :user
+  end
+
+  # ========================
+  # File Type (if using uploads)
+  # ========================
+  object :file do
+    field :id, non_null(:id)
+    field :filename, :string
+    field :url, :string
+    field :content_type, :string
+    field :size, :integer
+    field :inserted_at, :naive_datetime
   end
 
   input_object :page_input do

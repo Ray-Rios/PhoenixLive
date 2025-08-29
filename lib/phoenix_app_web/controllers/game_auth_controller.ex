@@ -1,19 +1,15 @@
 defmodule PhoenixAppWeb.GameAuthController do
   use PhoenixAppWeb, :controller
-  
-  alias PhoenixApp.Accounts
-  alias PhoenixApp.Accounts.User
-  alias PhoenixAppWeb.GameAuth
 
+  alias PhoenixApp.Accounts
+  alias PhoenixApp.Auth.Guardian
+
+  ## LOGIN
   def login(conn, %{"email" => email, "password" => password}) do
     case Accounts.authenticate_user(email, password) do
       {:ok, user} ->
-        case GameAuth.generate_jwt(user) do
-          {:ok, token, _claims} -> {user, token}
-          {:ok, token} -> {user, token}  # Fallback for different return format
-          {:error, error} -> {:error, error}
-        end
-        
+        {:ok, token, _claims} = Guardian.encode_and_sign(user)
+
         conn
         |> put_status(:ok)
         |> json(%{
@@ -22,47 +18,34 @@ defmodule PhoenixAppWeb.GameAuthController do
           user: %{
             id: user.id,
             email: user.email,
-            game_username: user.name || user.email,
-            avatar_shape: user.avatar_shape,
-            avatar_color: user.avatar_color
+            username: user.username
           }
         })
-        
+
       {:error, :invalid_credentials} ->
         conn
         |> put_status(:unauthorized)
-        |> json(%{success: false, error: "Invalid email or password"})
+        |> json(%{
+          success: false,
+          errors: ["Invalid email or password"]
+        })
+
+      {:error, _reason} ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          success: false,
+          errors: ["Authentication failed"]
+        })
     end
   end
 
-  def register(conn, %{"email" => email, "password" => password} = params) do
-    game_username = Map.get(params, "game_username", email)
-    
-    user_params = %{
-      email: email,
-      password: password,
-      name: game_username,
-      avatar_shape: Map.get(params, "avatar_shape", "circle"),
-      avatar_color: Map.get(params, "avatar_color", "#3B82F6")
-    }
-    
-    # Wrap in transaction to prevent partial creates
-    result = PhoenixApp.Repo.transaction(fn ->
-      case Accounts.create_user(user_params) do
-        {:ok, user} ->
-          case GameAuth.generate_jwt(user) do
-            {:ok, token} ->
-              {user, token}
-            {:error, jwt_error} ->
-              PhoenixApp.Repo.rollback({:jwt_error, jwt_error})
-          end
-        {:error, changeset} ->
-          PhoenixApp.Repo.rollback({:user_error, changeset})
-      end
-    end)
-    
-    case result do
-      {:ok, {user, token}} ->
+  ## REGISTER
+  def register(conn, %{"email" => email, "password" => password, "username" => username}) do
+    case Accounts.create_user(%{email: email, password: password, username: username}) do
+      {:ok, user} ->
+        {:ok, token, _claims} = Guardian.encode_and_sign(user)
+
         conn
         |> put_status(:created)
         |> json(%{
@@ -71,70 +54,37 @@ defmodule PhoenixAppWeb.GameAuthController do
           user: %{
             id: user.id,
             email: user.email,
-            game_username: user.name,
-            avatar_shape: user.avatar_shape,
-            avatar_color: user.avatar_color
+            username: user.username
           }
         })
-        
-      {:error, {:user_error, changeset}} ->
+
+      {:error, changeset} ->
         conn
         |> put_status(:unprocessable_entity)
         |> json(%{
           success: false,
           errors: format_changeset_errors(changeset)
         })
-        
-      {:error, {:jwt_error, jwt_error}} ->
+
+      {:error, {:jwt_error, _jwt_error}} ->
         conn
         |> put_status(:internal_server_error)
         |> json(%{
           success: false,
-          error: "Failed to generate authentication token"
+          errors: ["Token generation failed"]
         })
     end
   end
 
-  def refresh_token(conn, %{"token" => token}) do
-    case GameAuth.verify_jwt(token) do
-      {:ok, user_id} ->
-        case Accounts.get_user(user_id) do
-          nil ->
-            conn
-            |> put_status(:unauthorized)
-            |> json(%{success: false, error: "User not found"})
-            
-          user ->
-            case GameAuth.generate_jwt(user) do
-              {:ok, new_token} ->
-                conn
-                |> put_status(:ok)
-                |> json(%{success: true, token: new_token})
-              {:error, _jwt_error} ->
-                conn
-                |> put_status(:internal_server_error)
-                |> json(%{success: false, error: "Failed to generate authentication token"})
-            end
-        end
-        
-      {:error, _reason} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{success: false, error: "Invalid token"})
-    end
-  end
-
+  ## ERROR FORMATTER
   defp format_changeset_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Enum.reduce(opts, msg, fn {key, value}, acc ->
-        # Handle different value types properly
-        string_value = cond do
-          is_binary(value) -> value
-          is_list(value) -> Enum.join(value, ", ")
-          true -> inspect(value)
-        end
-        String.replace(acc, "%{#{key}}", string_value)
+        String.replace(acc, "%{#{key}}", to_string(value))
       end)
+    end)
+    |> Enum.map(fn {field, messages} ->
+      "#{Atom.to_string(field)} #{Enum.join(messages, ", ")}"
     end)
   end
 end

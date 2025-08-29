@@ -42,6 +42,7 @@ defmodule PhoenixApp.MixProject do
       {:gettext, "~> 0.20"},
       {:jason, "~> 1.2"},
       {:joken, "~> 2.5"},
+      {:guardian, "~> 2.3"},
       {:plug_cowboy, "~> 2.5"},
       {:absinthe, "~> 1.7"},
       {:absinthe_plug, "~> 1.5"},

@@ -6,6 +6,11 @@ config :phoenix_app,
   ecto_repos: [PhoenixApp.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+config :phoenix_app, PhoenixApp.Auth.Guardian,
+  issuer: "phoenix_app",
+  secret_key: "super_secret_key_here" # replace with `mix guardian.gen.secret`
+
+
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Phoenix.Endpoint.Cowboy2Adapter,

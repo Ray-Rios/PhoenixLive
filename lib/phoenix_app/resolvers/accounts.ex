@@ -1,45 +1,60 @@
 defmodule PhoenixApp.Resolvers.Accounts do
   alias PhoenixApp.Accounts
+  alias PhoenixApp.Auth.Guardian
 
-
+  # ----------------------------
+  # Get current user
+  # ----------------------------
   def get_current_user(_parent, _args, %{context: %{current_user: user}}) do
     {:ok, user}
   end
 
-  def get_current_user(_parent, _args, _resolution) do
-    {:error, "Not authenticated"}
-  end
+  def get_current_user(_parent, _args, _ctx), do: {:error, "Not logged in"}
 
-  def register(_parent, %{input: input}, _resolution) do
-    case Accounts.create_user(input) do
+  # ----------------------------
+  # Register
+  # ----------------------------
+  def register(_parent, %{input: params}, _ctx) do
+    case Accounts.create_user(params) do
       {:ok, user} ->
-        # Return user without JWT token since we're using session-based auth
-        {:ok, %{user: user}}
+        {:ok, token, _claims} = Guardian.encode_and_sign(user)
+        {:ok, %{token: token, user: user}}
+
       {:error, changeset} ->
-        {:error, changeset}
+        {:error, format_changeset_errors(changeset)}
     end
   end
 
-  def login(_parent, %{input: %{email: email, password: password}}, _resolution) do
+  # ----------------------------
+  # Login
+  # ----------------------------
+  def login(_parent, %{input: %{email: email, password: password}}, _ctx) do
     case Accounts.authenticate_user(email, password) do
       {:ok, user} ->
-        # Return user without JWT token since we're using session-based auth
-        {:ok, %{user: user}}
-      {:error, reason} ->
-        {:error, reason}
+        {:ok, token, _claims} = Guardian.encode_and_sign(user)
+        {:ok, %{token: token, user: user}}
+
+      {:error, _reason} ->
+        {:error, "Invalid email or password"}
     end
   end
 
-  def update_avatar(_parent, %{input: input}, %{context: %{current_user: user}}) do
-    case Accounts.update_user(user, input) do
-      {:ok, updated_user} ->
-        {:ok, updated_user}
-      {:error, changeset} ->
-        {:error, changeset}
-    end
+  # ----------------------------
+  # Update avatar
+  # ----------------------------
+  def update_avatar(_parent, %{input: input}, _ctx) do
+    user = Accounts.get_user!(input.user_id)
+    {:ok, Accounts.update_avatar(user, input)}
   end
 
-  def update_avatar(_parent, _args, _resolution) do
-    {:error, "Not authenticated"}
+  # ----------------------------
+  # Helper for formatting Ecto errors
+  # ----------------------------
+  defp format_changeset_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {key, value}, acc ->
+        String.replace(acc, "%{#{key}}", to_string(value))
+      end)
+    end)
   end
 end

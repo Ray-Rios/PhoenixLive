@@ -1,5 +1,9 @@
 import Config
 
+config :phoenix_app, PhoenixApp.Auth.Guardian,
+  issuer: "phoenix_app",
+  secret_key: "iTYKvanE1HgOWaWB3lu_SAcTBxeYJXBnY_lNMHzEAP3Wrpz9z0l98-V3DxJcJiQk" # replace with `mix guardian.gen.secret`
+
 config :phoenix_app, PhoenixApp.Repo,
   username: "postgres",
   password: "postgres",
