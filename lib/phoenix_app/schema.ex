@@ -1,14 +1,10 @@
 defmodule PhoenixApp.Schema do
   use Absinthe.Schema
   import_types PhoenixApp.Schema.ContentTypes
-  import_types PhoenixApp.Schema.Types.Inputs
-  import_types PhoenixApp.Schema.Queries.Accounts
-  import_types PhoenixApp.Schema.Mutations.Accounts
 
   alias PhoenixApp.Resolvers
 
   query do
-    import_fields :accounts_queries
     @desc "Get all pages"
     field :pages, list_of(:page) do
       resolve &Resolvers.Content.list_pages/3
@@ -27,7 +23,6 @@ defmodule PhoenixApp.Schema do
   end
 
   mutation do
-    import_fields :accounts_mutations
     @desc "Create a new page"
     field :create_page, :page do
       arg :input, non_null(:page_input)

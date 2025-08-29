@@ -1,7 +1,61 @@
 defmodule PhoenixApp.Accounts.User do
+  alias PhoenixApp.Repo
+  alias PhoenixApp.Accounts.User
   use Ecto.Schema
-  use Arc.Ecto.Schema
   import Ecto.Changeset
+  import Comeonin.Bcrypt, only: [hashpwsalt: 1, checkpw: 2]
+
+  schema "users" do
+    field :email, :string
+    field :name, :string
+    field :password_hash, :string
+    field :password, :string, virtual: true
+    field :is_admin, :boolean, default: false
+
+    timestamps()
+  end
+
+  # ---------------------
+  # Registration changeset
+  # ---------------------
+  def registration_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:email, :name, :password])
+    |> validate_required([:email, :password])
+    |> unique_constraint(:email)
+    |> put_password_hash()
+  end
+
+  defp put_password_hash(changeset) do
+    if pwd = get_change(changeset, :password) do
+      put_change(changeset, :password_hash, Comeonin.Bcrypt.hashpwsalt(pwd))
+    else
+      changeset
+    end
+  end
+
+  # ---------------------
+  # Register a new user
+  # ---------------------
+  def register_user(attrs) do
+    %User{}
+    |> User.registration_changeset(attrs)
+    |> Repo.insert()
+  end
+
+  # ---------------------
+  # Get user by email
+  # ---------------------
+  def get_user_by_email(email) when is_binary(email) do
+    Repo.get_by(User, email: email)
+  end
+
+  # ---------------------
+  # Check user password
+  # ---------------------
+  def check_password(%User{password_hash: hash}, password) when is_binary(password) do
+    checkpw(password, hash)
+  end
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
