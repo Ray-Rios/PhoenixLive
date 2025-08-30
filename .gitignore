@@ -1,7 +1,7 @@
 # Sensitive configuration files
 .env
 .env.local
-.env.production
+.env.prod
 config/dev.secret.exs
 config/prod.secret.exs
 

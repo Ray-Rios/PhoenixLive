@@ -1,15 +1,13 @@
 import Config
 
+# ----------------------------
+# Global Phoenix App Config
+# ----------------------------
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 config :phoenix_app,
   ecto_repos: [PhoenixApp.Repo],
   generators: [timestamp_type: :utc_datetime]
-
-config :phoenix_app, PhoenixApp.Auth.Guardian,
-  issuer: "phoenix_app",
-  secret_key: "super_secret_key_here" # replace with `mix guardian.gen.secret`
-
 
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   url: [host: "localhost"],
@@ -18,10 +16,10 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
     formats: [html: PhoenixAppWeb.ErrorHTML, json: PhoenixAppWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: PhoenixApp.PubSub,
-  live_view: [signing_salt: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"]
+  pubsub_server: PhoenixApp.PubSub
 
-config :phoenix_app, PhoenixApp.Mailer, adapter: Swoosh.Adapters.Local
+config :phoenix_app, PhoenixApp.Mailer,
+  adapter: Swoosh.Adapters.Local
 
 config :esbuild,
   version: "0.17.11",
@@ -38,9 +36,15 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
+# ----------------------------
+# CORS defaults (can override per environment)
+# ----------------------------
 config :cors_plug,
   origin: ["http://localhost:3000", "http://localhost:4000"],
   max_age: 86400,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
+# ----------------------------
+# Import environment-specific configs
+# ----------------------------
 import_config "#{config_env()}.exs"

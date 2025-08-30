@@ -1,3 +1,24 @@
+✅ Notes:
+SECRET_KEY_BASE, LIVE_VIEW_SIGNING_SALT, and GUARDIAN_SECRET_KEY in prod must be generated using:
+ > mix phx.gen.secret
+and then inserted into .env.prod.
+
+How it works:
+  Dev (docker-compose.yml)
+    Bind-mounts your source code.
+    MIX_ENV=dev is set by the compose file.
+    Assets aren’t precompiled — you can use npm run watch or mix phx.server with watchers inside the container.
+    Live code changes reflected immediately.
+  Prod (prod.yml)
+    No bind-mounts — uses built image.
+    MIX_ENV=prod is set via ARG or environment.
+    Assets are precompiled with mix assets.deploy.
+    Fully compiled and ready to run.
+-- --------------------------------------------
+ > docker-compose up -d    # dev mode (default)
+ > docker-compose -f prod.yml up -d  # prod mode
+----------------------------------------------
+
 # For the time when .css doesn't load
 # This runs Tailwind/Esbuild, digests assets, and updates the manifest.
 MIX_ENV=prod mix assets.deploy

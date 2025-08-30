@@ -1,0 +1,12 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        MIX_ENV: prod
+    env_file:
+      - .env.prod   # still works because it’s baked into image now
+    ports:
+      - "4000:4000"
+    command: /usr/local/bin/start.sh
+    volumes: []  # no bind mounts in prod

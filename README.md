@@ -14,47 +14,7 @@ A modern, real-time collaborative CMS built with Phoenix/Elixir, featuring Graph
 - **Redis Caching** - Fast content delivery and session management
 - **Responsive Design** - Professional look with familiar navigation elements
 
-## Quick Start with Docker
 
-1. **Clone and start the application:**
-   ```bash
-   git clone <your-repo>
-   cd phoenix-cms
-   docker-compose up --build
-   ```
-
-2. **Access the application:**
-   - Main app: http://localhost:4000
-   - GraphiQL interface: http://localhost:4000/graphiql
-   - Mail server UI: http://localhost:8025
-
-3. **Setup the database:**
-   ```bash
-   docker-compose exec web mix ecto.create
-   docker-compose exec web mix ecto.migrate
-   ```
-
-## Development Setup
-
-### Prerequisites
-- Elixir 1.14+
-- Erlang/OTP 25+
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
-
-### Local Development
-```bash
-# Install dependencies
-mix deps.get
-cd assets && npm install && cd ..
-
-# Setup database
-mix ecto.setup
-
-# Start Phoenix server
-mix phx.server
-```
 
 ## Architecture
 
@@ -91,6 +51,7 @@ mix phx.server
 - Live chat with message bubbles
 - Real-time user status updates
 - WebSocket-based communication
+- Node caching optimized
 
 #### Content Management
 - WYSIWYG page editor

@@ -2,81 +2,66 @@
 # Base image
 # -------------------------------
     FROM elixir:latest
-
     # -------------------------------
-    # System dependencies
+    # System deps
     # -------------------------------
-    RUN apt-get update && apt-get install -y \
+        RUN apt-get update && apt-get install -y \
         curl \
-        wget \
         git \
         build-essential \
         postgresql-client \
         inotify-tools \
+        redis-tools \
+        nodejs \
+        npm \
         && rm -rf /var/lib/apt/lists/*
     
     # -------------------------------
-    # Node.js for assets
-    # -------------------------------
-    RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-        && apt-get install -y nodejs
-    
-    # -------------------------------
-    # Hex and Rebar
-    # -------------------------------
-    RUN mix local.hex --force && mix local.rebar --force
-    
-    # -------------------------------
-    # Set working directory
+    # Set workdir & env
     # -------------------------------
     WORKDIR /app
-    ENV MIX_ENV=prod
+    ARG MIX_ENV=dev
+    ENV MIX_ENV=${MIX_ENV}
     
     # -------------------------------
-    # Copy only what's needed for dependencies first (caching)
+    # Copy deps files for caching
     # -------------------------------
     COPY mix.* ./
     COPY config ./config
     
     # -------------------------------
-    # Install Elixir dependencies
+    # Install deps for all envs
     # -------------------------------
-    RUN mix deps.get --only prod
-    RUN mix deps.compile
+    RUN mix local.hex --force && mix local.rebar --force
+    RUN mix deps.get && mix deps.compile
     
     # -------------------------------
-    # Copy the rest of the app
+    # Copy full app source
     # -------------------------------
     COPY lib ./lib
     COPY priv ./priv
     COPY assets ./assets
     
     # -------------------------------
-    # Install Node dependencies and build assets
+    # Build assets
     # -------------------------------
     WORKDIR /app/assets
-    RUN npm ci
-    RUN npm run deploy  # Phoenix 1.7+ alias: mix assets.deploy will use minified assets
+    RUN npm install
+    RUN npm install @tailwindcss/forms --save-dev
+    RUN npx update-browserslist-db@latest
     
-    # -------------------------------
-    # Build assets into priv/static
-    # -------------------------------
     WORKDIR /app
     RUN mix assets.deploy
     
     # -------------------------------
-    # Compile the Elixir app
+    # Compile only for prod
     # -------------------------------
-    RUN mix compile
+    RUN if [ "$MIX_ENV" = "prod" ]; then mix compile; fi
     
     # -------------------------------
-    # Expose port
+    # Expose port & start script
     # -------------------------------
     EXPOSE 4000
-    
-    # -------------------------------
-    # Start script
-    # -------------------------------
     COPY start.sh /usr/local/bin/start.sh
     RUN chmod +x /usr/local/bin/start.sh
     CMD ["/usr/local/bin/start.sh"]
