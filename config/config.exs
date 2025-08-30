@@ -5,10 +5,16 @@ import Config
 # ----------------------------
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
+# ----------------------------
+# Ecto Repos
+# ----------------------------
 config :phoenix_app,
-  ecto_repos: [PhoenixApp.Repo],
+  ecto_repos: [PhoenixLive.Repo], # updated to use PhoenixLive.Repo
   generators: [timestamp_type: :utc_datetime]
 
+# ----------------------------
+# Phoenix Endpoint
+# ----------------------------
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Phoenix.Endpoint.Cowboy2Adapter,
@@ -18,9 +24,15 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   ],
   pubsub_server: PhoenixApp.PubSub
 
+# ----------------------------
+# Mailer
+# ----------------------------
 config :phoenix_app, PhoenixApp.Mailer,
   adapter: Swoosh.Adapters.Local
 
+# ----------------------------
+# Esbuild (JS bundler)
+# ----------------------------
 config :esbuild,
   version: "0.17.11",
   default: [
@@ -30,10 +42,16 @@ config :esbuild,
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
+# ----------------------------
+# Logger
+# ----------------------------
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# ----------------------------
+# JSON library
+# ----------------------------
 config :phoenix, :json_library, Jason
 
 # ----------------------------
@@ -43,6 +61,19 @@ config :cors_plug,
   origin: ["http://localhost:3000", "http://localhost:4000"],
   max_age: 86400,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+# ----------------------------
+# Cockroach/Ecto Repo defaults
+# ----------------------------
+config :phoenixlive, PhoenixLive.Repo,
+  username: System.get_env("DB_USERNAME") || "root",
+  password: System.get_env("DB_PASSWORD") || "cockroachDB",
+  database: System.get_env("DB_NAME") || "phoenixlive_dev",
+  hostname: System.get_env("DB_HOST") || "db",
+  port: String.to_integer(System.get_env("DB_PORT") || "26257"),
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10,
+  migration_primary_key: [type: :bigserial]
 
 # ----------------------------
 # Import environment-specific configs

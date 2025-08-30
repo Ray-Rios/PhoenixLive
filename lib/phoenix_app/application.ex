@@ -9,6 +9,7 @@ defmodule PhoenixApp.Application do
     :ets.new(:user_sessions, [:set, :public, :named_table])
     
     children = [
+      PhoenixLive.Repo,
       PhoenixApp.Repo,
       {Phoenix.PubSub, name: PhoenixApp.PubSub},
       {Finch, name: PhoenixApp.Finch},

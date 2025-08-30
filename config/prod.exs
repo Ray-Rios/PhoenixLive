@@ -1,34 +1,33 @@
-# ----------------------------
-# Phoenix Environment
-# ----------------------------
-MIX_ENV=prod
-SECRET_KEY_BASE=GENERATE_WITH_mix_phx.gen.secret
-LIVE_VIEW_SIGNING_SALT=GENERATE_WITH_mix_phx.gen.secret
-GUARDIAN_SECRET_KEY=GENERATE_WITH_mix_phx.gen.secret
+import Config
 
 # ----------------------------
-# Cockroach Database
+# Endpoint
 # ----------------------------
-DB_USERNAME=root
-DB_PASSWORD=cockroachDB
-DB_HOST=db
-DB_PORT=26257
-DB_NAME=phoenixlive_prod
+config :phoenix_app, PhoenixAppWeb.Endpoint,
+  http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
+  secret_key_base: System.get_env("SECRET_KEY_BASE") ||
+    raise "SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`",
+  live_view: [signing_salt: System.get_env("LIVE_VIEW_SIGNING_SALT") ||
+    raise "LIVE_VIEW_SIGNING_SALT is missing"]
 
 # ----------------------------
-# Redis
+# Guardian (prod)
 # ----------------------------
-REDIS_URL=redis://redis:6379/0
+config :phoenix_app, PhoenixApp.Auth.Guardian,
+  secret_key: System.get_env("GUARDIAN_SECRET_KEY") ||
+    raise "GUARDIAN_SECRET_KEY is missing. Generate with `mix guardian.gen.secret`"
 
 # ----------------------------
-# Mail (real SMTP)
+# Redis & Mail
 # ----------------------------
-SMTP_RELAY=smtp.yourprovider.com
-SMTP_PORT=587
-SMTP_USERNAME=your_username
-SMTP_PASSWORD=your_password
+config :phoenix_app, :redis_url,
+  System.get_env("REDIS_URL") || "redis://redis:6379/0"
 
-# ----------------------------
-# CORS (prod)
-# ----------------------------
-CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://api.yourdomain.com
+config :phoenix_app, PhoenixApp.Mailer,
+  adapter: Swoosh.Adapters.SMTP,
+  relay: System.get_env("SMTP_HOST") || "smtp.yourprovider.com",
+  port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
+  username: System.get_env("SMTP_USER"),
+  password: System.get_env("SMTP_PASS"),
+  tls: :if_available,
+  retries: 3

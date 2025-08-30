@@ -27,11 +27,11 @@ defmodule PhoenixApp.MixProject do
     [
       {:phoenix, "~> 1.7.0"},
       {:phoenix_ecto, "~> 4.4"},
-      {:ecto_sql, "~> 3.6"},
-      {:postgrex, ">= 0.0.0"},
+      {:ecto_sql, "~> 3.10"},
+      {:postgrex, ">= 0.17.0"},
       {:phoenix_html, "~> 3.3"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 0.20.0"},
+      {:phoenix_live_view, "~> 0.21"},
       {:floki, ">= 0.30.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.0"},
       {:esbuild, "~> 0.7", runtime: Mix.env() == :dev},
@@ -63,7 +63,9 @@ defmodule PhoenixApp.MixProject do
       # Caching
       {:cachex, "~> 3.4"},
       # Additional utilities
-      {:uuid, "~> 1.1"}
+      {:uuid, "~> 1.1"},
+      {:cors_plug, "~> 3.0"},
+      {:tz, "~> 0.24"}
     ]
   end
 

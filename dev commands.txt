@@ -1,7 +1,16 @@
 ✅ Notes:
-SECRET_KEY_BASE, LIVE_VIEW_SIGNING_SALT, and GUARDIAN_SECRET_KEY in prod must be generated using:
+SECRET_KEY_BASE, LIVE_VIEW_SIGNING_SALT, and GUARDIAN_SECRET_KEY in prod must be generated.
+For prod, you must replace these with real secrets before deployment — otherwise start.sh will fail.
+Example:
+SECRET_KEY_BASE=$(mix phx.gen.secret)
+LIVE_VIEW_SIGNING_SALT=$(mix phx.gen.secret)
+Please run: 
  > mix phx.gen.secret
 and then inserted into .env.prod.
+
+Recommended to run dev first and generate secrets in the web docker container
+ > docker-compose web RUN mix phx.gen.secret
+
 
 How it works:
   Dev (docker-compose.yml)

@@ -1,23 +1,12 @@
 import Config
 
 # ----------------------------
-# Guardian
+# Guardian (dev)
 # ----------------------------
 config :phoenix_app, PhoenixApp.Auth.Guardian,
   issuer: "phoenix_app",
-  secret_key: "iTYKvanE1HgOWaWB3lu_SAcTBxeYJXBnY_lNMHzEAP3Wrpz9z0l98-V3DxJcJiQk" # replace with mix guardian.gen.secret
-
-# ----------------------------
-# Cockroach Database
-# ----------------------------
-config :phoenixlive, PhoenixLive.Repo,
-  username: System.get_env("DB_USERNAME") || "root",
-  password: System.get_env("DB_PASSWORD") || "",
-  database: System.get_env("DB_NAME") || "projekt_dev",
-  hostname: System.get_env("DB_HOST") || "db",
-  port: String.to_integer(System.get_env("DB_PORT") || "26257"),
-  show_sensitive_data_on_connection_error: true,
-  pool_size: 10
+  # Secret picked up from runtime.exs
+  secret_key: System.get_env("GUARDIAN_SECRET_KEY") || "dev_guardian_secret_placeholder"
 
 # ----------------------------
 # Endpoint
@@ -27,7 +16,7 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2",
+  secret_key_base: "dev_secret_key_base_placeholder",
   watchers: [
     npm: ["run", "watch", "--prefix", "assets"],
     esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]}
@@ -52,13 +41,14 @@ config :swoosh, :api_client, false
 # ----------------------------
 # Redis & Mail (dev)
 # ----------------------------
-config :phoenix_app, :redis_url, "redis://localhost:6379"
+config :phoenix_app, :redis_url,
+  System.get_env("REDIS_URL") || "redis://localhost:6379"
 
 config :phoenix_app, PhoenixApp.Mailer,
   adapter: Swoosh.Adapters.SMTP,
-  relay: "localhost",
-  port: 1025,
-  username: nil,
-  password: nil,
+  relay: System.get_env("SMTP_HOST") || "mailhog",
+  port: String.to_integer(System.get_env("SMTP_PORT") || "1025"),
+  username: System.get_env("SMTP_USER"),
+  password: System.get_env("SMTP_PASS"),
   tls: :never,
   retries: 1
