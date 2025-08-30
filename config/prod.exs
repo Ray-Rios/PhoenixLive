@@ -5,17 +5,17 @@ import Config
 # ----------------------------
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
-  secret_key_base: System.get_env("SECRET_KEY_BASE") ||
-    raise "SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`",
-  live_view: [signing_salt: System.get_env("LIVE_VIEW_SIGNING_SALT") ||
-    raise "LIVE_VIEW_SIGNING_SALT is missing"]
+  secret_key_base: (System.get_env("SECRET_KEY_BASE") ||
+    raise("SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`")),
+  live_view: [signing_salt: (System.get_env("LIVE_VIEW_SIGNING_SALT") ||
+    raise("LIVE_VIEW_SIGNING_SALT is missing"))]
 
 # ----------------------------
 # Guardian (prod)
 # ----------------------------
 config :phoenix_app, PhoenixApp.Auth.Guardian,
-  secret_key: System.get_env("GUARDIAN_SECRET_KEY") ||
-    raise "GUARDIAN_SECRET_KEY is missing. Generate with `mix guardian.gen.secret`"
+  secret_key: (System.get_env("GUARDIAN_SECRET_KEY") ||
+    raise("GUARDIAN_SECRET_KEY is missing. Generate with `mix guardian.gen.secret`"))
 
 # ----------------------------
 # Redis & Mail

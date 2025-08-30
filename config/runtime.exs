@@ -54,15 +54,20 @@ db_name = System.get_env("DB_NAME") || "phoenixapp_dev"
 db_pool = String.to_integer(System.get_env("POOL_SIZE") || "10")
 
 database_url =
-  "ecto://#{System.get_env("DB_USERNAME")}:#{System.get_env("DB_PASSWORD")}@" <>
-  "#{System.get_env("DB_HOST")}:#{System.get_env("DB_PORT")}/#{System.get_env("DB_NAME")}"
+  System.get_env("DATABASE_URL") ||
+  "postgresql://#{db_username}@#{db_host}:#{db_port}/#{db_name}?sslmode=disable"
 
 config :phoenix_app, PhoenixApp.Repo,
   url: database_url,
-  pool_size: 10,
+  pool_size: db_pool,
   timeout: 30_000,
   ownership_timeout: 30_000,
-  migration_primary_key: [type: :bigserial]
+  migration_primary_key: [type: :bigserial],
+  # CockroachDB specific settings
+  prepare: :named,
+  parameters: [
+    application_name: "phoenix_app"
+  ]
 
 # -------------------------------------------------
 # Endpoint config

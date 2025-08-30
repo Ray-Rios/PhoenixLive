@@ -72,4 +72,118 @@ defmodule PhoenixApp.Accounts do
         end
     end
   end
+
+  # ---------------------
+  # Session token functions
+  # ---------------------
+  def generate_user_session_token(_user) do
+    token = :crypto.strong_rand_bytes(32)
+    # For now, just return the token - implement UserToken later if needed
+    token
+  end
+
+  def get_user_by_session_token(_token) do
+    # For now, return nil - implement UserToken later if needed
+    nil
+  end
+
+  def delete_user_session_token(_token) do
+    # For now, just return ok - implement UserToken later if needed
+    :ok
+  end
+
+  # ---------------------
+  # Admin functions
+  # ---------------------
+  def make_admin(%User{} = user) do
+    user
+    |> User.admin_changeset(%{is_admin: true})
+    |> Repo.update()
+  end
+
+  def remove_admin(%User{} = user) do
+    user
+    |> User.admin_changeset(%{is_admin: false})
+    |> Repo.update()
+  end
+
+  def count_users do
+    Repo.aggregate(User, :count, :id)
+  end
+
+  def list_recent_users(limit \\ 5) do
+    import Ecto.Query
+    from(u in User, order_by: [desc: u.inserted_at], limit: ^limit)
+    |> Repo.all()
+  end
+
+  # ---------------------
+  # User management functions
+  # ---------------------
+  def create_user(attrs) do
+    %User{}
+    |> User.registration_changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_user(%User{} = user, attrs) do
+    user
+    |> User.profile_changeset(attrs)
+    |> Repo.update()
+  end
+
+  def update_user_position(%User{} = user, attrs) do
+    user
+    |> User.position_changeset(attrs)
+    |> Repo.update()
+  end
+
+  def update_user_profile(%User{} = user, attrs) do
+    update_profile(user, attrs)
+  end
+
+  def update_user_password(%User{} = user, attrs) do
+    update_password(user, attrs)
+  end
+
+  def update_avatar(%User{} = user, attrs) do
+    user
+    |> User.avatar_changeset(attrs)
+    |> Repo.update()
+  end
+
+  def enable_user(%User{} = user) do
+    user
+    |> User.status_changeset(%{is_active: true})
+    |> Repo.update()
+  end
+
+  def disable_user(%User{} = user) do
+    user
+    |> User.status_changeset(%{is_active: false})
+    |> Repo.update()
+  end
+
+  # ---------------------
+  # Two-factor authentication
+  # ---------------------
+  def enable_two_factor(%User{} = user, secret, backup_codes) do
+    user
+    |> User.two_factor_changeset(%{
+      two_factor_secret: secret,
+      two_factor_enabled: true,
+      two_factor_backup_codes: backup_codes
+    })
+    |> Repo.update()
+  end
+
+  def disable_two_factor(%User{} = user) do
+    user
+    |> User.two_factor_changeset(%{
+      two_factor_secret: nil,
+      two_factor_enabled: false,
+      two_factor_backup_codes: []
+    })
+    |> Repo.update()
+  end
 end

@@ -1,5 +1,6 @@
 defmodule PhoenixApp.Accounts.User do
   use Ecto.Schema
+  use Arc.Ecto.Schema
   import Ecto.Changeset
   alias Bcrypt
 
@@ -58,6 +59,56 @@ defmodule PhoenixApp.Accounts.User do
     |> validate_required([:password])
     |> validate_length(:password, min: 6)
     |> put_password_hash()
+  end
+
+  # Admin changeset
+  def admin_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:is_admin])
+    |> validate_required([:is_admin])
+  end
+
+  # Avatar changeset
+  def avatar_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:avatar_shape, :avatar_color, :avatar_url])
+    |> cast_attachments(attrs, [:avatar_file])
+  end
+
+  # Position changeset
+  def position_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:position_x, :position_y])
+    |> validate_number(:position_x, greater_than_or_equal_to: 0)
+    |> validate_number(:position_y, greater_than_or_equal_to: 0)
+  end
+
+  # Status changeset
+  def status_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:status, :is_active])
+  end
+
+  # Two-factor authentication changeset
+  def two_factor_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:two_factor_secret, :two_factor_enabled, :two_factor_backup_codes])
+  end
+
+  # Password validation
+  def valid_password?(%__MODULE__{password_hash: hash}, password) when is_binary(password) do
+    Bcrypt.verify_pass(password, hash)
+  end
+
+  def valid_password?(_, _), do: false
+
+  # Two-factor authentication helpers
+  def generate_two_factor_secret do
+    :crypto.strong_rand_bytes(20) |> Base.encode32()
+  end
+
+  def generate_backup_codes do
+    for _ <- 1..10, do: :crypto.strong_rand_bytes(4) |> Base.encode16()
   end
 
   # Internal helper
