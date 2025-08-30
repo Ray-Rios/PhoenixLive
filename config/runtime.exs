@@ -50,14 +50,14 @@ db_username = System.get_env("DB_USERNAME") || "root"
 db_password = System.get_env("DB_PASSWORD") || "cockroachDB"
 db_host = System.get_env("DB_HOST") || "db"
 db_port = String.to_integer(System.get_env("DB_PORT") || "26257")
-db_name = System.get_env("DB_NAME") || "phoenixlive_dev"
+db_name = System.get_env("DB_NAME") || "phoenixapp_dev"
 db_pool = String.to_integer(System.get_env("POOL_SIZE") || "10")
 
 database_url =
   "ecto://#{System.get_env("DB_USERNAME")}:#{System.get_env("DB_PASSWORD")}@" <>
   "#{System.get_env("DB_HOST")}:#{System.get_env("DB_PORT")}/#{System.get_env("DB_NAME")}"
 
-config :phoenixlive, PhoenixLive.Repo,
+config :phoenix_app, PhoenixApp.Repo,
   url: database_url,
   pool_size: 10,
   timeout: 30_000,

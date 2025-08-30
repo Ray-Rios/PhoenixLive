@@ -4,11 +4,9 @@ set -e
 # ----------------------------
 # Load env file if running outside docker-compose
 # ----------------------------
-if [ -f "/app/.env.prod" ]; then
-  echo "Sourcing /app/.env.prod..."
-  set -o allexport
-  source /app/.env.prod
-  set +o allexport
+if [ -f ".env.prod" ]; then
+  echo "Sourcing .env.prod..."
+  source .env.prod
 fi
 
 # ----------------------------
@@ -49,11 +47,17 @@ echo "LIVE_VIEW_SIGNING_SALT: ${LIVE_VIEW_SIGNING_SALT:0:8}..."
 # Wait for database
 # ----------------------------
 echo "Waiting for CockroachDB to be ready..."
-until cockroach sql --insecure --host=db -e "SELECT 1;" &> /dev/null; do
+until cockroach sql --insecure --host=db &> /dev/null; do
   sleep 1
 done
 echo "CockroachDB is ready!"
 
+ ----------------------------
+# Run Ecto migrations
+# ----------------------------
+echo "Running migrations..."
+mix ecto.create
+mix ecto.migrate
 
 # ----------------------------
 # Wait for Redis

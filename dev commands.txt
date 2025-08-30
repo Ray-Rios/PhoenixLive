@@ -35,3 +35,67 @@ MIX_ENV=prod mix assets.deploy
 # Mix command to create jwt token for a new api signature
 # place in config/dev.exs or prod.exs
 docker-compose exec web mix guardian.gen.secret
+
+
+docker-compose build web
+
+docker-compose run --rm web bash
+
+# Users table
+mix ecto.gen.migration create_users
+# Posts table
+mix ecto.gen.migration create_posts
+# Comments table
+mix ecto.gen.migration create_comments
+
+#create_users (migration)
+defmodule PhoenixLive.Repo.Migrations.CreateUsers do
+  use Ecto.Migration
+
+  def change do
+    create table(:users) do
+      add :email, :string, null: false
+      add :hashed_password, :string, null: false
+      add :role, :string, default: "user"
+      timestamps()
+    end
+
+    create unique_index(:users, [:email])
+  end
+end
+
+#create_posts (migration)
+defmodule PhoenixLive.Repo.Migrations.CreatePosts do
+  use Ecto.Migration
+
+  def change do
+    create table(:posts) do
+      add :user_id, references(:users), null: false
+      add :title, :string, null: false
+      add :body, :text
+      timestamps()
+    end
+
+    create index(:posts, [:user_id])
+  end
+end
+
+# create_comments (migration)
+defmodule PhoenixLive.Repo.Migrations.CreateComments do
+  use Ecto.Migration
+
+  def change do
+    create table(:comments) do
+      add :post_id, references(:posts), null: false
+      add :user_id, references(:users), null: false
+      add :body, :text
+      timestamps()
+    end
+
+    create index(:comments, [:post_id])
+    create index(:comments, [:user_id])
+  end
+end
+
+mix ecto.create
+mix ecto.migrate

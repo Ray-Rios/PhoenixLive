@@ -1,5 +1,6 @@
 defmodule PhoenixApp.Repo.Migrations.CreateUsers do
   use Ecto.Migration
+  @disable_ddl_transaction true
 
   def change do
     create table(:users, primary_key: false) do

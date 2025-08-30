@@ -2,13 +2,13 @@ version: "3.9"
 
 services:
   db:
-    image: cockroachdb/cockroach:latest
+    image: cockroachdb/cockroach:v25.2.5
     command: start-single-node --insecure
     env_file:
       - .env
     ports:
-      - "26257:26257"  # SQL port
-      - "8080:8080"    # Admin UI
+      - "26258:26257"  # SQL port
+      - "8081:8080"    # Admin UI
     volumes:
       - cockroach_data:/cockroach/cockroach-data
     healthcheck:
@@ -46,7 +46,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app:rw
-      - ./dev.env:/app/.env:rw
+      - ./.env:/app/.env:rw
     command: /usr/local/bin/start.sh
 
   mailhog:
