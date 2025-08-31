@@ -27,12 +27,22 @@
     # Copy deps files for caching
     # -------------------------------
     COPY mix.* ./
-    COPY config ./config
     
     # -------------------------------
-    # Install deps for all envs
+    # Install hex and rebar first
     # -------------------------------
     RUN mix local.hex --force && mix local.rebar --force
+    
+    # -------------------------------
+    # Copy config and install deps
+    # -------------------------------
+    COPY config ./config
+    
+    # Set temporary env vars for build
+    ENV SECRET_KEY_BASE=build_time_secret_key_base_placeholder_64_chars_long_minimum
+    ENV LIVE_VIEW_SIGNING_SALT=build_time_salt_32_chars_long_min
+    ENV GUARDIAN_SECRET_KEY=build_time_guardian_secret_key_placeholder_64_chars_long_minimum
+    
     RUN mix deps.get && mix deps.compile
     
     # -------------------------------
@@ -47,11 +57,9 @@
     # -------------------------------
     WORKDIR /app/assets
     RUN npm install
-    RUN npm install @tailwindcss/forms --save-dev
-    RUN npx update-browserslist-db@latest
+    RUN npm run build
     
     WORKDIR /app
-    RUN mix assets.deploy
     
     # -------------------------------
     # Compile only for prod

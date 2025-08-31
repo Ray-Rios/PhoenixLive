@@ -2,10 +2,10 @@
 SECRET_KEY_BASE, LIVE_VIEW_SIGNING_SALT, and GUARDIAN_SECRET_KEY in prod must be generated.
 For prod, you must replace these with real secrets before deployment — otherwise start.sh will fail.
 Example:
-SECRET_KEY_BASE=$(mix phx.gen.secret)
-LIVE_VIEW_SIGNING_SALT=$(mix phx.gen.secret)
-Please run: 
- > mix phx.gen.secret
+SECRET_KEY_BASE= $(mix phx.gen.secret 64)
+LIVE_VIEW_SIGNING_SALT= $(mix phx.gen.secret 32)
+
+
 and then inserted into .env.prod.
 
 Recommended to run dev first and generate secrets in the web docker container
@@ -41,6 +41,13 @@ docker-compose build web
 
 docker-compose run --rm web bash
 
+Tailwind & NPM rebuilding
+docker-compose exec web bash -c "cd assets && npx tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --verbose"
+docker-compose exec web bash -c "cd assets && npm run build"
+npm run build:css
+Get-Process | Where-Object {$_.ProcessName -like "*beam*" -or $_.ProcessName -like "*erl*" -or $_.ProcessName -like "*node*"}
+
+Example Migrations
 # Users table
 mix ecto.gen.migration create_users
 # Posts table
@@ -49,7 +56,7 @@ mix ecto.gen.migration create_posts
 mix ecto.gen.migration create_comments
 
 #create_users (migration)
-defmodule PhoenixLive.Repo.Migrations.CreateUsers do
+defmodule PhoenixApp.Repo.Migrations.CreateUsers do
   use Ecto.Migration
 
   def change do
@@ -65,7 +72,7 @@ defmodule PhoenixLive.Repo.Migrations.CreateUsers do
 end
 
 #create_posts (migration)
-defmodule PhoenixLive.Repo.Migrations.CreatePosts do
+defmodule PhoenixApp.Repo.Migrations.CreatePosts do
   use Ecto.Migration
 
   def change do
@@ -81,7 +88,7 @@ defmodule PhoenixLive.Repo.Migrations.CreatePosts do
 end
 
 # create_comments (migration)
-defmodule PhoenixLive.Repo.Migrations.CreateComments do
+defmodule PhoenixApp.Repo.Migrations.CreateComments do
   use Ecto.Migration
 
   def change do
@@ -99,3 +106,5 @@ end
 
 mix ecto.create
 mix ecto.migrate
+
+cockroach start-single-node --insecure --listen-addr=0.0.0.0 --http-addr=0.0.0.0 --store=/cockroach/cockroach-data

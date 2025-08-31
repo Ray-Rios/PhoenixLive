@@ -11,14 +11,3 @@ else
   echo "⚠️  Phoenix server not running."
 fi
 
-# Optional: Stop local Postgres if started manually
-if pgrep -x "postgres" > /dev/null; then
-  pkill -x "postgres"
-  echo "✅ Postgres stopped."
-fi
-
-# Optional: Stop local Redis if started manually
-if pgrep -x "redis-server" > /dev/null; then
-  pkill -x "redis-server"
-  echo "✅ Redis stopped."
-fi
