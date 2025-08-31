@@ -44,7 +44,6 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - .:/app:rw
       - /app/priv/static/assets
     command: /usr/local/bin/start.sh
 

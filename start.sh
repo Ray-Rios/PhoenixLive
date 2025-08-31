@@ -77,13 +77,14 @@ for i in {1..3}; do
 done
 
 # ----------------------------
-# Wait for Redis
+# Install and build assets initially to avoid race condition
 # ----------------------------
-echo "Waiting for Redis to be ready..."
-until redis-cli -h redis ping | grep -q PONG; do
-  sleep 1
-done
-echo "Redis is ready!"
+cd assets
+echo "Installing npm dependencies..."
+npm install
+echo "Building initial assets..."
+npm run build:css
+cd ..
 
 # ----------------------------
 # Fetch deps and compile only in dev
@@ -93,6 +94,15 @@ if [ "$MIX_ENV" = "dev" ]; then
   mix deps.get
   mix deps.compile
 fi
+
+# ----------------------------
+# Wait for Redis
+# ----------------------------
+echo "Waiting for Redis to be ready..."
+until redis-cli -h redis ping | grep -q PONG; do
+  sleep 1
+done
+echo "Redis is ready!"
 
 # ----------------------------
 # Start Phoenix server

@@ -4,9 +4,6 @@ import "phoenix_html";
 // Topbar for progress indicators
 import topbar from "../vendor/topbar";
 
-// CSS
-import "../css/app.css";
-
 // Phoenix LiveView
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";

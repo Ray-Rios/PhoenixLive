@@ -44,8 +44,12 @@ docker-compose run --rm web bash
 Tailwind & NPM rebuilding
 docker-compose exec web bash -c "cd assets && npx tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --verbose"
 docker-compose exec web bash -c "cd assets && npm run build"
-npm run build:css
+                                              npm run build:css
 Get-Process | Where-Object {$_.ProcessName -like "*beam*" -or $_.ProcessName -like "*erl*" -or $_.ProcessName -like "*node*"}
+
+prune your docker
+docker system prune -a -f
+
 
 Example Migrations
 # Users table
