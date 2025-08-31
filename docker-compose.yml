@@ -45,7 +45,6 @@ services:
         condition: service_healthy
     volumes:
       - .:/app:rw
-      - ./.env:/app/.env:rw
     command: /usr/local/bin/start.sh
 
   mailhog:

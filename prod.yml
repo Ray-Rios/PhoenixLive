@@ -1,12 +1,50 @@
 services:
+  db:
+    image: cockroachdb/cockroach:v25.2.5
+    command: start-single-node --insecure
+    env_file:
+      - .env.prod
+    ports:
+      - "26258:26257"  # SQL port
+      - "8081:8080"    # Admin UI
+    volumes:
+      - cockroach_data_prod:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD-SHELL", "cockroach sql --insecure --host=localhost -e 'SELECT 1;'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   web:
     build:
       context: .
       args:
         MIX_ENV: prod
     env_file:
-      - .env.prod   # still works because it’s baked into image now
+      - .env.prod
     ports:
       - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     command: /usr/local/bin/start.sh
     volumes: []  # no bind mounts in prod
+
+volumes:
+  cockroach_data_prod:
+  redis_data_prod:

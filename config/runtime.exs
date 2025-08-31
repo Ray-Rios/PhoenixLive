@@ -53,15 +53,15 @@ db_port = String.to_integer(System.get_env("DB_PORT") || "26257")
 db_name = System.get_env("DB_NAME") || "phoenixapp_dev"
 db_pool = String.to_integer(System.get_env("POOL_SIZE") || "10")
 
-database_url =
-  System.get_env("DATABASE_URL") ||
-  "postgresql://#{db_username}@#{db_host}:#{db_port}/#{db_name}?sslmode=disable"
+database_url = "postgresql://#{db_username}@#{db_host}:#{db_port}/#{db_name}?sslmode=disable"
 
 config :phoenix_app, PhoenixApp.Repo,
   url: database_url,
   pool_size: db_pool,
-  timeout: 30_000,
-  ownership_timeout: 30_000,
+  timeout: 60_000,
+  ownership_timeout: 60_000,
+  queue_target: 5000,
+  queue_interval: 1000,
   migration_primary_key: [type: :bigserial],
   # CockroachDB specific settings
   prepare: :named,

@@ -2,23 +2,21 @@
 set -e
 
 # ----------------------------
-# Load env file if running outside docker-compose
+# Environment variables are loaded by docker-compose
 # ----------------------------
-if [ -f ".env.prod" ]; then
-  echo "Sourcing .env.prod..."
-  source .env.prod
-fi
+echo "Current MIX_ENV: $MIX_ENV"
+echo "DATABASE_URL: ${DATABASE_URL:0:30}..."
 
 # ----------------------------
 # Generate secrets (dev only)
 # ----------------------------
 if [ "$MIX_ENV" = "dev" ]; then
-  if [ -z "$SECRET_KEY_BASE" ] || [ "$SECRET_KEY_BASE" == "GENERATE_WITH_mix_phx.gen.secret" ]; then
+  if [ -z "$SECRET_KEY_BASE" ] || [[ "$SECRET_KEY_BASE" == GENERATE_WITH_mix_phx.gen.secret* ]]; then
     echo "Generating SECRET_KEY_BASE for dev..."
     export SECRET_KEY_BASE=$(mix phx.gen.secret 64)
   fi
 
-  if [ -z "$LIVE_VIEW_SIGNING_SALT" ] || [ "$LIVE_VIEW_SIGNING_SALT" == "GENERATE_WITH_mix_phx.gen.secret" ]; then
+  if [ -z "$LIVE_VIEW_SIGNING_SALT" ] || [[ "$LIVE_VIEW_SIGNING_SALT" == GENERATE_WITH_mix_phx.gen.secret* ]]; then
     echo "Generating LIVE_VIEW_SIGNING_SALT for dev..."
     export LIVE_VIEW_SIGNING_SALT=$(mix phx.gen.secret 32)
   fi
@@ -52,20 +50,31 @@ echo "LIVE_VIEW_SIGNING_SALT: ${LIVE_VIEW_SIGNING_SALT:0:8}..."
 # Wait for database
 # ----------------------------
 echo "Waiting for CockroachDB to be ready..."
-until pg_isready -h db -p 26257 -U root -d phoenixapp_dev &> /dev/null; do
+until pg_isready -h db -p 26257 -U root &> /dev/null; do
   echo "Waiting for database..."
   sleep 2
 done
 echo "CockroachDB is ready!"
 
 # ----------------------------
-# Run Ecto migrations
+# Create database using Ecto
 # ----------------------------
 echo "Creating database if it doesn't exist..."
-mix ecto.create --quiet || echo "Database already exists"
+mix ecto.create --quiet || echo "Database already exists or creation failed, continuing..."
 
+# ----------------------------
+# Run Ecto migrations with retry
+# ----------------------------
 echo "Running migrations..."
-mix ecto.migrate
+for i in {1..3}; do
+  if mix ecto.migrate; then
+    echo "Migrations completed successfully"
+    break
+  else
+    echo "Migration attempt $i failed, retrying in 5 seconds..."
+    sleep 5
+  fi
+done
 
 # ----------------------------
 # Wait for Redis

@@ -4,7 +4,7 @@ defmodule PhoenixAppWeb.Endpoint do
   @session_options [
     store: :cookie,
     key: "_phoenix_app_key",
-    signing_salt: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+    signing_salt: "phoenix_app_session",
     same_site: "Lax"
   ]
 
@@ -17,7 +17,7 @@ defmodule PhoenixAppWeb.Endpoint do
     at: "/",
     from: :phoenix_app,
     gzip: false,
-    only: ~w(css js fonts images favicon.ico robots.txt)
+    only: ~w(assets css js fonts images favicon.ico robots.txt impact uploads)
 
   if code_reloading? do
     socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket

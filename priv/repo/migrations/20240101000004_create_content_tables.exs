@@ -24,7 +24,7 @@ defmodule PhoenixApp.Repo.Migrations.CreateContentTables do
     create index(:posts, [:user_id])
     create index(:posts, [:is_published])
     create index(:posts, [:published_at])
-    create index(:posts, [:tags], using: :gin)
+    create index(:posts, [:tags])
 
     # Pages
     create table(:pages, primary_key: false) do
