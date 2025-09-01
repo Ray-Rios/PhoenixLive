@@ -1,0 +1,316 @@
+.title {
+    -unity-text-outline-color: rgb(15, 4, 0);
+    font-size: 1131.25%;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    color: rgb(255, 255, 255);
+    justify-content: flex-start;
+    align-self: auto;
+    align-content: auto;
+    -unity-font-definition: url("project://database/Assets/Art/Fonts/TradeWinds-Regular%20SDF.asset?fileID=11400000&guid=b33843871ad4d1e46a8215a895cd4785&type=2#TradeWinds-Regular SDF");
+    text-shadow: 5px 5px 0 rgb(69, 34, 0);
+    align-items: auto;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+}
+
+.sub-title-1 {
+    -unity-text-outline-color: rgb(15, 4, 0);
+    font-size: 64px;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    color: rgb(85, 64, 42);
+    flex-shrink: 1;
+    justify-content: space-evenly;
+    align-self: stretch;
+    align-content: stretch;
+    -unity-font-definition: url("project://database/Assets/Art/Fonts/TradeWinds-Regular%20SDF.asset?fileID=11400000&guid=b33843871ad4d1e46a8215a895cd4785&type=2#TradeWinds-Regular SDF");
+}
+
+.sub-title-2 {
+    -unity-text-outline-color: rgb(15, 4, 0);
+    font-size: 64px;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    color: rgb(255, 255, 255);
+    flex-shrink: 1;
+    justify-content: space-evenly;
+    align-self: stretch;
+    align-content: stretch;
+    -unity-font-definition: url("project://database/Assets/Art/Fonts/Grenze-Medium%20SDF.asset?fileID=11400000&guid=068772b2a0880e44d92a707aa54ac1a5&type=2#Grenze-Medium SDF");
+    text-shadow: 2px 2px 0 rgb(69, 34, 0);
+}
+
+.button {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack_RPG/buttonLong_brown.png?fileID=21300000&guid=e238662b3055afd428fa4c4d9f466c5e&type=3#buttonLong_brown");
+    color: rgb(255, 255, 255);
+    -unity-text-align: middle-center;
+    white-space: pre-wrap;
+    align-content: stretch;
+    height: auto;
+    margin-top: 0;
+    font-size: 53px;
+    margin-bottom: 0;
+    -unity-slice-left: 93;
+    -unity-slice-top: 22;
+    -unity-slice-right: 93;
+    -unity-slice-bottom: 22;
+    padding-bottom: 1%;
+    -unity-font-definition: url("project://database/Assets/Art/Fonts/Grenze-Medium%20SDF.asset?fileID=11400000&guid=068772b2a0880e44d92a707aa54ac1a5&type=2#Grenze-Medium SDF");
+    width: auto;
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgb(255, 255, 255);
+    background-repeat: no-repeat no-repeat;
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
+    padding-top: 0;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.button:hover {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack_RPG/buttonLong_beige.png?fileID=21300000&guid=80a5031652718fc4fb7f78a53f68f33a&type=3#buttonLong_beige");
+}
+
+.button:focus {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack_RPG/buttonLong_beige.png?fileID=21300000&guid=80a5031652718fc4fb7f78a53f68f33a&type=3#buttonLong_beige");
+}
+
+.button:active {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack_RPG/buttonLong_beige_pressed.png?fileID=21300000&guid=0d2ababc184350e45884d58c65eff9db&type=3#buttonLong_beige_pressed");
+}
+
+.button-horizontal {
+    -unity-text-align: middle-center;
+    width: 300px;
+    margin-right: 20px;
+    margin-left: 20px;
+}
+
+.close-button {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack/check_square_color_cross.png?fileID=21300000&guid=2700a0f4282538342bda591a907e2d19&type=3#check_square_color_cross");
+    -unity-background-image-tint-color: rgb(201, 201, 201);
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
+    position: absolute;
+    max-width: 64px;
+    max-height: 64px;
+    width: 45px;
+    height: 45px;
+    align-self: flex-end;
+    bottom: auto;
+    right: 3.75%;
+    top: 6%;
+}
+
+.close-button:hover {
+    -unity-background-image-tint-color: rgb(239, 239, 239);
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack/check_square_color_cross.png?fileID=21300000&guid=2700a0f4282538342bda591a907e2d19&type=3#check_square_color_cross");
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.close-button:active {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack/check_square_color_cross.png?fileID=21300000&guid=2700a0f4282538342bda591a907e2d19&type=3#check_square_color_cross");
+    -unity-background-image-tint-color: rgb(134, 121, 111);
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.unity-progress-bar__background {
+    background-color: rgb(0, 0, 0);
+}
+
+.unity-progress-bar__progress {
+    background-color: rgb(255, 255, 255);
+}
+
+.scaled-text {
+}
+
+.base-brown-text {
+    color: rgb(85, 64, 42);
+    font-size: 43px;
+    -unity-font-definition: url("project://database/Assets/Art/Fonts/Grenze-Medium%20SDF.asset?fileID=11400000&guid=068772b2a0880e44d92a707aa54ac1a5&type=2#Grenze-Medium SDF");
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.unity-base-slider__label {
+    -unity-text-align: upper-left;
+    position: relative;
+    left: 3%;
+    -unity-font-definition: url("project://database/Assets/Art/Fonts/Texturina-Italic-VariableFont_opsz,wght%20SDF.asset?fileID=11400000&guid=a7296cca6916660448cc5fd650c73305&type=2#Texturina-Italic-VariableFont_opsz,wght SDF");
+    font-size: 33px;
+    white-space: pre;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    align-content: stretch;
+    align-self: stretch;
+    color: rgb(85, 64, 42);
+    -unity-font-style: normal;
+    min-width: 250px;
+}
+
+.unity-base-slider__tracker {
+    background-color: rgb(85, 64, 42);
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+}
+
+.unity-base-slider__tracker:hover {
+    background-color: rgb(113, 87, 59);
+}
+
+.unity-base-slider__dragger {
+    background-image: url("project://database/Assets/Art/Kenney/UI_Pack_Adventure/scrollbar_brown_small.png?fileID=21300000&guid=91881fa4dca41884fb207b22a5d919e3&type=3#scrollbar_brown_small");
+    min-height: 30px;
+    min-width: 20px;
+    align-items: flex-start;
+    max-width: 20px;
+    max-height: 30px;
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.unity-base-slider__dragger:hover {
+    -unity-background-image-tint-color: rgb(255, 255, 255);
+    align-items: auto;
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.unity-slider__input {
+    margin-left: 0;
+}
+
+.heart {
+    flex-grow: 1;
+    background-image: url("project://database/Assets/Art/SecretDimension/UI/Heart_01.png?fileID=21300000&guid=86a67c98ba634244ea293f8d045fdb86&type=3#Heart_01");
+    -unity-background-scale-mode: scale-to-fit;
+    background-position-x: left 0;
+    min-height: 100%;
+    translate: 0 0;
+    min-width: 50px;
+}
+
+.unity-base-slider_dragger-border {
+}
+
+.unity-base-slider--horizontal {
+}
+
+.unity-base-slider--horizontal:focus {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.button-horizontal {
+}
+
+.selector-button {
+    position: absolute;
+    align-self: center;
+    min-width: 50%;
+    max-width: 60%;
+    min-height: 100%;
+    max-height: 100%;
+    background-color: rgba(224, 188, 62, 0);
+    border-left-color: rgba(0, 0, 0, 0);
+    border-right-color: rgba(0, 0, 0, 0);
+    border-top-color: rgba(0, 0, 0, 0);
+    border-bottom-color: rgba(0, 0, 0, 0);
+}
+
+.selector-button:hover {
+    position: absolute;
+    align-self: center;
+    min-width: 50%;
+    max-width: 60%;
+    min-height: 100%;
+    max-height: 100%;
+    background-color: rgba(224, 188, 62, 0.55);
+}
+
+.selector-button:focus {
+    position: absolute;
+    align-self: center;
+    min-width: 50%;
+    max-width: 60%;
+    min-height: 100%;
+    max-height: 100%;
+    background-color: rgba(224, 188, 62, 0.55);
+}

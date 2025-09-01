@@ -1,0 +1,44 @@
+///<copyright> Secret Dimension Inc. 2025, All rights reserved <copyright>
+using UnityEngine;
+
+namespace SecretDimension
+{
+    ///<summary>
+    /// Class Description 
+    ///</summary>
+    public class #SCRIPTNAME# : MonoBehaviour
+    {
+        #region Attributes
+        // Attributes
+        #endregion
+
+        #region Unity Methods
+        // Unity Methods
+
+        /// <summary>
+        /// Awake is called when the script instance is being loaded.
+        /// </summary>
+        private void Awake()
+        {
+            #NOTRIM#
+        }
+
+        /// <summary>
+        /// Start is called once before the first execution of Update after the MonoBehaviour is created
+        /// </summary>
+        private void Start()
+        {
+            #NOTRIM#
+        }
+
+        /// <summary>
+        /// Update is called once per frame
+        /// </summary>
+        private void Update()
+        {
+            #NOTRIM#
+        }
+        #endregion
+        
+    }
+}

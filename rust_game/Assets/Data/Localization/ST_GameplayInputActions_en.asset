@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9620f8c34305754d8cc9a7e49e852d9, type: 3}
+  m_Name: ST_GameplayInputActions_en
+  m_EditorClassIdentifier: 
+  m_LocaleId:
+    m_Code: en
+  m_SharedData: {fileID: 11400000, guid: bfbd29c741d53c24690f47fc8e820962, type: 2}
+  m_Metadata:
+    m_Items: []
+  m_TableData:
+  - m_Id: 26503790592
+    m_Localized: Jump
+    m_Metadata:
+      m_Items: []
+  - m_Id: 51891912704
+    m_Localized: Move Axis
+    m_Metadata:
+      m_Items: []
+  - m_Id: 97580466176
+    m_Localized: Move Left
+    m_Metadata:
+      m_Items: []
+  - m_Id: 149321400320
+    m_Localized: Move Right
+    m_Metadata:
+      m_Items: []
+  - m_Id: 206452015104
+    m_Localized: Pause
+    m_Metadata:
+      m_Items: []
+  references:
+    version: 2
+    RefIds: []

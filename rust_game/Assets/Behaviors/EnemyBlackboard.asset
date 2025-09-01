@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-4930126353040981151
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c02bb70996b49eba31d0c206e28da24, type: 3}
+  m_Name: EnemyBlackboard
+  m_EditorClassIdentifier: 
+  VersionTimestamp: 638787487976042304
+  AssetID:
+    m_Value0: 4928067541396958950
+    m_Value1: 11295114502437540603
+  m_Blackboard:
+    m_Variables:
+    - rid: 1684406263014752670
+    - rid: 8546309918006968473
+  m_SharedBlackboardVariableGuids: []
+  references:
+    version: 2
+    RefIds:
+    - rid: 1684406263014752670
+      type: {class: 'BlackboardVariable`1[[System.Boolean, mscorlib]]', ns: Unity.Behavior, asm: Unity.Behavior}
+      data:
+        GUID:
+          m_Value0: 16075440489590843603
+          m_Value1: 14006599795458016423
+        Name: IsPlayerInPatrolVolume
+        m_Value: 0
+    - rid: 8546309918006968473
+      type: {class: 'BlackboardVariable`1[[System.Single, mscorlib]]', ns: Unity.Behavior, asm: Unity.Behavior}
+      data:
+        GUID:
+          m_Value0: 14995022011418318753
+          m_Value1: 8485345936655514802
+        Name: PatrolSpeed
+        m_Value: 0
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2dd922ae02c94c87a66e46a10a7319b9, type: 3}
+  m_Name: EnemyBlackboard
+  m_EditorClassIdentifier: 
+  AssetID:
+    m_Value0: 4928067541396958950
+    m_Value1: 11295114502437540603
+  m_Variables:
+  - rid: 1684406263014752647
+  - rid: 8546309918006968472
+  m_VersionTimestamp: 638787487976042304
+  m_CommandBuffer:
+    m_Commands: []
+  m_RuntimeBlackboardAsset: {fileID: -4930126353040981151}
+  references:
+    version: 2
+    RefIds:
+    - rid: 1684406263014752647
+      type: {class: 'TypedVariableModel`1[[System.Boolean, mscorlib]]', ns: Unity.Behavior.GraphFramework, asm: Unity.Behavior.GraphFramework}
+      data:
+        ID:
+          m_Value0: 16075440489590843603
+          m_Value1: 14006599795458016423
+        Name: IsPlayerInPatrolVolume
+        IsExposed: 0
+        m_IsShared: 0
+        m_Value: 0
+    - rid: 8546309918006968472
+      type: {class: 'TypedVariableModel`1[[System.Single, mscorlib]]', ns: Unity.Behavior.GraphFramework, asm: Unity.Behavior.GraphFramework}
+      data:
+        ID:
+          m_Value0: 14995022011418318753
+          m_Value1: 8485345936655514802
+        Name: PatrolSpeed
+        IsExposed: 0
+        m_IsShared: 0
+        m_Value: 0

@@ -57,34 +57,38 @@ done
 echo "CockroachDB is ready!"
 
 # ----------------------------
-# Create database using Ecto
+# Create database using Ecto (temporarily disabled for debugging)
 # ----------------------------
-echo "Creating database if it doesn't exist..."
-mix ecto.create --quiet || echo "Database already exists or creation failed, continuing..."
+echo "Skipping database creation for debugging..."
+# mix ecto.create --quiet || echo "Database already exists or creation failed, continuing..."
 
 # ----------------------------
-# Run Ecto migrations with retry
+# Run Ecto migrations with retry (temporarily disabled for debugging)
 # ----------------------------
-echo "Running migrations..."
-for i in {1..3}; do
-  if mix ecto.migrate; then
-    echo "Migrations completed successfully"
-    break
-  else
-    echo "Migration attempt $i failed, retrying in 5 seconds..."
-    sleep 5
-  fi
-done
+echo "Skipping migrations for debugging..."
+# for i in {1..3}; do
+#   if mix ecto.migrate; then
+#     echo "Migrations completed successfully"
+#     break
+#   else
+#     echo "Migration attempt $i failed, retrying in 5 seconds..."
+#     sleep 5
+#   fi
+# done
 
 # ----------------------------
 # Install and build assets initially to avoid race condition
 # ----------------------------
-cd assets
-echo "Installing npm dependencies..."
-npm install
-echo "Building initial assets..."
-npm run build:css
-cd ..
+if [ -d "assets" ]; then
+  cd assets
+  echo "Installing npm dependencies..."
+  npm install
+  echo "Building initial assets..."
+  npm run build:css
+  cd ..
+else
+  echo "Assets directory not found, skipping asset build..."
+fi
 
 # ----------------------------
 # Fetch deps and compile only in dev

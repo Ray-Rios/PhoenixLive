@@ -1,0 +1,8 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <engine:VisualElement name="Container" style="flex-grow: 1; align-items: stretch; flex-direction: row; justify-content: center; position: relative; min-width: auto; min-height: auto; max-width: none; max-height: none; align-self: stretch;">
+        <engine:Label name="ProjectText" text="Parrot" class="title" />
+        <engine:VisualElement name="SwordLogo" enabled="true" picking-mode="Ignore" style="flex-grow: 0; background-image: url(&quot;project://database/Assets/Art/Quaternius/PirateKit/UI_Props/T_UI_Swords_2D.PNG?fileID=2800000&amp;guid=d83144a9783cdc149836525247d4a257&amp;type=3#T_UI_Swords_2D&quot;); align-items: center; justify-content: center; align-self: auto; align-content: center; width: 15%; flex-basis: auto; -unity-background-scale-mode: scale-to-fit; padding-right: 0; margin-right: 0; -unity-background-image-tint-color: rgb(255, 255, 255); background-color: rgba(0, 0, 0, 0); -unity-font-definition: initial; margin-left: 0;" />
+        <engine:Label name="ParrotText" text="Sample" class="title" />
+    </engine:VisualElement>
+</engine:UXML>

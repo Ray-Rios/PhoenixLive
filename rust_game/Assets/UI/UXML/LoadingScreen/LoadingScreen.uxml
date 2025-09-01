@@ -1,0 +1,16 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <engine:VisualElement name="ScreenContainer" style="flex-grow: 1; width: 100%; height: 100%;">
+        <engine:VisualElement name="LoadingScreen" style="flex-grow: 1;">
+            <engine:VisualElement name="background" style="flex-grow: 1; background-image: url(&quot;project://database/Assets/Art/SecretDimension/UI/T_FlatBlack.png?fileID=2800000&amp;guid=66f9bfa0f5ed2414db9ab7e3925feed5&amp;type=3#T_FlatBlack&quot;);" />
+            <SecretDimension.AspectRatioContainer style="position: absolute; flex-grow: 1; width: 100%; height: 100%;">
+                <engine:Label text="Label" name="loading-text" class="title" style="flex-basis: auto; position: relative; top: 20%;">
+                    <Bindings>
+                        <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1559928750080)" />
+                    </Bindings>
+                </engine:Label>
+                <engine:ProgressBar name="loading-progress" value="0" high-value="1" style="position: relative; width: 20%; flex-wrap: nowrap; background-color: rgba(0, 0, 0, 0); border-left-color: rgba(0, 0, 0, 0); border-right-color: rgba(0, 0, 0, 0); border-top-color: rgba(0, 0, 0, 0); border-bottom-color: rgba(0, 0, 0, 0); color: rgb(255, 255, 255); align-self: center; top: 50%;" />
+            </SecretDimension.AspectRatioContainer>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

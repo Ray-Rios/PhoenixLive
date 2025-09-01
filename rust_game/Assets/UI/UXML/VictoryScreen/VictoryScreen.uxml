@@ -1,0 +1,20 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <engine:VisualElement name="ScreenContainer" style="flex-grow: 1;">
+        <engine:VisualElement name="level-complete-screen" style="flex-grow: 1; margin-right: 20%; margin-left: 20%; margin-top: 5%;">
+            <SecretDimension.LabelAutofit name="screen-title" class="title">
+                <Bindings>
+                    <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1503821545472)" />
+                </Bindings>
+            </SecretDimension.LabelAutofit>
+            <engine:Label text="Completed in: " name="level-complete-text" class="sub-title-2" />
+            <engine:VisualElement name="button-container" style="flex-direction: row; align-items: center; justify-content: center; height: 20%; top: 30%;">
+                <engine:Button name="continue-button" class="button button-horizontal">
+                    <Bindings>
+                        <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1162291953664)" />
+                    </Bindings>
+                </engine:Button>
+            </engine:VisualElement>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

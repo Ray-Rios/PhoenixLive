@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c876d4bff68c2b34ba2ab25702838246, type: 3}
+  m_Name: ParrotLevelData
+  m_EditorClassIdentifier: 
+  mainMenuLevel:
+    sceneAsset: {fileID: 102900000, guid: f59fdc137add490449ab4d347c748b11, type: 3}
+    scenePath: Assets/Scenes/Primary/_MainMenu.unity
+  singlePlayerLevels:
+  - sceneAsset: {fileID: 102900000, guid: cf3c9c981c5dd8d409530f9dc13a7d0d, type: 3}
+    scenePath: Assets/Scenes/Primary/_Level1.unity
+  - sceneAsset: {fileID: 102900000, guid: e47237a58926b9f4e9b4bb568dfb2910, type: 3}
+    scenePath: Assets/Scenes/Primary/_Level2.unity
+  - sceneAsset: {fileID: 102900000, guid: 68b763a24fe4eb94481f9c91027e5f1e, type: 3}
+    scenePath: Assets/Scenes/Primary/_LevelBoss.unity

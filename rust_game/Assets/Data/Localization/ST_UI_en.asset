@@ -1,0 +1,163 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9620f8c34305754d8cc9a7e49e852d9, type: 3}
+  m_Name: ST_UI_en
+  m_EditorClassIdentifier: 
+  m_LocaleId:
+    m_Code: en
+  m_SharedData: {fileID: 11400000, guid: 1c7c5c671507db64399514259aef5b2c, type: 2}
+  m_Metadata:
+    m_Items: []
+  m_TableData:
+  - m_Id: 734535860224
+    m_Localized: Accept
+    m_Metadata:
+      m_Items: []
+  - m_Id: 840299429888
+    m_Localized: Actions
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1022151868416
+    m_Localized: Apply
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1054380900352
+    m_Localized: Back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1081778094080
+    m_Localized: Are you sure?
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1162291953664
+    m_Localized: Continue
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1208420909056
+    m_Localized: Exit To Main Menu
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1287454179328
+    m_Localized: Exit To Desktop
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1337517391872
+    m_Localized: Game Over!
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1385336651776
+    m_Localized: Gamepad
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1438054858752
+    m_Localized: Key Bindings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1503821545472
+    m_Localized: Level Complete!
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1559928750080
+    m_Localized: Loading...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1624319705088
+    m_Localized: Main Volume
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1660495577088
+    m_Localized: Music Volume
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1963353686016
+    m_Localized: Keyboard
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2000754294784
+    m_Localized: No
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2066651004928
+    m_Localized: Parrot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2107235090432
+    m_Localized: Play
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2131507527680
+    m_Localized: 'Press any axis to bind to '
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2194224955392
+    m_Localized: Press any button to bind to
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2254203502592
+    m_Localized: Press the start button to cancel.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2321945706496
+    m_Localized: Press escape to cancel.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2434692792320
+    m_Localized: Press any key to bind to
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2471283900416
+    m_Localized: Project
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2505857548288
+    m_Localized: Project Parrot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2585947783168
+    m_Localized: Quit
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2628511580160
+    m_Localized: Reset
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2651517337600
+    m_Localized: Reset All
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2707775537152
+    m_Localized: Resume
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2743519395840
+    m_Localized: Settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2782295736320
+    m_Localized: SFX Volume
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2858455908352
+    m_Localized: TIME
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2894799552512
+    m_Localized: You have unsaved mappings, are you sure you want to exit?
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2955101061120
+    m_Localized: Yes
+    m_Metadata:
+      m_Items: []
+  references:
+    version: 2
+    RefIds: []

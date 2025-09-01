@@ -54,9 +54,18 @@
             RUN mix deps.get && mix deps.compile
             
         # -------------------------------
-        # Compile only for prod
+        # Copy source code and compile
         # -------------------------------
-            RUN if [ "$MIX_ENV" = "prod" ]; then mix compile; fi
+            COPY lib ./lib
+            
+        # -------------------------------
+        # Copy assets and build them
+        # -------------------------------
+            COPY assets ./assets
+            RUN cd assets && npm install
+            RUN mix assets.deploy
+            
+            RUN mix compile
         
     # -------------------------------
     # Expose port & start script

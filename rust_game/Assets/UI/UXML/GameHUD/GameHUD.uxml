@@ -1,0 +1,32 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <engine:Template name="PauseScreen" src="project://database/Assets/UI/UXML/PauseScreen/PauseScreen.uxml?fileID=9197481963319205126&amp;guid=a734fc60ecaed7147929a171cde210cb&amp;type=3#PauseScreen" />
+    <engine:Template name="SettingsScreen" src="project://database/Assets/UI/UXML/SettingsScreen/SettingsScreen.uxml?fileID=9197481963319205126&amp;guid=0e98950add3dbbe4a99f213635bc5e4a&amp;type=3#SettingsScreen" />
+    <engine:Template name="KeybindingsScreen" src="project://database/Assets/UI/UXML/KeybindingsScreen/KeybindingsScreen.uxml?fileID=9197481963319205126&amp;guid=2f5f08cd0b98c3b429d4f416c5c88ef0&amp;type=3#KeybindingsScreen" />
+    <engine:Template name="GameOverScreen" src="project://database/Assets/UI/UXML/GameOverScreen/GameOverScreen.uxml?fileID=9197481963319205126&amp;guid=3e740b66700db054cbf696a868926d30&amp;type=3#GameOverScreen" />
+    <engine:Template name="VictoryScreen" src="project://database/Assets/UI/UXML/VictoryScreen/VictoryScreen.uxml?fileID=9197481963319205126&amp;guid=9832aba95d6e8354f8150d0d33443d0f&amp;type=3#VictoryScreen" />
+    <engine:Template name="InputHint" src="project://database/Assets/UI/UXML/Utility/InputHint.uxml?fileID=9197481963319205126&amp;guid=e2afb5dc2f5fd354f83593644d0fa5e8&amp;type=3#InputHint" />
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <SecretDimension.AspectRatioContainer style="width: 100%; height: 100%; flex-grow: 1;">
+        <engine:VisualElement name="game-hud" style="flex-grow: 1; width: 100%; height: 100%;">
+            <engine:VisualElement name="timer" style="flex-grow: 0; width: 10%; align-self: center; max-height: 16%; min-height: 14%;">
+                <engine:VisualElement name="timer-background" style="flex-grow: 1; width: auto; height: auto; background-image: url(&quot;project://database/Assets/Art/Kenney/UI_Pack_Adventure/panel_brown_corners_a.png?fileID=21300000&amp;guid=fdb62815106b24842b1369b7fb441c2d&amp;type=3#panel_brown_corners_a&quot;); padding-top: 0; padding-right: 0; padding-bottom: 0; padding-left: 0; align-content: center; position: relative; min-height: auto; min-width: auto; -unity-background-scale-mode: stretch-to-fill;">
+                    <engine:Label text="Label" name="timer-title" style="-unity-font-definition: url(&quot;project://database/Assets/Art/Fonts/Grenze-Medium%20SDF.asset?fileID=11400000&amp;guid=068772b2a0880e44d92a707aa54ac1a5&amp;type=2#Grenze-Medium SDF&quot;); -unity-text-align: upper-center; margin-top: 0; margin-right: 0; margin-bottom: 0; margin-left: 0; padding-top: 0; padding-right: 0; padding-bottom: 0; padding-left: 0; color: rgb(85, 64, 42); font-size: 53%; -unity-background-scale-mode: scale-to-fit; top: 8%; align-self: stretch; max-height: 75%; height: 50%; width: 100%;">
+                        <Bindings>
+                            <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(2858455908352)" />
+                        </Bindings>
+                    </engine:Label>
+                    <engine:Label text="300" name="timer-time" enabled="true" enable-rich-text="true" style="-unity-font-definition: url(&quot;project://database/Assets/Art/Fonts/Texturina-Italic-VariableFont_opsz,wght%20SDF.asset?fileID=11400000&amp;guid=a7296cca6916660448cc5fd650c73305&amp;type=2#Texturina-Italic-VariableFont_opsz,wght SDF&quot;); margin-top: 0; margin-right: 0; margin-bottom: 0; margin-left: 0; padding-top: 0; padding-right: 0; padding-bottom: 0; padding-left: 0; color: rgb(85, 64, 42); font-size: 40%; -unity-background-scale-mode: scale-to-fit; flex-shrink: 1; top: auto; flex-grow: 1; justify-content: flex-start; align-self: stretch; position: relative; -unity-text-align: upper-center; max-height: none; width: 100%; height: 10%; bottom: 9%;" />
+                </engine:VisualElement>
+            </engine:VisualElement>
+            <engine:VisualElement name="heart-container" style="flex-grow: 1; position: absolute; flex-direction: row; align-self: flex-start; min-height: 50px; margin-top: 1%; margin-left: 1.25%;" />
+            <engine:Instance template="InputHint" name="jump-hint" style="position: absolute; right: 0; bottom: 0;">
+                <AttributeOverrides element-name="hint-content" GamepadBindingID="1" />
+            </engine:Instance>
+        </engine:VisualElement>
+        <engine:Instance template="PauseScreen" name="pause-screen-template" style="width: 100%; height: 100%; display: none; flex-grow: 1;" />
+        <engine:Instance template="SettingsScreen" name="settings-screen-template" style="width: 100%; height: 100%; display: none; flex-grow: 1;" />
+        <engine:Instance template="KeybindingsScreen" name="keybindings-screen-template" style="width: 100%; height: 100%; display: none; flex-grow: 1;" />
+        <engine:Instance template="GameOverScreen" name="game-over-screen-template" style="flex-grow: 1; width: 100%; height: 100%; display: none;" />
+        <engine:Instance template="VictoryScreen" name="victory-screen-template" style="flex-grow: 1; width: 100%; height: 100%; display: none;" />
+    </SecretDimension.AspectRatioContainer>
+</engine:UXML>

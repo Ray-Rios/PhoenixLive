@@ -1,0 +1,38 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <engine:VisualElement name="ScreenContainer" style="flex-grow: 1;">
+        <engine:VisualElement name="pause-screen" style="flex-grow: 1;">
+            <engine:VisualElement name="screen-background" enabled="true" picking-mode="Ignore" style="flex-grow: 1; position: absolute; background-color: rgba(0, 0, 0, 0); background-image: url(&quot;project://database/Assets/Art/SecretDimension/UI/T_FlatBlack.png?fileID=21300000&amp;guid=66f9bfa0f5ed2414db9ab7e3925feed5&amp;type=3#T_FlatBlack&quot;); -unity-background-image-tint-color: rgba(255, 255, 255, 0.5); width: 100%; height: 100%;" />
+            <engine:VisualElement name="button-container" style="flex-grow: 1; padding-top: 10px; padding-right: 40px; padding-bottom: 10px; padding-left: 40px; justify-content: center; background-image: url(&quot;project://database/Assets/Art/Kenney/UI_Pack_Adventure/panel_brown_corners_a.png?fileID=2800000&amp;guid=fdb62815106b24842b1369b7fb441c2d&amp;type=3#panel_brown_corners_a&quot;); -unity-slice-left: 62; -unity-slice-top: 62; -unity-slice-right: 62; -unity-slice-bottom: 62; top: 30%; left: auto; max-width: 400px; max-height: 350px; align-self: center; min-width: 350px;">
+                <engine:Button name="resume-button" class="button" style="min-height: 25%; font-size: 35%; margin-bottom: 10px;">
+                    <Bindings>
+                        <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(2707775537152)" />
+                    </Bindings>
+                </engine:Button>
+                <engine:Button name="settings-button" class="button" style="min-height: 25%; font-size: 35%; margin-bottom: 10px;">
+                    <Bindings>
+                        <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(2743519395840)" />
+                    </Bindings>
+                </engine:Button>
+                <engine:Button name="exit-button" class="button" style="min-height: 25%; font-size: 30%;">
+                    <Bindings>
+                        <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1208420909056)" />
+                    </Bindings>
+                </engine:Button>
+            </engine:VisualElement>
+            <engine:VisualElement name="back-hint" template="InputHint" style="right: 0; bottom: 0; position: absolute;">
+                <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+                <SecretDimension.ParrotVisibilityBorder name="hint" VisibleInputType="Gamepad" picking-mode="Ignore" style="right: 0; bottom: 0; position: absolute;">
+                    <SecretDimension.GamepadHint SpriteData="project://database/Assets/Data/Input/ParrotSpriteData.asset?fileID=11400000&amp;guid=56ca95fe1ffa5eb44bf882e635add6d9&amp;type=2#ParrotSpriteData" name="hint-content" picking-mode="Ignore" GamepadBindingID="0" Action="project://database/Assets/Data/Input/InputSystem_Actions.inputactions?fileID=-4567588500682921604&amp;guid=82c64129c95c44e9ab1ff932a9ff0efd&amp;type=3#UI/Cancel" style="flex-direction: row; flex-wrap: nowrap;">
+                        <engine:Label name="title-1" picking-mode="Ignore" class="sub-title-2">
+                            <Bindings>
+                                <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1054380900352)" />
+                            </Bindings>
+                        </engine:Label>
+                        <engine:Label name="icon" picking-mode="Ignore" style="-unity-text-align: middle-center; font-size: 25px;" />
+                    </SecretDimension.GamepadHint>
+                </SecretDimension.ParrotVisibilityBorder>
+            </engine:VisualElement>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

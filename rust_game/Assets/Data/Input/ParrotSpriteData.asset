@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 122790fdc2234af418289f50b020b60c, type: 3}
+  m_Name: ParrotSpriteData
+  m_EditorClassIdentifier: 
+  SpriteSheet: XboxSpriteSheet1
+  DisplayFormatString: <sprite="{0}" name="{1}">
+  IconData:
+  - inputControl: buttonSouth
+    spritePath: a
+  - inputControl: buttonWest
+    spritePath: x
+  - inputControl: buttonEast
+    spritePath: b
+  - inputControl: buttonNorth
+    spritePath: y
+  - inputControl: dpad/up
+    spritePath: dpad-1-up
+  - inputControl: dpad/down
+    spritePath: dpad-1-down
+  - inputControl: dpad/left
+    spritePath: dpad-1-left
+  - inputControl: dpad/right
+    spritePath: dpad-1-right
+  - inputControl: leftStickPress
+    spritePath: stick-l-in
+  - inputControl: leftStick/up
+    spritePath: stick-l-up
+  - inputControl: leftStick/down
+    spritePath: stick-l-down
+  - inputControl: leftStick/left
+    spritePath: stick-l-left
+  - inputControl: leftStick/right
+    spritePath: stick-l-right
+  - inputControl: rightStickPress
+    spritePath: stick-r-in
+  - inputControl: rightStick/up
+    spritePath: stick-r-up
+  - inputControl: rightStick/left
+    spritePath: stick-r-left
+  - inputControl: rightStick/right
+    spritePath: stick-r-right
+  - inputControl: rightStick/down
+    spritePath: stick-r-down
+  - inputControl: leftShoulder
+    spritePath: lb-1
+  - inputControl: rightShoulder
+    spritePath: rb-1
+  - inputControl: leftTrigger
+    spritePath: lt-1
+  - inputControl: rightTrigger
+    spritePath: rt-1
+  - inputControl: '*/{Cancel}'
+    spritePath: b

@@ -1,0 +1,61 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <engine:VisualElement name="ScreenContainer" style="flex-grow: 1;">
+        <engine:VisualElement name="screen-background" picking-mode="Ignore" style="flex-grow: 1; position: absolute; background-color: rgba(0, 0, 0, 0); background-image: url(&quot;project://database/Assets/Art/SecretDimension/UI/T_FlatBlack.png?fileID=21300000&amp;guid=66f9bfa0f5ed2414db9ab7e3925feed5&amp;type=3#T_FlatBlack&quot;); -unity-background-image-tint-color: rgba(255, 255, 255, 0.8); width: 100%; height: 100%;" />
+        <engine:VisualElement name="settings-screen" style="flex-grow: 1; font-size: 33px;">
+            <engine:VisualElement name="container" style="top: 22.5%; left: initial; justify-content: center; align-self: center; min-width: 440px;">
+                <engine:VisualElement name="container-background" style="position: absolute; background-image: url(&quot;project://database/Assets/Art/Kenney/UI_Pack_Adventure/panel_brown_corners_a.png?fileID=21300000&amp;guid=fdb62815106b24842b1369b7fb441c2d&amp;type=3#panel_brown_corners_a&quot;); -unity-slice-scale: 1px; width: 100%; height: 100%;" />
+                <engine:VisualElement name="button-container" style="flex-grow: 1; padding-top: 50px; padding-right: 50px; padding-bottom: 50px; padding-left: 50px; justify-content: space-evenly;">
+                    <SecretDimension.ParrotVisibilityBorder name="visibility-container" style="position: absolute; top: 0; width: 100%; height: 100%; align-self: center;">
+                        <engine:Button name="close-button" class="close-button" style="position: absolute; justify-content: center; left: auto; bottom: auto; align-items: flex-end; align-self: flex-end; align-content: flex-start; right: 30px; top: 30px; min-width: 32px; min-height: 32px;" />
+                    </SecretDimension.ParrotVisibilityBorder>
+                    <engine:Label text="Label" name="settings-title" class="sub-title-1">
+                        <Bindings>
+                            <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(2743519395840)" />
+                        </Bindings>
+                    </engine:Label>
+                    <engine:Slider label="Slider" high-value="1" name="main-volume" value="1" style="min-width: 450px; padding-right: 5px; -unity-text-align: middle-center; white-space: normal; margin-left: 0;">
+                        <Bindings>
+                            <UnityEngine.Localization.LocalizedString property="label" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1624319705088)" />
+                        </Bindings>
+                    </engine:Slider>
+                    <engine:Slider label="Slider" value="1" high-value="1" name="music-volume" page-size="0.1" style="min-width: 450px; padding-right: 5px; -unity-text-align: middle-center; white-space: normal; margin-left: 0;">
+                        <Bindings>
+                            <UnityEngine.Localization.LocalizedString property="label" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1660495577088)" />
+                        </Bindings>
+                    </engine:Slider>
+                    <engine:Slider label="Slider" value="1" high-value="1" name="sfx-volume" page-size="0.1" style="min-width: 450px; padding-right: 5px; -unity-text-align: middle-center; white-space: normal; margin-left: 0;">
+                        <Bindings>
+                            <UnityEngine.Localization.LocalizedString property="label" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(2782295736320)" />
+                        </Bindings>
+                    </engine:Slider>
+                    <engine:Button name="keybindings-button" class="button" style="min-height: 20%; margin-top: 10px;">
+                        <Bindings>
+                            <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1438054858752)" />
+                        </Bindings>
+                    </engine:Button>
+                </engine:VisualElement>
+            </engine:VisualElement>
+            <engine:VisualElement name="back-hint" template="InputHint" style="right: 0; bottom: 0; position: absolute;">
+                <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+                <SecretDimension.ParrotVisibilityBorder name="hint" VisibleInputType="Gamepad" picking-mode="Ignore" style="right: 0; bottom: 0; position: absolute;">
+                    <SecretDimension.GamepadHint SpriteData="project://database/Assets/Data/Input/ParrotSpriteData.asset?fileID=11400000&amp;guid=56ca95fe1ffa5eb44bf882e635add6d9&amp;type=2#ParrotSpriteData" name="hint-content" picking-mode="Ignore" GamepadBindingID="0" Action="project://database/Assets/Data/Input/InputSystem_Actions.inputactions?fileID=-4567588500682921604&amp;guid=82c64129c95c44e9ab1ff932a9ff0efd&amp;type=3#UI/Cancel" style="flex-direction: row; flex-wrap: nowrap;">
+                        <engine:Label name="title-1" picking-mode="Ignore" class="sub-title-2">
+                            <Bindings>
+                                <UnityEngine.Localization.LocalizedString property="text" table="GUID:1c7c5c671507db64399514259aef5b2c" entry="Id(1054380900352)" />
+                            </Bindings>
+                        </engine:Label>
+                        <engine:Label name="icon" picking-mode="Ignore" style="-unity-text-align: middle-center; font-size: 25px;" />
+                    </SecretDimension.GamepadHint>
+                </SecretDimension.ParrotVisibilityBorder>
+            </engine:VisualElement>
+            <engine:VisualElement name="version-number" template="InputHint" style="right: auto; bottom: 0; position: absolute; top: auto; left: 0;">
+                <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+                <engine:VisualElement style="flex-direction: row;">
+                    <engine:Label text="v" class="sub-title-2" style="font-size: 32px; margin-left: 15px; margin-bottom: 5px; padding-right: 0; margin-right: 2px; -unity-text-align: middle-center; padding-top: 10px;" />
+                    <engine:Label text="1.0.21619" class="sub-title-2" style="font-size: 42px; margin-left: 0; margin-bottom: 5px; padding-left: 0; padding-right: 0; margin-right: 0;" />
+                </engine:VisualElement>
+            </engine:VisualElement>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

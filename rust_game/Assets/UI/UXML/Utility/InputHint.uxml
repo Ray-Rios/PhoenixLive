@@ -1,0 +1,9 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <SecretDimension.ParrotVisibilityBorder name="hint" VisibleInputType="Gamepad" picking-mode="Ignore" style="right: 0; bottom: 0; position: absolute;">
+        <SecretDimension.GamepadHint SpriteData="project://database/Assets/Data/Input/ParrotSpriteData.asset?fileID=11400000&amp;guid=56ca95fe1ffa5eb44bf882e635add6d9&amp;type=2#ParrotSpriteData" Action="project://database/Assets/Data/Input/InputSystem_Actions.inputactions?fileID=9064083588028862933&amp;guid=82c64129c95c44e9ab1ff932a9ff0efd&amp;type=3#Gameplay/Jump" name="hint-content" picking-mode="Ignore" style="flex-direction: row; flex-wrap: nowrap;">
+            <engine:Label name="title" picking-mode="Ignore" class="sub-title-2" />
+            <engine:Label name="icon" picking-mode="Ignore" style="-unity-text-align: middle-center; font-size: 25px;" />
+        </SecretDimension.GamepadHint>
+    </SecretDimension.ParrotVisibilityBorder>
+</engine:UXML>

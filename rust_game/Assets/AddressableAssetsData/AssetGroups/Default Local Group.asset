@@ -1,0 +1,166 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: Default Local Group
+  m_EditorClassIdentifier: 
+  m_GroupName: Default Local Group
+  m_GUID: 97565800bc9f7f2439e9c9e1bb124c35
+  m_SerializeEntries:
+  - m_GUID: 05a795a5a48078143a9f7808e1542bf0
+    m_Address: Assets/Art/OpenGameArt/Music/ASailorsChant/oga_jam_menu_music_loopable.wav
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - music
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 068772b2a0880e44d92a707aa54ac1a5
+    m_Address: Assets/Art/Fonts/Grenze-Medium SDF.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - font
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 18ea1e60bb3d48049be9fe74d995ed2f
+    m_Address: Assets/Art/OpenGameArt/Music/AKnightsChallenge/a_knights_challenge.wav
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - music
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2aa639edb01a27c488884a5e2d59c2c9
+    m_Address: Assets/Scenes/MainMenu/_MainMenuUI.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 55d228623ba2fbd42ab3e1f4046155ec
+    m_Address: Assets/Scenes/Environment/Level1Environment.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5b507e2211d874d4eb1ed4f0d617e64d
+    m_Address: Assets/Art/OpenGameArt/Music/MonsterRPG2/jungle.flac
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - music
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6096acc0038841941a0b034a04d7f039
+    m_Address: Assets/Art/OpenGameArt/Music/TreasureHunter/treasure_hunter.wav
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - music
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 65572e506e68c124e93b64ef9fb0819b
+    m_Address: Assets/Scenes/Environment/Level2Environment.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 68b763a24fe4eb94481f9c91027e5f1e
+    m_Address: Assets/Scenes/Primary/_LevelBoss.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8c9b6cccc4bb378479d502acb4d1f5d0
+    m_Address: Assets/Scenes/Environment/LevelBossEnvironment.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 916006d2cc2e21f4ebece897a93f2d5d
+    m_Address: Assets/Scenes/Environment/MainMenuEnvironment.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9d9b705cd9fd2b646a2c8b53607e6c6a
+    m_Address: Assets/Scenes/Primary/_Bootstrap.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a7296cca6916660448cc5fd650c73305
+    m_Address: Assets/Art/Fonts/Texturina-Italic-VariableFont_opsz,wght SDF.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - font
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ade59f0e89c026549b72c49db74963ab
+    m_Address: Assets/Art/OpenGameArt/Music/PirateShip/pirate_ship_in_game.wav
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - music
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b33843871ad4d1e46a8215a895cd4785
+    m_Address: Assets/Art/Fonts/TradeWinds-Regular SDF.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - font
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b54bcc6eda1a37b42aebb571c097c91c
+    m_Address: Assets/Scenes/Utility/_LoadingScreen.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bb30e82f3e8175e428721a2141d13299
+    m_Address: Assets/Art/OpenGameArt/Music/PirateAdventure/pirate_adventure.wav
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - music
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cc226baea84ed0941b3da0a5ae7e2436
+    m_Address: Assets/Art/Fonts/FingerPaint-Regular SDF.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cf3c9c981c5dd8d409530f9dc13a7d0d
+    m_Address: Assets/Scenes/Primary/_Level1.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e1172689aa4418d45b211b946c2e571d
+    m_Address: Assets/Scenes/Utility/PersistentResources.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e13004ccf6342794f86c179a905a96e5
+    m_Address: Assets/Scenes/Gameplay/_GameplayUI.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e47237a58926b9f4e9b4bb568dfb2910
+    m_Address: Assets/Scenes/Primary/_Level2.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ebae901b90991e54d849e81bc4bc4474
+    m_Address: Assets/Scenes/Gameplay/_GameplayResources.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f59fdc137add490449ab4d347c748b11
+    m_Address: Assets/Scenes/Primary/_MainMenu.unity
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - scenes
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: 0c5fe89bb54a93a488154dc2e12efb7c, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 36c01abb76d37a845b03196c8decfde5, type: 2}
+    - {fileID: 11400000, guid: fa247f39da2ed4d46af08c272e612c13, type: 2}

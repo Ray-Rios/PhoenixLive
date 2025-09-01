@@ -1,0 +1,16 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/Common/CommonStyleSheet.uss?fileID=7433441132597879392&amp;guid=d7c926ae35196314a9c952b8d933eb1b&amp;type=3#CommonStyleSheet" />
+    <SecretDimension.ParrotActionContainer name="main-container" Action="project://database/Assets/Data/Input/InputSystem_Actions.inputactions?fileID=9064083588028862933&amp;guid=82c64129c95c44e9ab1ff932a9ff0efd&amp;type=3#Gameplay/Jump" GamepadBindingID="1" KeyboardBindingID="0" SpriteData="project://database/Assets/Data/Input/ParrotSpriteData.asset?fileID=11400000&amp;guid=56ca95fe1ffa5eb44bf882e635add6d9&amp;type=2#ParrotSpriteData" style="flex-grow: 1; flex-direction: row; justify-content: center; max-height: 200px; background-color: rgba(118, 86, 56, 0.3);">
+        <engine:Label name="action-title" class="sub-title-2" style="min-width: 30%; max-width: 30%;" />
+        <engine:VisualElement name="keyboard-background" style="flex-grow: 1; min-width: 30%; max-width: 30%;">
+            <engine:Button name="keyboard-button" class="selector-button" style="position: absolute; max-width: 80%; max-height: 100%; padding-top: 0; padding-right: 0; padding-bottom: 0; padding-left: 0; margin-top: 0; margin-right: 0; margin-bottom: 0; margin-left: 0; align-self: center; min-width: 50%;" />
+            <engine:VisualElement name="keyboard-key" picking-mode="Ignore" style="flex-grow: 1; background-image: url(&quot;project://database/Assets/Art/Kenney/Input_Prompts/Keyboard_Mouse/keyboard_blank.png?fileID=2800000&amp;guid=e00a68e652c34ad4fa45ebb88fe1c68b&amp;type=3#keyboard_blank&quot;); -unity-background-scale-mode: scale-to-fit;">
+                <SecretDimension.LabelAutofit max-font-size="30" name="keyboard-label" picking-mode="Ignore" target-text="Test" style="-unity-text-align: middle-center; white-space: normal; max-width: 60%; align-self: center; justify-content: center; align-items: center; align-content: center; flex-wrap: wrap; top: 12.5%; min-width: 50%; max-height: 70%; min-height: 98%; flex-shrink: 1; flex-grow: 1; color: rgb(0, 0, 0);" />
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:VisualElement name="gamepad-background" style="flex-grow: 1; -unity-background-scale-mode: scale-to-fit;">
+            <engine:Button name="gamepad-button" class="selector-button" style="position: absolute; min-width: 50%; max-width: 60%; max-height: 100%; min-height: 100%; padding-top: 0; padding-right: 0; padding-bottom: 0; padding-left: 0; margin-top: 0; margin-right: 0; margin-bottom: 0; margin-left: 0; align-self: center;" />
+            <SecretDimension.LabelAutofit max-font-size="30" name="gamepad-label" enabled="true" picking-mode="Ignore" style="-unity-text-align: middle-center; white-space: normal; max-width: 60%; align-self: center; justify-content: center; align-items: center; align-content: center; flex-wrap: wrap; top: 12.5%; min-width: 50%; max-height: 70%; min-height: 100%; flex-shrink: 1; flex-grow: 1;" />
+        </engine:VisualElement>
+    </SecretDimension.ParrotActionContainer>
+</engine:UXML>
