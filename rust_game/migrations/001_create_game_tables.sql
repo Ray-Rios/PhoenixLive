@@ -1,79 +1,50 @@
--- Game sessions table
+-- Game sessions table for MMO player data
 CREATE TABLE IF NOT EXISTS game_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
-    session_token TEXT NOT NULL UNIQUE,
-    player_x FLOAT8 DEFAULT 0.0,
-    player_y FLOAT8 DEFAULT 0.0,
-    player_z FLOAT8 DEFAULT 0.0,
-    rotation_x FLOAT8 DEFAULT 0.0,
-    rotation_y FLOAT8 DEFAULT 0.0,
-    rotation_z FLOAT8 DEFAULT 0.0,
+    session_token VARCHAR(255) NOT NULL,
+    player_x FLOAT DEFAULT 0.0,
+    player_y FLOAT DEFAULT 0.0,
+    player_z FLOAT DEFAULT 0.0,
+    rotation_x FLOAT DEFAULT 0.0,
+    rotation_y FLOAT DEFAULT 0.0,
+    rotation_z FLOAT DEFAULT 0.0,
     health INTEGER DEFAULT 100,
     score INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
     experience INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT true,
-    last_heartbeat TIMESTAMPTZ DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Game events table for logging all game actions
+-- Game events table for MMO event logging
 CREATE TABLE IF NOT EXISTS game_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID REFERENCES game_sessions(id) ON DELETE CASCADE,
-    player_id UUID,
-    event_type TEXT NOT NULL,
+    session_id UUID REFERENCES game_sessions(id),
+    event_type VARCHAR(50) NOT NULL,
     event_data JSONB,
-    server_timestamp TIMESTAMPTZ DEFAULT NOW(),
-    client_timestamp TIMESTAMPTZ,
-    processed BOOLEAN DEFAULT false
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Player stats table for persistent data
+-- Player stats table for MMO character progression
 CREATE TABLE IF NOT EXISTS player_stats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL UNIQUE,
-    total_score INTEGER DEFAULT 0,
-    total_playtime INTEGER DEFAULT 0,
-    games_played INTEGER DEFAULT 0,
-    highest_level INTEGER DEFAULT 1,
-    achievements JSONB DEFAULT '{}',
-    preferences JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    user_id UUID NOT NULL,
+    character_name VARCHAR(100),
+    character_class VARCHAR(50),
+    strength INTEGER DEFAULT 10,
+    dexterity INTEGER DEFAULT 10,
+    intelligence INTEGER DEFAULT 10,
+    vitality INTEGER DEFAULT 10,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Game world state for persistent world elements
+-- World state table for MMO persistent world data
 CREATE TABLE IF NOT EXISTS world_state (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    world_id TEXT NOT NULL,
-    object_id TEXT NOT NULL,
-    object_type TEXT NOT NULL,
-    position JSONB NOT NULL,
-    rotation JSONB DEFAULT '{"x": 0, "y": 0, "z": 0}',
-    scale JSONB DEFAULT '{"x": 1, "y": 1, "z": 1}',
-    properties JSONB DEFAULT '{}',
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(world_id, object_id)
+    zone_name VARCHAR(100) NOT NULL,
+    state_data JSONB,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_game_sessions_user_id ON game_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_game_sessions_active ON game_sessions(is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_game_sessions_heartbeat ON game_sessions(last_heartbeat);
-
-CREATE INDEX IF NOT EXISTS idx_game_events_session_id ON game_events(session_id);
-CREATE INDEX IF NOT EXISTS idx_game_events_player_id ON game_events(player_id);
-CREATE INDEX IF NOT EXISTS idx_game_events_type ON game_events(event_type);
-CREATE INDEX IF NOT EXISTS idx_game_events_timestamp ON game_events(server_timestamp);
-CREATE INDEX IF NOT EXISTS idx_game_events_unprocessed ON game_events(processed) WHERE processed = false;
-
-CREATE INDEX IF NOT EXISTS idx_player_stats_user_id ON player_stats(user_id);
-CREATE INDEX IF NOT EXISTS idx_player_stats_score ON player_stats(total_score);
-
-CREATE INDEX IF NOT EXISTS idx_world_state_world_id ON world_state(world_id);
-CREATE INDEX IF NOT EXISTS idx_world_state_active ON world_state(is_active) WHERE is_active = true;

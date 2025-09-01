@@ -49,12 +49,199 @@ type Sessions = Arc<Mutex<HashMap<Uuid, GameSession>>>;
 async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Response<Body>, Infallible> {
     let response = match (req.method(), req.uri().path()) {
         (&Method::GET, "/health") => {
-            let json = serde_json::json!({"status": "Game service is running"});
+            let json = serde_json::json!({"status": "UE5 MMO Game Service is running"});
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", "application/json")
                 .header("access-control-allow-origin", "*")
                 .body(Body::from(json.to_string()))
+                .unwrap()
+        }
+        (&Method::GET, "/") => {
+            let html = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UE5 MMO Game Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            max-width: 800px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 { color: #fff; margin-bottom: 20px; font-size: 2.5em; }
+        .status { color: #4CAF50; font-weight: bold; margin: 20px 0; font-size: 1.2em; }
+        .info { 
+            background: rgba(255, 255, 255, 0.1); 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin: 20px 0; 
+            text-align: left; 
+        }
+        .api-endpoint { 
+            background: rgba(0, 0, 0, 0.3); 
+            padding: 12px; 
+            border-radius: 5px; 
+            font-family: 'Courier New', monospace; 
+            margin: 8px 0; 
+            color: #E0E0E0;
+        }
+        .game-area {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            padding: 40px;
+            margin: 20px 0;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 8px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .ue5-logo {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+        .download-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="ue5-logo">🎮</div>
+        <h1>UE5 Action RPG MMO</h1>
+        <div class="status">✅ Game Server Running on Port 8080</div>
+        
+        <div class="game-area">
+            <h3>🏰 Action RPG Multiplayer Game</h3>
+            <p>This is the backend service for the UE5 Action RPG MMO game.</p>
+            <p><strong>Game Project:</strong> ActionRPGMultiplayerStart (UE5.4)</p>
+        </div>
+
+        <div class="download-section">
+            <h3>📥 How to Play</h3>
+            <p>To play this MMO game, you'll need to:</p>
+            <ol style="text-align: left;">
+                <li><strong>Build the UE5 Client:</strong> Open ActionRPGMultiplayerStart.uproject in UE5.4</li>
+                <li><strong>Package for Windows:</strong> File → Package Project → Windows (64-bit)</li>
+                <li><strong>Run the Game:</strong> Launch the packaged .exe file</li>
+                <li><strong>Connect to Server:</strong> The game will connect to this API server</li>
+            </ol>
+        </div>
+
+        <div class="info">
+            <h3>🔌 MMO API Endpoints:</h3>
+            <div class="api-endpoint">GET /health - Server health check</div>
+            <div class="api-endpoint">POST /game/session - Create player session</div>
+            <div class="api-endpoint">GET /game/session/{id} - Get player data</div>
+            <div class="api-endpoint">PUT /game/session/{id}/update - Update player state</div>
+            <div class="api-endpoint">GET /game/players - List online players</div>
+        </div>
+
+        <button onclick="testAPI()">🔍 Test Server</button>
+        <button onclick="createSession()">👤 Create Player</button>
+        <button onclick="listPlayers()">👥 List Players</button>
+        
+        <div id="result" style="margin-top: 20px; padding: 15px; border-radius: 5px;"></div>
+    </div>
+
+    <script>
+        async function testAPI() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                document.getElementById('result').innerHTML = 
+                    `<div style="background: rgba(76, 175, 80, 0.2); color: #4CAF50; padding: 10px; border-radius: 5px;">
+                        ✅ Server Status: ${data.status}
+                    </div>`;
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    `<div style="background: rgba(244, 67, 54, 0.2); color: #F44336; padding: 10px; border-radius: 5px;">
+                        ❌ Connection Error: ${error.message}
+                    </div>`;
+            }
+        }
+
+        async function createSession() {
+            try {
+                const response = await fetch('/game/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: '550e8400-e29b-41d4-a716-446655440000' })
+                });
+                const data = await response.json();
+                document.getElementById('result').innerHTML = 
+                    `<div style="background: rgba(76, 175, 80, 0.2); color: #4CAF50; padding: 10px; border-radius: 5px;">
+                        ✅ Player Session Created!<br>
+                        🆔 Session ID: ${data.id}<br>
+                        🎯 Health: ${data.health} | Level: ${data.level}
+                    </div>`;
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    `<div style="background: rgba(244, 67, 54, 0.2); color: #F44336; padding: 10px; border-radius: 5px;">
+                        ❌ Session Error: ${error.message}
+                    </div>`;
+            }
+        }
+
+        async function listPlayers() {
+            try {
+                const response = await fetch('/game/players');
+                const data = await response.json();
+                document.getElementById('result').innerHTML = 
+                    `<div style="background: rgba(33, 150, 243, 0.2); color: #2196F3; padding: 10px; border-radius: 5px;">
+                        👥 Online Players: ${data.count}<br>
+                        ${data.players.map(p => `🎮 Level ${p.level} Player (Health: ${p.health})`).join('<br>')}
+                    </div>`;
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    `<div style="background: rgba(244, 67, 54, 0.2); color: #F44336; padding: 10px; border-radius: 5px;">
+                        ❌ Players Error: ${error.message}
+                    </div>`;
+            }
+        }
+    </script>
+</body>
+</html>
+            "#;
+            
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "text/html")
+                .header("access-control-allow-origin", "*")
+                .body(Body::from(html))
                 .unwrap()
         }
         (&Method::POST, "/game/session") => {
@@ -82,7 +269,7 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                     };
 
                     sessions.lock().await.insert(session_id, session.clone());
-                    println!("Created game session {} for user {}", session_id, payload.user_id);
+                    println!("Created MMO session {} for user {}", session_id, payload.user_id);
 
                     Response::builder()
                         .status(StatusCode::OK)
@@ -99,6 +286,25 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                         .unwrap()
                 }
             }
+        }
+        (&Method::GET, "/game/players") => {
+            let sessions_lock = sessions.lock().await;
+            let active_players: Vec<&GameSession> = sessions_lock
+                .values()
+                .filter(|s| s.is_active)
+                .collect();
+            
+            let response_data = serde_json::json!({
+                "count": active_players.len(),
+                "players": active_players
+            });
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "application/json")
+                .header("access-control-allow-origin", "*")
+                .body(Body::from(response_data.to_string()))
+                .unwrap()
         }
         (&Method::GET, path) if path.starts_with("/game/session/") => {
             let session_id_str = path.strip_prefix("/game/session/").unwrap();
@@ -154,7 +360,7 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                                         if let Some(level) = payload.level { session.level = level; }
                                         if let Some(exp) = payload.experience { session.experience = exp; }
 
-                                        println!("Updated game session {}", session_id);
+                                        println!("Updated MMO session {}", session_id);
                                         Response::builder()
                                             .status(StatusCode::OK)
                                             .header("content-type", "application/json")
@@ -209,7 +415,7 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
             Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .header("access-control-allow-origin", "*")
-                .body(Body::from("Not found"))
+                .body(Body::from("Endpoint not found"))
                 .unwrap()
         }
     };
@@ -238,7 +444,8 @@ async fn main() {
     let addr = ([0, 0, 0, 0], port).into();
     let server = Server::bind(&addr).serve(make_svc);
 
-    println!("Game service starting on port {}", port);
+    println!("🎮 UE5 MMO Game Service starting on port {}", port);
+    println!("🏰 ActionRPG Multiplayer Backend Ready!");
 
     if let Err(e) = server.await {
         eprintln!("Server error: {}", e);

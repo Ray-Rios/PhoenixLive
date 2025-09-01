@@ -60,100 +60,11 @@ A modern, real-time collaborative CMS built with Phoenix/Elixir, featuring Graph
 - Product business template (5 pages)
 - Page publishing workflow
 
-## Configuration
-
-### Environment Variables
-
-#### Development
-```bash
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/phoenix_app_dev
-REDIS_URL=redis://localhost:6379
-SECRET_KEY_BASE=your_secret_key_here
-```
-
-#### Production
-```bash
-DATABASE_URL=postgres://user:pass@host:5432/database
-REDIS_URL=redis://host:6379
-SECRET_KEY_BASE=your_production_secret
-SMTP_RELAY=your.smtp.server
-SMTP_USERNAME=your_username
-SMTP_PASSWORD=your_password
-# SSL_KEY_PATH=/path/to/ssl.key
-# SSL_CERT_PATH=/path/to/ssl.crt
-```
-
-### Production Deployment
-
-#### HTTP/HTTPS Configuration
-Uncomment the following in `config/prod.exs` for production:
-```elixir
-config :phoenix_app, PhoenixAppWeb.Endpoint,
-  http: [ip: {0, 0, 0, 0}, port: 80],
-  https: [
-    ip: {0, 0, 0, 0},
-    port: 443,
-    cipher_suite: :strong,
-    keyfile: System.get_env("SSL_KEY_PATH"),
-    certfile: System.get_env("SSL_CERT_PATH")
-  ]
-```
-
-#### Docker Production
-```bash
-# Build production image
-docker build -t phoenix-cms:prod .
-
-# Run with production config
-docker run -p 80:80 -p 443:443 \
-  -e DATABASE_URL=your_db_url \
-  -e REDIS_URL=your_redis_url \
-  -e SECRET_KEY_BASE=your_secret \
-  phoenix-cms:prod
-```
-
 ## API Documentation
 
 ### GraphQL Endpoints
 - **Query Endpoint:** `/api/graphql`
 - **GraphiQL Interface:** `/graphiql`
-
-### Key Mutations
-```graphql
-# User Registration
-mutation {
-  register(input: {email: "user@example.com", password: "SecurePass123!"}) {
-    token
-    user { id email }
-  }
-}
-
-# Create Page
-mutation {
-  createPage(input: {title: "Home", content: "<h1>Welcome</h1>", templateType: "service"}) {
-    id title slug
-  }
-}
-```
-
-### Subscriptions
-```graphql
-# Chat Messages
-subscription {
-  messageAdded {
-    id content user { email }
-  }
-}
-
-# User Presence
-subscription {
-  userPresence {
-    userId status user { email avatarShape avatarColor }
-  }
-}
-```
-
-## Templates
 
 ### Service Business Template
 - Home page with hero section
@@ -200,6 +111,11 @@ subscription {
 3. Make your changes
 4. Add tests for new functionality
 5. Submit a pull request
+
+🎮 UE5 Desktop Game ←→ 🦀 Rust Server (9069) ←→ 🗄️ Database
+                              ↕
+                    🌐 Phoenix Dashboard (4000) ←→ 📦 Redis
+
 
 ## License
 

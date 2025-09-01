@@ -1,1 +1,0 @@
-Scenes are organized by function. The "Primary" scenes folder holds scenes that will be used by the Parrot Scene Manager. Everything else will be loaded or unloaded as a dependency of a primary scene.

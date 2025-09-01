@@ -3,13 +3,9 @@ name = "rust_game_service"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "rust_game_service"
-path = "src/main.rs"
-
 [dependencies]
-tokio = { version = "1.35", features = ["full"] }
 hyper = { version = "0.14", features = ["full"] }
+tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-uuid = { version = "1.6", features = ["v4", "serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }

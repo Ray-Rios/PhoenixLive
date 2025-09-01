@@ -1,4 +1,4 @@
-# rust_game/Dockerfile
+# Build stage
 FROM rust:1.75-slim as builder
 
 # Install system dependencies
@@ -8,17 +8,18 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
 WORKDIR /app
 
-# Copy manifest files
+# Copy Cargo files for dependency caching
 COPY Cargo.toml ./
 
-# Create a dummy main.rs to cache dependencies
+# Create dummy main.rs for dependency compilation
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 
-# Build dependencies (this step is cached if Cargo.toml hasn't changed)
+# Build dependencies
 RUN cargo build --release
+
+# Remove dummy main.rs
 RUN rm src/main.rs
 
 # Copy source code
@@ -43,14 +44,13 @@ RUN useradd -m -u 1000 app
 
 WORKDIR /app
 
-# Copy the binary from builder stage
+# Copy binary and migrations
 COPY --from=builder /app/target/release/rust_game_service /app/rust_game_service
-
-# Copy migrations
 COPY --from=builder /app/migrations ./migrations
 
-# Change ownership
+# Set ownership
 RUN chown -R app:app /app
+
 USER app
 
 EXPOSE 8080
