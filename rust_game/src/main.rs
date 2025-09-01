@@ -57,6 +57,25 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                 .body(Body::from(json.to_string()))
                 .unwrap()
         }
+        (&Method::GET, "/api/players") => {
+            let sessions_lock = sessions.lock().await;
+            let active_players: Vec<&GameSession> = sessions_lock
+                .values()
+                .filter(|s| s.is_active)
+                .collect();
+            
+            let response_data = serde_json::json!({
+                "count": active_players.len(),
+                "players": active_players
+            });
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "application/json")
+                .header("access-control-allow-origin", "*")
+                .body(Body::from(response_data.to_string()))
+                .unwrap()
+        }
         (&Method::GET, "/") => {
             let html = r#"
 <!DOCTYPE html>
@@ -151,14 +170,30 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
         </div>
 
         <div class="download-section">
-            <h3>📥 How to Play</h3>
-            <p>To play this MMO game, you'll need to:</p>
-            <ol style="text-align: left;">
-                <li><strong>Build the UE5 Client:</strong> Open ActionRPGMultiplayerStart.uproject in UE5.4</li>
-                <li><strong>Package for Windows:</strong> File → Package Project → Windows (64-bit)</li>
-                <li><strong>Run the Game:</strong> Launch the packaged .exe file</li>
-                <li><strong>Connect to Server:</strong> The game will connect to this API server</li>
-            </ol>
+            <h3>🎮 How to Play</h3>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                <div style="background: rgba(76, 175, 80, 0.1); padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+                    <h4>🖥️ Desktop Client (Best Performance)</h4>
+                    <ol style="text-align: left; font-size: 0.9em;">
+                        <li>Open ActionRPGMultiplayerStart.uproject in UE5.4</li>
+                        <li>Package for Windows (64-bit)</li>
+                        <li>Run the packaged .exe file</li>
+                        <li>Automatic server connection</li>
+                    </ol>
+                </div>
+                
+                <div style="background: rgba(33, 150, 243, 0.1); padding: 15px; border-radius: 8px; border-left: 4px solid #2196F3;">
+                    <h4>🌐 Browser Play (Instant Access)</h4>
+                    <p style="text-align: left; font-size: 0.9em; margin-bottom: 10px;">
+                        Play directly in your web browser with no downloads required!
+                    </p>
+                    <a href="http://localhost:8080" target="_blank" 
+                       style="background: #2196F3; color: white; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold;">
+                        🎮 Play in Browser
+                    </a>
+                </div>
+            </div>
         </div>
 
         <div class="info">

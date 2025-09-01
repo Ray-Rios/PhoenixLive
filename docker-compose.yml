@@ -75,6 +75,47 @@ services:
       # - ./rust_game:/app:rw  # Mount for development (disabled for production)
     restart: unless-stopped
 
+  # UE5 Project Builder Service
+  ue5_builder:
+    image: adamrehn/ue4-runtime:4.27.2
+    # Note: Replace with UE5 image when available, or build custom
+    volumes:
+      - ./rust_game:/project:rw
+      - ue5_build_cache:/tmp/build
+    working_dir: /project
+    command: >
+      bash -c "
+        echo '🎮 UE5 Project Builder Ready';
+        echo '📋 To build your project, run:';
+        echo '   docker-compose run ue5_builder /project/build-project.sh';
+        echo '⏳ Waiting for build commands...';
+        tail -f /dev/null
+      "
+    profiles:
+      - build
+
+  # Pixel Streaming Service (Browser-based Gaming)
+  pixel_streaming:
+    build:
+      context: ./rust_game
+      dockerfile: Dockerfile.pixelstreaming
+    env_file:
+      - .env
+    environment:
+      - PIXEL_STREAMING_PORT=8080
+      - GAME_SERVER_URL=http://game_service:8080
+    ports:
+      - "8080:8080"   # Pixel streaming web interface
+      - "8888:8888"   # WebRTC signaling
+    depends_on:
+      - game_service
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # Uncomment when you have a packaged UE5 game:
+    # volumes:
+    #   - ./rust_game/Packaged:/app/game:ro
+    restart: unless-stopped
+
   mailhog:
     image: mailhog/mailhog:latest
     ports:

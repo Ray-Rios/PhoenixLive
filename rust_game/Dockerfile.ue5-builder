@@ -1,0 +1,70 @@
+# UE5 Build Container
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies for UE5 compilation
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential \
+    clang \
+    cmake \
+    git \
+    curl \
+    wget \
+    unzip \
+    # UE5 specific dependencies
+    mono-complete \
+    mono-devel \
+    mono-xbuild \
+    mono-dmcs \
+    mono-reference-assemblies-4.0 \
+    # .NET dependencies
+    dotnet-sdk-6.0 \
+    # Additional libraries
+    libc6-dev \
+    libssl-dev \
+    libcurl4-openssl-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    libffi-dev \
+    # Graphics libraries
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libx11-dev \
+    libxcursor-dev \
+    libxrandr-dev \
+    libxi-dev \
+    libxinerama-dev \
+    libxxf86vm-dev \
+    # Audio libraries
+    libasound2-dev \
+    libpulse-dev \
+    # Python for UE5 build scripts
+    python3 \
+    python3-pip \
+    # Node.js for some UE5 tools
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working directory
+WORKDIR /ue5
+
+# Download and install UE5 (this is a simplified approach)
+# Note: In production, you'd want to use Epic Games Launcher or GitHub source
+RUN echo "UE5 installation placeholder - see instructions below"
+
+# Create build script
+COPY build-ue5-project.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/build-ue5-project.sh
+
+# Set environment variables
+ENV UE5_ROOT=/ue5/UnrealEngine
+ENV PATH="${UE5_ROOT}/Engine/Binaries/Linux:${PATH}"
+
+WORKDIR /project
+
+# Default command
+CMD ["/usr/local/bin/build-ue5-project.sh"]

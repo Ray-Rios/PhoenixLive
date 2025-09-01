@@ -1,0 +1,37 @@
+# UE5 Build Pipeline Docker Compose
+version: '3.8'
+
+services:
+  # UE5 Project Builder
+  ue5-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.ue5-builder
+    volumes:
+      - .:/project:rw
+      - ue5_build_cache:/tmp/ue5_cache
+      - ue5_engine:/opt/ue5
+    environment:
+      - PROJECT_NAME=ActionRPGMultiplayerStart
+      - BUILD_PLATFORM=Win64
+      - BUILD_CONFIG=Shipping
+      - OUTPUT_DIR=/project/Packaged
+    working_dir: /project
+    command: /usr/local/bin/build-ue5-project.sh
+    
+  # Alternative: Use pre-built UE5 container (if available)
+  ue5-prebuilt:
+    image: ghcr.io/epicgames/unreal-engine:5.4-runtime
+    volumes:
+      - .:/workspace:rw
+    working_dir: /workspace
+    command: >
+      bash -c "
+        echo '🎮 UE5 Container Ready';
+        echo 'Run: docker-compose -f docker-compose.build.yml run ue5-prebuilt ./build-project.sh';
+        /bin/bash
+      "
+
+volumes:
+  ue5_build_cache:
+  ue5_engine:
