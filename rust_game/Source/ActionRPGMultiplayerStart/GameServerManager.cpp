@@ -1,19 +1,17 @@
 #include "GameServerManager.h"
-#include "HttpModule.h"
-#include "Interfaces/IHttpRequest.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Engine/World.h"
-#include "TimerManager.h"
 
 AGameServerManager::AGameServerManager()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = true;
     
-    // Initialize HTTP Module
+    // Get HTTP module
     HttpModule = &FHttpModule::Get();
 }
 
@@ -24,23 +22,27 @@ void AGameServerManager::BeginPlay()
     LogServerMessage(TEXT("🎮 MMO Game Server Manager Started"));
     LogServerMessage(FString::Printf(TEXT("🌐 Server URL: %s"), *ServerURL));
     
-    // Auto-connect to server on start
-    ConnectToServer();
+    // Initialize local player data
+    LocalPlayerData.PlayerID = PlayerID;
+    LocalPlayerData.Health = 100;
+    LocalPlayerData.Level = 1;
+    LocalPlayerData.Score = 0;
+    LocalPlayerData.Experience = 0;
 }
 
 void AGameServerManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // Clean up timers
+    // Disconnect from server when ending play
+    if (bIsConnected)
+    {
+        DisconnectFromServer();
+    }
+    
+    // Clear timers
     if (GetWorld())
     {
         GetWorld()->GetTimerManager().ClearTimer(UpdateTimerHandle);
         GetWorld()->GetTimerManager().ClearTimer(PlayersTimerHandle);
-    }
-    
-    // Disconnect from server
-    if (bIsConnected)
-    {
-        DisconnectFromServer();
     }
     
     Super::EndPlay(EndPlayReason);
@@ -50,19 +52,15 @@ void AGameServerManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
     
-    // Update local player data from pawn if available
-    if (APawn* PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn())
-    {
-        LocalPlayerData.Position = PlayerPawn->GetActorLocation();
-        LocalPlayerData.Rotation = PlayerPawn->GetActorRotation();
-    }
+    // Update last update time
+    LastUpdateTime += DeltaTime;
 }
 
 void AGameServerManager::ConnectToServer()
 {
     if (bIsConnected)
     {
-        LogServerMessage(TEXT("⚠️ Already connected to server"));
+        LogServerMessage(TEXT("Already connected to server"));
         return;
     }
     
@@ -77,7 +75,14 @@ void AGameServerManager::ConnectToServer()
     
     // Create JSON payload
     TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
-    JsonObject->SetStringField(TEXT("user_id"), PlayerID);
+    JsonObject->SetStringField(TEXT("player_id"), PlayerID);
+    JsonObject->SetNumberField(TEXT("x"), LocalPlayerData.Position.X);
+    JsonObject->SetNumberField(TEXT("y"), LocalPlayerData.Position.Y);
+    JsonObject->SetNumberField(TEXT("z"), LocalPlayerData.Position.Z);
+    JsonObject->SetNumberField(TEXT("health"), LocalPlayerData.Health);
+    JsonObject->SetNumberField(TEXT("level"), LocalPlayerData.Level);
+    JsonObject->SetNumberField(TEXT("score"), LocalPlayerData.Score);
+    JsonObject->SetNumberField(TEXT("experience"), LocalPlayerData.Experience);
     
     FString OutputString;
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
@@ -108,32 +113,57 @@ void AGameServerManager::DisconnectFromServer()
     SessionID.Empty();
     OnlinePlayers.Empty();
     
-    LogServerMessage(TEXT("✅ Disconnected from server"));
+    LogServerMessage(TEXT("✅ Disconnected from MMO server"));
 }
 
 void AGameServerManager::UpdatePlayerPosition(const FVector& Position, const FRotator& Rotation)
 {
+    if (!bIsConnected)
+    {
+        return;
+    }
+    
+    // Update local player data
     LocalPlayerData.Position = Position;
     LocalPlayerData.Rotation = Rotation;
     
-    // The automatic update will send this data
+    // Create HTTP request
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = HttpModule->CreateRequest();
+    Request->OnProcessRequestComplete().BindUObject(this, &AGameServerManager::OnUpdateResponse);
+    Request->SetURL(ServerURL + TEXT("/game/session/") + SessionID + TEXT("/update"));
+    Request->SetVerb(TEXT("PUT"));
+    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    Request->SetContentAsString(CreateUpdatePayload());
+    Request->ProcessRequest();
 }
 
 void AGameServerManager::UpdatePlayerStats(int32 Health, int32 Level, int32 Score, int32 Experience)
 {
+    if (!bIsConnected)
+    {
+        return;
+    }
+    
+    // Update local player data
     LocalPlayerData.Health = Health;
     LocalPlayerData.Level = Level;
     LocalPlayerData.Score = Score;
     LocalPlayerData.Experience = Experience;
     
-    // The automatic update will send this data
+    // Create HTTP request
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = HttpModule->CreateRequest();
+    Request->OnProcessRequestComplete().BindUObject(this, &AGameServerManager::OnUpdateResponse);
+    Request->SetURL(ServerURL + TEXT("/game/session/") + SessionID + TEXT("/update"));
+    Request->SetVerb(TEXT("PUT"));
+    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    Request->SetContentAsString(CreateUpdatePayload());
+    Request->ProcessRequest();
 }
 
 void AGameServerManager::RequestOnlinePlayers()
 {
     if (!bIsConnected)
     {
-        LogServerMessage(TEXT("⚠️ Not connected to server"), true);
         return;
     }
     
@@ -142,7 +172,6 @@ void AGameServerManager::RequestOnlinePlayers()
     Request->OnProcessRequestComplete().BindUObject(this, &AGameServerManager::OnPlayersResponse);
     Request->SetURL(ServerURL + TEXT("/game/players"));
     Request->SetVerb(TEXT("GET"));
-    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->ProcessRequest();
 }
 
@@ -150,136 +179,142 @@ void AGameServerManager::OnConnectResponse(FHttpRequestPtr Request, FHttpRespons
 {
     if (!bWasSuccessful || !Response.IsValid())
     {
-        LogServerMessage(TEXT("❌ Failed to connect to server"), true);
-        OnServerError.Broadcast(TEXT("Connection failed"));
+        LogServerMessage(TEXT("❌ Failed to connect to MMO server: Network error"), true);
+        OnServerError.Broadcast(TEXT("Network connection failed"));
         return;
     }
     
-    if (Response->GetResponseCode() != 200)
-    {
-        LogServerMessage(FString::Printf(TEXT("❌ Server error: %d"), Response->GetResponseCode()), true);
-        OnServerError.Broadcast(FString::Printf(TEXT("Server error: %d"), Response->GetResponseCode()));
-        return;
-    }
+    int32 ResponseCode = Response->GetResponseCode();
+    FString ResponseContent = Response->GetContentAsString();
     
-    // Parse response
-    FString ResponseString = Response->GetContentAsString();
-    TSharedPtr<FJsonObject> JsonObject;
-    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseString);
-    
-    if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
+    if (ResponseCode == 200 || ResponseCode == 201)
     {
-        // Extract session data
-        SessionID = JsonObject->GetStringField(TEXT("id"));
-        LocalPlayerData.SessionID = SessionID;
+        // Parse JSON response
+        TSharedPtr<FJsonObject> JsonObject;
+        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseContent);
         
-        // Update local player data from response
-        ParsePlayerData(JsonObject, LocalPlayerData);
-        
-        bIsConnected = true;
-        
-        LogServerMessage(FString::Printf(TEXT("✅ Connected! Session ID: %s"), *SessionID));
-        OnServerConnected.Broadcast(SessionID);
-        
-        // Start automatic updates
-        if (GetWorld())
+        if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
         {
-            GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, [this]()
+            // Extract session ID
+            if (JsonObject->HasField(TEXT("session_id")))
             {
-                if (bIsConnected && !SessionID.IsEmpty())
+                SessionID = JsonObject->GetStringField(TEXT("session_id"));
+                bIsConnected = true;
+                
+                LogServerMessage(FString::Printf(TEXT("✅ Connected! Session ID: %s"), *SessionID));
+                OnServerConnected.Broadcast(SessionID);
+                
+                // Start periodic updates
+                if (GetWorld())
                 {
-                    // Send player update
-                    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UpdateRequest = HttpModule->CreateRequest();
-                    UpdateRequest->OnProcessRequestComplete().BindUObject(this, &AGameServerManager::OnUpdateResponse);
-                    UpdateRequest->SetURL(ServerURL + TEXT("/game/session/") + SessionID + TEXT("/update"));
-                    UpdateRequest->SetVerb(TEXT("PUT"));
-                    UpdateRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-                    UpdateRequest->SetContentAsString(CreateUpdatePayload());
-                    UpdateRequest->ProcessRequest();
+                    GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, [this]()
+                    {
+                        UpdatePlayerPosition(LocalPlayerData.Position, LocalPlayerData.Rotation);
+                    }, UpdateInterval, true);
+                    
+                    GetWorld()->GetTimerManager().SetTimer(PlayersTimerHandle, [this]()
+                    {
+                        RequestOnlinePlayers();
+                    }, 10.0f, true);
                 }
-            }, UpdateInterval, true);
-            
-            // Start player list updates
-            GetWorld()->GetTimerManager().SetTimer(PlayersTimerHandle, [this]()
+            }
+            else
             {
-                RequestOnlinePlayers();
-            }, UpdateInterval * 2.0f, true);
+                LogServerMessage(TEXT("❌ Server response missing session_id"), true);
+                OnServerError.Broadcast(TEXT("Invalid server response"));
+            }
+        }
+        else
+        {
+            LogServerMessage(TEXT("❌ Failed to parse server response"), true);
+            OnServerError.Broadcast(TEXT("Invalid JSON response"));
         }
     }
     else
     {
-        LogServerMessage(TEXT("❌ Invalid response from server"), true);
-        OnServerError.Broadcast(TEXT("Invalid server response"));
+        LogServerMessage(FString::Printf(TEXT("❌ Server error: %d - %s"), ResponseCode, *ResponseContent), true);
+        OnServerError.Broadcast(FString::Printf(TEXT("Server error: %d"), ResponseCode));
     }
 }
 
 void AGameServerManager::OnUpdateResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
-    if (!bWasSuccessful || !Response.IsValid() || Response->GetResponseCode() != 200)
+    if (!bWasSuccessful || !Response.IsValid())
     {
         LogServerMessage(TEXT("⚠️ Failed to update player data"), true);
         return;
     }
     
-    // Optionally parse updated data from server
-    FString ResponseString = Response->GetContentAsString();
-    TSharedPtr<FJsonObject> JsonObject;
-    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseString);
-    
-    if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
+    int32 ResponseCode = Response->GetResponseCode();
+    if (ResponseCode == 200)
     {
-        ParsePlayerData(JsonObject, LocalPlayerData);
+        UE_LOG(LogTemp, VeryVerbose, TEXT("📍 Player data updated successfully"));
+    }
+    else
+    {
+        LogServerMessage(FString::Printf(TEXT("⚠️ Update failed: %d"), ResponseCode), true);
     }
 }
 
 void AGameServerManager::OnPlayersResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
-    if (!bWasSuccessful || !Response.IsValid() || Response->GetResponseCode() != 200)
+    if (!bWasSuccessful || !Response.IsValid())
     {
-        LogServerMessage(TEXT("⚠️ Failed to get online players"), true);
         return;
     }
     
-    FString ResponseString = Response->GetContentAsString();
+    int32 ResponseCode = Response->GetResponseCode();
+    if (ResponseCode != 200)
+    {
+        return;
+    }
+    
+    FString ResponseContent = Response->GetContentAsString();
     TSharedPtr<FJsonObject> JsonObject;
-    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseString);
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseContent);
     
     if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
     {
-        int32 PlayerCount = JsonObject->GetIntegerField(TEXT("count"));
-        const TArray<TSharedPtr<FJsonValue>>* PlayersArray;
+        // Clear current players
+        OnlinePlayers.Empty();
         
-        if (JsonObject->TryGetArrayField(TEXT("players"), PlayersArray))
+        // Parse players array
+        if (JsonObject->HasField(TEXT("players")))
         {
-            OnlinePlayers.Empty();
-            
-            for (const TSharedPtr<FJsonValue>& PlayerValue : *PlayersArray)
+            const TArray<TSharedPtr<FJsonValue>>* PlayersArray;
+            if (JsonObject->TryGetArrayField(TEXT("players"), PlayersArray))
             {
-                if (PlayerValue->Type == EJson::Object)
+                for (const TSharedPtr<FJsonValue>& PlayerValue : *PlayersArray)
                 {
-                    TSharedPtr<FJsonObject> PlayerObj = PlayerValue->AsObject();
-                    FPlayerData PlayerData;
-                    ParsePlayerData(PlayerObj, PlayerData);
-                    OnlinePlayers.Add(PlayerData);
+                    TSharedPtr<FJsonObject> PlayerObject = PlayerValue->AsObject();
+                    if (PlayerObject.IsValid())
+                    {
+                        FPlayerData PlayerData;
+                        ParsePlayerData(PlayerObject, PlayerData);
+                        OnlinePlayers.Add(PlayerData);
+                    }
                 }
             }
-            
-            LogServerMessage(FString::Printf(TEXT("👥 Online Players: %d"), PlayerCount));
-            OnPlayersUpdated.Broadcast(PlayerCount);
         }
+        
+        // Get player count
+        int32 PlayerCount = 0;
+        if (JsonObject->HasField(TEXT("count")))
+        {
+            PlayerCount = JsonObject->GetIntegerField(TEXT("count"));
+        }
+        
+        UE_LOG(LogTemp, VeryVerbose, TEXT("👥 Online players updated: %d"), PlayerCount);
+        OnPlayersUpdated.Broadcast(PlayerCount);
     }
 }
 
 FString AGameServerManager::CreateUpdatePayload() const
 {
     TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
-    
-    JsonObject->SetNumberField(TEXT("player_x"), LocalPlayerData.Position.X);
-    JsonObject->SetNumberField(TEXT("player_y"), LocalPlayerData.Position.Y);
-    JsonObject->SetNumberField(TEXT("player_z"), LocalPlayerData.Position.Z);
-    JsonObject->SetNumberField(TEXT("rotation_x"), LocalPlayerData.Rotation.Roll);
-    JsonObject->SetNumberField(TEXT("rotation_y"), LocalPlayerData.Rotation.Pitch);
-    JsonObject->SetNumberField(TEXT("rotation_z"), LocalPlayerData.Rotation.Yaw);
+    JsonObject->SetNumberField(TEXT("x"), LocalPlayerData.Position.X);
+    JsonObject->SetNumberField(TEXT("y"), LocalPlayerData.Position.Y);
+    JsonObject->SetNumberField(TEXT("z"), LocalPlayerData.Position.Z);
     JsonObject->SetNumberField(TEXT("health"), LocalPlayerData.Health);
     JsonObject->SetNumberField(TEXT("level"), LocalPlayerData.Level);
     JsonObject->SetNumberField(TEXT("score"), LocalPlayerData.Score);
@@ -299,34 +334,67 @@ void AGameServerManager::ParsePlayerData(const TSharedPtr<FJsonObject>& JsonObje
         return;
     }
     
-    OutPlayerData.SessionID = JsonObject->GetStringField(TEXT("id"));
-    OutPlayerData.Position.X = JsonObject->GetNumberField(TEXT("player_x"));
-    OutPlayerData.Position.Y = JsonObject->GetNumberField(TEXT("player_y"));
-    OutPlayerData.Position.Z = JsonObject->GetNumberField(TEXT("player_z"));
-    OutPlayerData.Rotation.Roll = JsonObject->GetNumberField(TEXT("rotation_x"));
-    OutPlayerData.Rotation.Pitch = JsonObject->GetNumberField(TEXT("rotation_y"));
-    OutPlayerData.Rotation.Yaw = JsonObject->GetNumberField(TEXT("rotation_z"));
-    OutPlayerData.Health = JsonObject->GetIntegerField(TEXT("health"));
-    OutPlayerData.Level = JsonObject->GetIntegerField(TEXT("level"));
-    OutPlayerData.Score = JsonObject->GetIntegerField(TEXT("score"));
-    OutPlayerData.Experience = JsonObject->GetIntegerField(TEXT("experience"));
+    if (JsonObject->HasField(TEXT("session_id")))
+    {
+        OutPlayerData.SessionID = JsonObject->GetStringField(TEXT("session_id"));
+    }
+    
+    if (JsonObject->HasField(TEXT("x")))
+    {
+        OutPlayerData.Position.X = JsonObject->GetNumberField(TEXT("x"));
+    }
+    
+    if (JsonObject->HasField(TEXT("y")))
+    {
+        OutPlayerData.Position.Y = JsonObject->GetNumberField(TEXT("y"));
+    }
+    
+    if (JsonObject->HasField(TEXT("z")))
+    {
+        OutPlayerData.Position.Z = JsonObject->GetNumberField(TEXT("z"));
+    }
+    
+    if (JsonObject->HasField(TEXT("health")))
+    {
+        OutPlayerData.Health = JsonObject->GetIntegerField(TEXT("health"));
+    }
+    
+    if (JsonObject->HasField(TEXT("level")))
+    {
+        OutPlayerData.Level = JsonObject->GetIntegerField(TEXT("level"));
+    }
+    
+    if (JsonObject->HasField(TEXT("score")))
+    {
+        OutPlayerData.Score = JsonObject->GetIntegerField(TEXT("score"));
+    }
+    
+    if (JsonObject->HasField(TEXT("experience")))
+    {
+        OutPlayerData.Experience = JsonObject->GetIntegerField(TEXT("experience"));
+    }
 }
 
 void AGameServerManager::LogServerMessage(const FString& Message, bool bIsError)
 {
     if (bIsError)
     {
-        UE_LOG(LogTemp, Error, TEXT("[MMO Server] %s"), *Message);
+        UE_LOG(LogTemp, Error, TEXT("%s"), *Message);
+        
+        // Also show on screen for visibility
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Red, Message);
+        }
     }
     else
     {
-        UE_LOG(LogTemp, Log, TEXT("[MMO Server] %s"), *Message);
-    }
-    
-    // Also print to screen for debugging
-    if (GEngine)
-    {
-        FColor Color = bIsError ? FColor::Red : FColor::Green;
-        GEngine->AddOnScreenDebugMessage(-1, 5.0f, Color, FString::Printf(TEXT("[MMO] %s"), *Message));
+        UE_LOG(LogTemp, Log, TEXT("%s"), *Message);
+        
+        // Show success messages on screen too
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, Message);
+        }
     }
 }

@@ -36,6 +36,8 @@ services:
         MIX_ENV: dev
     env_file:
       - .env
+    environment:
+      - GAME_SERVER_URL=http://game_service:8080
     ports:
       - "4000:4000"
     depends_on:
@@ -102,10 +104,10 @@ services:
     env_file:
       - .env
     environment:
-      - PIXEL_STREAMING_PORT=8080
+      - PIXEL_STREAMING_PORT=9070
       - GAME_SERVER_URL=http://game_service:8080
     ports:
-      - "8080:8080"   # Pixel streaming web interface
+      - "9070:9070"   # Pixel streaming web interface
       - "8888:8888"   # WebRTC signaling
     depends_on:
       - game_service
@@ -125,3 +127,4 @@ services:
 volumes:
   cockroach_data:
   redis_data:
+  ue5_build_cache:

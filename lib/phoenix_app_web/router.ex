@@ -50,6 +50,10 @@ defmodule PhoenixAppWeb.Router do
     live "/unreal", UnrealLive, :index
     live "/desktop", DesktopLive, :index
     live "/terminal", TerminalLive, :index
+    live "/galaxy-test", GalaxyTestLive, :index
+    live "/galaxy", SimpleGalaxyLive, :index
+    live "/galaxy-demo", DemoGalaxyLive, :index
+
 
     # Pages
     live "/pages", PageLive.Index, :index
@@ -107,6 +111,7 @@ defmodule PhoenixAppWeb.Router do
       live "/analytics", AdminAnalyticsLive, :index
       live "/settings", AdminSettingsLive, :index
       live "/user-management", AdminLive.UserManagementLive, :index
+      live "/services", AdminLive.ServicesLive, :index
     end
 
     # Impact/Level Designer (Weltmeister)
@@ -127,6 +132,16 @@ defmodule PhoenixAppWeb.Router do
   end
 
   # --------------------
+  # Static Impact.js Game Files
+  # --------------------
+  scope "/", PhoenixAppWeb do
+    pipe_through :browser
+    
+    # Serve Impact.js game files from priv/static
+    get "/impact/*path", PageController, :serve_impact_file
+  end
+
+  # --------------------
   # Game API
   # --------------------
   scope "/api/game", PhoenixAppWeb do
@@ -136,6 +151,11 @@ defmodule PhoenixAppWeb.Router do
     post "/login", GameAuthController, :login
     post "/register", GameAuthController, :register
     post "/refresh_token", GameAuthController, :refresh_token
+    
+    # New unified authentication endpoints
+    post "/auth", Api.GameAuthController, :authenticate
+    post "/verify", Api.GameAuthController, :verify_token
+    get "/users", Api.GameAuthController, :list_users
 
     # Protected game routes
     pipe_through :game_auth

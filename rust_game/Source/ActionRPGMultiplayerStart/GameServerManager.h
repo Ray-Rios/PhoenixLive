@@ -17,6 +17,9 @@ struct FPlayerData
     GENERATED_BODY()
 
     UPROPERTY(BlueprintReadOnly)
+    FString PlayerID;
+
+    UPROPERTY(BlueprintReadOnly)
     FString SessionID;
 
     UPROPERTY(BlueprintReadOnly)
@@ -39,6 +42,7 @@ struct FPlayerData
 
     FPlayerData()
     {
+        PlayerID = "";
         SessionID = "";
         Position = FVector::ZeroVector;
         Rotation = FRotator::ZeroRotator;

@@ -15,15 +15,40 @@ let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("
 // Hooks
 // ---------------------------
 
-// Import ImpactJS hook
-import ImpactHooks from "./hooks/impact_game";
+// Import quest engine
+import "./quest_engine";
 
-// Merge into a single Hooks object
-let Hooks = { ...ImpactHooks };
+// Quest Game Hook
+const QuestGame = {
+  mounted() {
+    this.players = JSON.parse(this.el.dataset.players || '{}');
+    this.currentPlayerId = this.el.dataset.currentPlayer;
+    
+    this.questEngine = new window.QuestEngine(this.el, this);
+    this.questEngine.updatePlayers(this.players);
+    this.questEngine.setCurrentPlayer(this.currentPlayerId);
+    
+    console.log('Quest Game initialized with', Object.keys(this.players).length, 'players');
+  },
 
-// Example: other hooks can also be added to the same object
-// Hooks.FileUpload = { ... }
-// Hooks.DesktopWindow = { ... }
+  updated() {
+    if (this.questEngine) {
+      const newPlayers = JSON.parse(this.el.dataset.players || '{}');
+      this.questEngine.updatePlayers(newPlayers);
+    }
+  },
+
+  destroyed() {
+    if (this.questEngine) {
+      // Clean up if needed
+    }
+  }
+};
+
+// Clean hooks object with quest game
+let Hooks = {
+  QuestGame
+};
 
 let liveSocket = new LiveSocket("/live", Socket, {
   params: { _csrf_token: csrfToken },

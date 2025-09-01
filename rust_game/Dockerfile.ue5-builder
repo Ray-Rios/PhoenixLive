@@ -1,70 +1,55 @@
-# UE5 Build Container
-FROM ubuntu:22.04
+# UE5 Builder Dockerfile for packaging games in Docker
+FROM ubuntu:22.04 AS ue5-builder
 
-# Prevent interactive prompts during package installation
+# Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
+ENV UE_VERSION=5.4
 
-# Install dependencies for UE5 compilation
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
-    # Build essentials
-    build-essential \
-    clang \
-    cmake \
-    git \
-    curl \
     wget \
+    curl \
+    git \
     unzip \
-    # UE5 specific dependencies
+    build-essential \
     mono-complete \
     mono-devel \
-    mono-xbuild \
-    mono-dmcs \
-    mono-reference-assemblies-4.0 \
-    # .NET dependencies
-    dotnet-sdk-6.0 \
-    # Additional libraries
-    libc6-dev \
-    libssl-dev \
-    libcurl4-openssl-dev \
-    libxml2-dev \
-    libxslt1-dev \
-    libffi-dev \
-    # Graphics libraries
-    libgl1-mesa-dev \
-    libglu1-mesa-dev \
-    libx11-dev \
-    libxcursor-dev \
-    libxrandr-dev \
-    libxi-dev \
-    libxinerama-dev \
-    libxxf86vm-dev \
-    # Audio libraries
-    libasound2-dev \
-    libpulse-dev \
-    # Python for UE5 build scripts
+    ca-certificates-mono \
     python3 \
     python3-pip \
-    # Node.js for some UE5 tools
-    nodejs \
-    npm \
+    clang \
+    cmake \
+    ninja-build \
+    libssl-dev \
+    libffi-dev \
+    zip \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up working directory
-WORKDIR /ue5
+# Set up workspace
+WORKDIR /workspace
 
-# Download and install UE5 (this is a simplified approach)
-# Note: In production, you'd want to use Epic Games Launcher or GitHub source
-RUN echo "UE5 installation placeholder - see instructions below"
+# Install UE5 build tools (simplified approach)
+# In a real scenario, you would either:
+# 1. Mount UE5 from host system
+# 2. Download UE5 from Epic Games (requires authentication)
+# 3. Use a pre-built UE5 Docker image
 
-# Create build script
-COPY build-ue5-project.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/build-ue5-project.sh
+# For now, create a mock UE5 environment that can be replaced
+RUN mkdir -p /opt/UnrealEngine/Engine/Binaries/Linux && \
+    mkdir -p /opt/UnrealEngine/Engine/Build && \
+    mkdir -p /opt/UnrealEngine/Engine/Programs
+
+# Create a mock UnrealBuildTool that can package projects
+COPY build-tools/mock-ue5-tools.sh /opt/UnrealEngine/Engine/Binaries/Linux/UnrealEditor
+RUN chmod +x /opt/UnrealEngine/Engine/Binaries/Linux/UnrealEditor
 
 # Set environment variables
-ENV UE5_ROOT=/ue5/UnrealEngine
-ENV PATH="${UE5_ROOT}/Engine/Binaries/Linux:${PATH}"
+ENV UE_ROOT=/opt/UnrealEngine
+ENV PATH="$UE_ROOT/Engine/Binaries/Linux:$PATH"
 
-WORKDIR /project
+# Copy packaging script
+COPY package-ue5-game.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/package-ue5-game.sh
 
 # Default command
-CMD ["/usr/local/bin/build-ue5-project.sh"]
+CMD ["/usr/local/bin/package-ue5-game.sh"]

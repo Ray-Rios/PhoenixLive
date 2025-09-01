@@ -75,4 +75,33 @@ defmodule PhoenixAppWeb.PageController do
         send_resp(conn, 400, "Missing 'data' param")
     end
   end
+
+  # GET /impact/*path
+  # Serve Impact.js game files from priv/static/impact
+  def serve_impact_file(conn, %{"path" => path}) do
+    # Join the path segments
+    file_path = Path.join(path)
+    
+    full_path =
+      :phoenix_app
+      |> :code.priv_dir()
+      |> Path.join("static/impact/#{file_path}")
+
+    if File.exists?(full_path) do
+      # Determine content type based on file extension
+      content_type = case Path.extname(file_path) do
+        ".js" -> "application/javascript"
+        ".css" -> "text/css"
+        ".html" -> "text/html"
+        ".json" -> "application/json"
+        _ -> "application/octet-stream"
+      end
+
+      conn
+      |> put_resp_content_type(content_type)
+      |> send_file(200, full_path)
+    else
+      send_resp(conn, 404, "File not found")
+    end
+  end
 end

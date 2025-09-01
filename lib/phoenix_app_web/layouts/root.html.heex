@@ -11,6 +11,14 @@
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
     </script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Impact.js Game Engine -->
+    <script type="text/javascript">
+      // Set the Impact.js base path before loading the engine
+      window.ImpactPrefix = '/impact/';
+    </script>
+    <script type="text/javascript" src={~p"/impact/lib/impact/impact.js"}></script>
+    <script type="text/javascript" src={~p"/impact/lib/game/main.js"}></script>
   </head>
   <body class="bg-black antialiased">
     <%= @inner_content %>

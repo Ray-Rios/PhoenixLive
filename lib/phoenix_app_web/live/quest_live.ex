@@ -9,176 +9,139 @@ defmodule PhoenixAppWeb.QuestLive do
     user = socket.assigns.current_user
 
     if user do
-      PubSub.subscribe(PhoenixApp.PubSub, "quest:lobby")
+      PubSub.subscribe(PhoenixApp.PubSub, "galaxy:quest")
 
-      player_data = %{
+      player = %{
         id: user.id,
         name: user.name || user.email,
         color: user.avatar_color || "#3B82F6",
-        x: user.position_x || 100.0,
-        y: 100.0,
-        velocityX: 0.0,
-        velocityY: 0.0,
+        x: :rand.uniform(700) + 50,
+        y: :rand.uniform(500) + 50,
         message: nil,
         message_time: nil,
-        avatar_url: user.avatar_url
+        avatar_url: user.avatar_url,
+        last_seen: System.system_time(:millisecond)
       }
 
-      PubSub.broadcast(PhoenixApp.PubSub, "quest:lobby", {:player_joined, player_data})
+      PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_joined, player})
 
       {:ok,
        assign(socket,
          user: user,
-         players: %{user.id => player_data},
-         chat_messages: [],
-         current_message: "",
-         page_title: "Quest"
+         players: %{user.id => player},
+         page_title: "Galaxy Quest"
        )}
     else
       {:ok, redirect(socket, to: "/login")}
     end
   end
 
-  # Player movement events
   def handle_event("move_player", %{"x" => x, "y" => y}, socket) do
     user = socket.assigns.user
-    current = socket.assigns.players[user.id]
+    player = socket.assigns.players[user.id]
 
-    updated = %{
-      current
-      | x: max(0, min(800, x)),
-        y: max(0, min(600, y))
-    }
+    updated_player = %{player | x: x, y: y}
+    PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_moved, updated_player})
 
-    Accounts.update_user_position(user, %{position_x: updated.x, position_y: updated.y})
-    PubSub.broadcast(PhoenixApp.PubSub, "quest:lobby", {:player_moved, updated})
-
-    {:noreply, assign(socket, players: Map.put(socket.assigns.players, user.id, updated))}
+    {:noreply, assign(socket, players: Map.put(socket.assigns.players, user.id, updated_player))}
   end
 
-  # Chat events
   def handle_event("send_message", %{"message" => message}, socket) when message != "" do
     user = socket.assigns.user
     player = socket.assigns.players[user.id]
 
-    updated = %{player | message: message, message_time: System.system_time(:millisecond)}
-
-    chat_msg = %{
-      id: Ecto.UUID.generate(),
-      user_id: user.id,
-      user_name: user.name || user.email,
-      content: message,
-      timestamp: DateTime.utc_now()
+    updated_player = %{
+      player 
+      | message: String.slice(message, 0, 50),
+        message_time: System.system_time(:millisecond)
     }
 
-    PubSub.broadcast(PhoenixApp.PubSub, "quest:lobby", {:player_message, updated})
-    PubSub.broadcast(PhoenixApp.PubSub, "quest:lobby", {:chat_message, chat_msg})
+    PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_message, updated_player})
 
-    {:noreply,
-     assign(socket,
-       players: Map.put(socket.assigns.players, user.id, updated),
-       current_message: ""
-     )}
+    {:noreply, assign(socket, players: Map.put(socket.assigns.players, user.id, updated_player))}
   end
 
-  def handle_event("update_message", %{"message" => message}, socket) do
-    {:noreply, assign(socket, current_message: message)}
+  def handle_event("send_message", %{"message" => ""}, socket), do: {:noreply, socket}
+
+  def handle_event("player_abducted", %{"player_id" => player_id}, socket) do
+    if player = socket.assigns.players[player_id] do
+      respawned_player = %{
+        player 
+        | x: :rand.uniform(700) + 50,
+          y: :rand.uniform(500) + 50,
+          message: "I was abducted! 👽",
+          message_time: System.system_time(:millisecond)
+      }
+      
+      PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_respawned, respawned_player})
+      
+      {:noreply, assign(socket, players: Map.put(socket.assigns.players, player_id, respawned_player))}
+    else
+      {:noreply, socket}
+    end
   end
 
-  # LiveView info broadcasts
-  def handle_info({:player_joined, player}, socket), do: {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
-  def handle_info({:player_left, player_id}, socket), do: {:noreply, assign(socket, players: Map.delete(socket.assigns.players, player_id))}
-  def handle_info({:player_moved, player}, socket), do: {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
-  def handle_info({:player_message, player}, socket), do: {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
-  def handle_info({:chat_message, msg}, socket) do
-    {:noreply, assign(socket, chat_messages: [msg | socket.assigns.chat_messages] |> Enum.take(50))}
+  def handle_info({:player_joined, player}, socket) do
+    {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
+  end
+
+  def handle_info({:player_left, player_id}, socket) do
+    {:noreply, assign(socket, players: Map.delete(socket.assigns.players, player_id))}
+  end
+
+  def handle_info({:player_moved, player}, socket) do
+    {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
+  end
+
+  def handle_info({:player_message, player}, socket) do
+    {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
+  end
+
+  def handle_info({:player_respawned, player}, socket) do
+    {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
   end
 
   def terminate(_reason, socket) do
     if socket.assigns[:user] do
-      PubSub.broadcast(PhoenixApp.PubSub, "quest:lobby", {:player_left, socket.assigns.user.id})
+      PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_left, socket.assigns.user.id})
     end
   end
 
-  # Render with ImpactJS canvas
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
+    <canvas 
+      id="quest-canvas"
+      phx-hook="QuestGame"
+      data-players={Jason.encode!(@players)}
+      data-current-player={@user.id}
+      style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1000; background: #000011; cursor: crosshair;">
+    </canvas>
 
-    <div class="w-full h-full relative">
-      <canvas id="impact-game" width="8000" height="6000"
-              phx-hook="ImpactGame"
-              data-players={Jason.encode!(@players)}
-              data-current-player={@user.id}>
-              data-level="/impact/levels/test.js">
-      </canvas>
-
-      <!-- Chat Input Overlay -->
-      <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
-        <form phx-submit="send_message" class="flex space-x-2 bg-black bg-opacity-70 p-2 rounded-lg">
-          <input type="text" name="message" value={@current_message}
-                 phx-change="update_message"
-                 placeholder="Chat above your avatar..."
-                 class="w-80 bg-gray-700 text-white px-2 py-1 rounded" />
-          <button type="submit" class="bg-yellow-600 text-white px-4 rounded">Send</button>
-        </form>
-      </div>
+    <div id="chat-overlay" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1001;">
+      <form phx-submit="send_message" style="display: flex; gap: 10px; background: rgba(0,0,0,0.9); padding: 12px; border-radius: 25px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+        <input 
+          type="text" 
+          name="message" 
+          placeholder="Type to chat..."
+          maxlength="50"
+          autocomplete="off"
+          style="width: 350px; padding: 10px 16px; border: none; border-radius: 20px; background: rgba(255,255,255,0.1); color: white; outline: none; font-size: 14px;" />
+        <button type="submit" style="padding: 10px 20px; border: none; border-radius: 20px; background: linear-gradient(45deg, #667eea 0%, #764ba2 100%); color: white; cursor: pointer; font-weight: bold;">Send</button>
+      </form>
     </div>
 
-    <script type="text/javascript">
-      let Hooks = {};
-      Hooks.ImpactGame = {
-        mounted() {
-          const canvas = this.el;
-          const players = JSON.parse(canvas.dataset.players);
-          const currentPlayerId = canvas.dataset.currentPlayer;
-          const levelPath = canvas.dataset.level;
+    <div id="instructions" style="position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.9); color: white; padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; z-index: 1001;">
+      <h3 style="margin: 0 0 12px 0; color: #a78bfa;">🌌 Galaxy Quest</h3>
+      <p style="margin: 4px 0;">WASD/Arrows: Move</p>
+      <p style="margin: 4px 0;">Click: Move to location</p>
+      <p style="margin: 4px 0;">Avoid aliens!</p>
+      <p style="margin: 4px 0;">Players: <%= map_size(@players) %></p>
+    </div>
 
-          // Initialize ImpactJS Game
-          const levelPath = canvas.dataset.level;
-
-        ig.module('game.main')
-          .requires('impact.game','impact.entities','impact.levels.' + levelPath)
-          .defines(function(){
-            MyGame = ig.Game.extend({
-              players: players,
-              currentPlayerId: currentPlayerId,
-              update: function(){
-                this.parent();
-                // movement, bouncing...
-              },
-              draw: function(){
-                this.parent();
-                // draw players and messages
-              }
-            });
-            ig.main('#impact-game', MyGame, 60, 800, 600, 1);
-          });
-
-
-          this.handleEvent("playersUpdated", ({players}) => {
-            MyGame.players = players;
-          });
-        },
-
-        updated() {
-          // update players from LiveView assigns
-          for (const id in this.players){
-            let p = this.players[id];
-            const collision = this.collisionMap.trace(p.x, p.y, 16, 16);
-            if (collision.collision.x || collision.collision.y){
-              p.velocityX *= -1;
-              p.velocityY *= -1;
-             }
-          }
-        }
-      }
-      
-
-      window.addEventListener('phx:hook', e => {
-        window.liveSocket && window.liveSocket.connect();
-      });
-    </script>
+    <style>
+      body { overflow: hidden; margin: 0; padding: 0; }
+      html { overflow: hidden; margin: 0; padding: 0; }
+    </style>
     """
   end
 end

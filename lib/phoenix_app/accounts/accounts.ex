@@ -186,4 +186,63 @@ defmodule PhoenixApp.Accounts do
     })
     |> Repo.update()
   end
+
+  # ---------------------
+  # Delete user
+  # ---------------------
+  def delete_user(%User{} = user) do
+    Repo.delete(user)
+  end
+
+  # ---------------------
+  # Game server authentication
+  # ---------------------
+  def authenticate_for_game_server(email, password) do
+    case authenticate_user(email, password) do
+      {:ok, user} ->
+        # Generate a game session token
+        game_token = generate_game_session_token(user)
+        {:ok, %{user: user, game_token: game_token}}
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def generate_game_session_token(%User{} = user) do
+    # Create a JWT-like token for game server authentication
+    payload = %{
+      user_id: user.id,
+      email: user.email,
+      name: user.name,
+      is_admin: user.is_admin,
+      exp: System.system_time(:second) + (24 * 60 * 60) # 24 hours
+    }
+    
+    # Simple base64 encoding for now - in production use proper JWT
+    payload
+    |> Jason.encode!()
+    |> Base.encode64()
+  end
+
+  def verify_game_session_token(token) when is_binary(token) do
+    try do
+      payload = 
+        token
+        |> Base.decode64!()
+        |> Jason.decode!()
+      
+      # Check if token is expired
+      if payload["exp"] > System.system_time(:second) do
+        case get_user(payload["user_id"]) do
+          nil -> {:error, :user_not_found}
+          user -> {:ok, user}
+        end
+      else
+        {:error, :token_expired}
+      end
+    rescue
+      _ -> {:error, :invalid_token}
+    end
+  end
 end

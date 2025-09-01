@@ -44,6 +44,15 @@ struct UpdateSessionRequest {
     experience: Option<i32>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct CreateSessionFromAuth {
+    user_id: String,
+    email: String,
+    name: Option<String>,
+    game_token: String,
+    is_admin: bool,
+}
+
 type Sessions = Arc<Mutex<HashMap<Uuid, GameSession>>>;
 
 async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Response<Body>, Infallible> {
@@ -188,7 +197,7 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                     <p style="text-align: left; font-size: 0.9em; margin-bottom: 10px;">
                         Play directly in your web browser with no downloads required!
                     </p>
-                    <a href="http://localhost:8080" target="_blank" 
+                    <a href="http://localhost:9070" target="_blank" 
                        style="background: #2196F3; color: white; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold;">
                         🎮 Play in Browser
                     </a>
@@ -208,6 +217,17 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
         <button onclick="testAPI()">🔍 Test Server</button>
         <button onclick="createSession()">👤 Create Player</button>
         <button onclick="listPlayers()">👥 List Players</button>
+        
+        <div style="margin: 20px 0; padding: 20px; background: rgba(33, 150, 243, 0.1); border-radius: 10px; border-left: 4px solid #2196F3;">
+            <h4>🔐 Unified Authentication</h4>
+            <p style="text-align: left; font-size: 0.9em; margin-bottom: 10px;">
+                To play with your Phoenix account, login through the main web app first, then return here.
+            </p>
+            <a href="http://localhost:4000/login" target="_blank" 
+               style="background: #2196F3; color: white; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold;">
+                🚀 Login to Phoenix
+            </a>
+        </div>
         
         <div id="result" style="margin-top: 20px; padding: 15px; border-radius: 5px;"></div>
     </div>
@@ -267,6 +287,8 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                     </div>`;
             }
         }
+
+
     </script>
 </body>
 </html>
@@ -278,6 +300,54 @@ async fn handle_request(req: Request<Body>, sessions: Sessions) -> Result<Respon
                 .header("access-control-allow-origin", "*")
                 .body(Body::from(html))
                 .unwrap()
+        }
+        (&Method::POST, "/auth/create_session") => {
+            let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+            match serde_json::from_slice::<CreateSessionFromAuth>(&body_bytes) {
+                Ok(auth_data) => {
+                    let session_id = Uuid::new_v4();
+                    let user_uuid = Uuid::parse_str(&auth_data.user_id).unwrap_or_else(|_| Uuid::new_v4());
+                    
+                    let session = GameSession {
+                        id: session_id,
+                        user_id: user_uuid,
+                        session_token: auth_data.game_token,
+                        player_x: 0.0,
+                        player_y: 0.0,
+                        player_z: 0.0,
+                        rotation_x: 0.0,
+                        rotation_y: 0.0,
+                        rotation_z: 0.0,
+                        health: 100,
+                        score: 0,
+                        level: 1,
+                        experience: 0,
+                        is_active: true,
+                    };
+
+                    sessions.lock().await.insert(session_id, session.clone());
+                    println!("Created game session {} for authenticated user {}", session_id, auth_data.email);
+
+                    let response_data = serde_json::json!({
+                        "success": true,
+                        "session": session
+                    });
+
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .header("content-type", "application/json")
+                        .header("access-control-allow-origin", "*")
+                        .body(Body::from(response_data.to_string()))
+                        .unwrap()
+                }
+                Err(_) => {
+                    Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .header("access-control-allow-origin", "*")
+                        .body(Body::from("Invalid JSON"))
+                        .unwrap()
+                }
+            }
         }
         (&Method::POST, "/game/session") => {
             let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();

@@ -65,7 +65,8 @@ defmodule PhoenixApp.MixProject do
       # Additional utilities
       {:uuid, "~> 1.1"},
       {:cors_plug, "~> 3.0"},
-      {:tz, "~> 0.24"}
+      {:tz, "~> 0.24"},
+      {:httpoison, "~> 2.0"}
     ]
   end
 

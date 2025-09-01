@@ -27,6 +27,26 @@
 		{
 			"Name": "HttpBlueprint",
 			"Enabled": true
+		},
+		{
+			"Name": "PixelStreaming",
+			"Enabled": true
+		},
+		{
+			"Name": "PixelStreamingPlayer",
+			"Enabled": true
+		},
+		{
+			"Name": "RenderTrace",
+			"Enabled": true
+		},
+		{
+			"Name": "PixelCapture",
+			"Enabled": true
+		},
+		{
+			"Name": "NNERuntimeIREE",
+			"Enabled": true
 		}
 	]
 }

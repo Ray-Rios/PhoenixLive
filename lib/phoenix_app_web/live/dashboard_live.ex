@@ -86,6 +86,21 @@ defmodule PhoenixAppWeb.DashboardLive do
                 </.link>
               </div>
             </div>
+
+            <div class="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-6 hover:bg-opacity-20 transition-all duration-300 transform hover:scale-105">
+              <div class="text-center">
+                <div class="w-16 h-16 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                  <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Services Management</h3>
+                <p class="text-gray-300 mb-4">Monitor and manage system services</p>
+                <.link navigate={~p"/admin/services"} class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-300">
+                  View Services
+                </.link>
+              </div>
+            </div>
           <% end %>
         </div>
       </div>

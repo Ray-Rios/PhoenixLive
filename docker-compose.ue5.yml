@@ -1,0 +1,69 @@
+# Docker Compose for UE5 game building and deployment
+# Usage: 
+#   Build game: docker-compose -f docker-compose.ue5.yml run --rm ue5_builder
+#   Deploy: docker-compose -f docker-compose.yml -f docker-compose.ue5.yml up -d
+
+version: '3.8'
+
+services:
+  # UE5 Game Builder Service - runs packaging process
+  ue5_builder:
+    build:
+      context: ./rust_game
+      dockerfile: Dockerfile.ue5-builder
+      target: ue5-builder
+    volumes:
+      - ./rust_game:/workspace:rw
+      - ue5_cache:/root/.cache
+      - ue5_build:/workspace/Intermediate
+    environment:
+      - UE_VERSION=5.4
+      - PROJECT_NAME=ActionRPGMultiplayerStart
+      - DEBIAN_FRONTEND=noninteractive
+    working_dir: /workspace
+    command: ["./package-ue5-game.sh"]
+    profiles:
+      - build
+
+  # UE5 Development Environment - for interactive development
+  ue5_dev:
+    build:
+      context: ./rust_game
+      dockerfile: Dockerfile.ue5-builder
+      target: ue5-builder
+    volumes:
+      - ./rust_game:/workspace:rw
+      - ue5_cache:/root/.cache
+      - ue5_build:/workspace/Intermediate
+    environment:
+      - UE_VERSION=5.4
+      - PROJECT_NAME=ActionRPGMultiplayerStart
+      - DEBIAN_FRONTEND=noninteractive
+    working_dir: /workspace
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    profiles:
+      - dev
+
+  # Override pixel streaming to use built game
+  pixel_streaming:
+    build:
+      context: ./rust_game
+      dockerfile: Dockerfile.pixelstreaming
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./rust_game/Packaged:/app/game:ro
+    environment:
+      - DISPLAY=:99
+      - PIXEL_STREAMING_PORT=9070
+      - GAME_EXECUTABLE=ActionRPGMultiplayerStart
+    ports:
+      - "8888:8888"
+      - "9070:9070"
+
+volumes:
+  ue5_cache:
+    driver: local
+  ue5_build:
+    driver: local

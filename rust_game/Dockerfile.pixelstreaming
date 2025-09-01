@@ -1,6 +1,13 @@
 # UE5 Pixel Streaming Docker Container
 FROM ubuntu:22.04
 
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Set timezone to avoid interactive prompts
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Install dependencies for UE5 and pixel streaming
 RUN apt-get update && apt-get install -y \
     wget \
@@ -44,7 +51,7 @@ COPY pixel-streaming-server.js /app/
 COPY pixel-streaming-web /app/web/
 
 # Expose ports
-EXPOSE 8888 8080 80
+EXPOSE 8888 9070 80
 
 # Create startup script
 COPY start-pixel-streaming.sh /app/

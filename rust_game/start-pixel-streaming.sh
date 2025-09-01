@@ -1,41 +1,82 @@
 #!/bin/bash
 
-echo "🎮 Starting UE5 Pixel Streaming Server..."
+# Start Pixel Streaming Service
+echo "🎮 Starting UE5 Pixel Streaming Service..."
+
+# Set environment variables
+export PIXEL_STREAMING_PORT=9070
+export DISPLAY=:99
 
 # Start virtual display
-export DISPLAY=:99
+echo "🖥️ Starting virtual display..."
 Xvfb :99 -screen 0 1920x1080x24 &
+XVFB_PID=$!
 
 # Start window manager
-fluxbox &
+echo "🪟 Starting window manager..."
+fluxbox -display :99 &
+FLUXBOX_PID=$!
 
 # Start audio system
-pulseaudio --start --log-target=syslog &
+echo "🔊 Starting audio system..."
+pulseaudio --start --verbose
 
 # Start the pixel streaming signaling server
-echo "🌐 Starting Pixel Streaming Signaling Server..."
+echo "🌐 Starting signaling server on port $PIXEL_STREAMING_PORT..."
 node /app/pixel-streaming-server.js &
+SIGNALING_PID=$!
 
-# Wait for signaling server to start
-sleep 5
-
-# Start the UE5 game with pixel streaming
-echo "🎯 Starting UE5 Game with Pixel Streaming..."
-if [ -f "/app/game/ActionRPGMultiplayerStart.exe" ]; then
+# Start the UE5 game (if packaged game exists)
+if [ -d "/app/game" ]; then
+    echo "🎮 Starting UE5 game with pixel streaming..."
     cd /app/game
-    wine ActionRPGMultiplayerStart.exe -PixelStreamingURL=ws://localhost:8888 -RenderOffScreen &
+    
+    # Look for the game executable in different possible locations
+    GAME_EXECUTABLE=""
+    if [ -f "Linux/ActionRPGMultiplayerStart" ]; then
+        GAME_EXECUTABLE="Linux/ActionRPGMultiplayerStart"
+    elif [ -f "Linux/start-game.sh" ]; then
+        GAME_EXECUTABLE="Linux/start-game.sh"
+    elif [ -f "ActionRPGMultiplayerStart.sh" ]; then
+        GAME_EXECUTABLE="ActionRPGMultiplayerStart.sh"
+    elif [ -f "ActionRPGMultiplayerStart" ]; then
+        GAME_EXECUTABLE="ActionRPGMultiplayerStart"
+    fi
+    
+    if [ -n "$GAME_EXECUTABLE" ]; then
+        echo "🚀 Found game executable: $GAME_EXECUTABLE"
+        ./$GAME_EXECUTABLE -RenderOffScreen -PixelStreamingURL=ws://localhost:$PIXEL_STREAMING_PORT &
+        GAME_PID=$!
+    else
+        echo "⚠️ No game executable found in /app/game"
+        echo "📋 Available files:"
+        find /app/game -type f -executable 2>/dev/null || echo "No executable files found"
+    fi
 else
-    echo "⚠️  UE5 game executable not found. Please build and copy your packaged game to /app/game/"
-    echo "📋 Instructions:"
-    echo "   1. Package your UE5 project for Windows"
-    echo "   2. Copy the packaged files to rust_game/Packaged/"
-    echo "   3. Rebuild this Docker container"
+    echo "⚠️ No packaged game found at /app/game"
+    echo "📝 To add your game:"
+    echo "   1. Package your UE5 project for Linux"
+    echo "   2. Copy the packaged files to /app/game/"
+    echo "   3. Restart this container"
 fi
 
-# Keep container running
-echo "✅ Pixel Streaming Server ready!"
-echo "🌐 Web interface available at: http://localhost:8080"
-echo "🎮 Game streaming ready for browser connections"
+# Function to cleanup on exit
+cleanup() {
+    echo "🛑 Shutting down services..."
+    kill $SIGNALING_PID 2>/dev/null
+    kill $GAME_PID 2>/dev/null
+    kill $FLUXBOX_PID 2>/dev/null
+    kill $XVFB_PID 2>/dev/null
+    pulseaudio --kill
+    exit 0
+}
 
-# Wait for all background processes
+# Set up signal handlers
+trap cleanup SIGTERM SIGINT
+
+echo "✅ Pixel Streaming Service is running!"
+echo "🌐 Access the stream at: http://localhost:$PIXEL_STREAMING_PORT"
+echo "🎮 Game server integration ready"
+
+# Keep the script running
 wait
