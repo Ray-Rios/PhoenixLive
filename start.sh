@@ -49,64 +49,55 @@ echo "LIVE_VIEW_SIGNING_SALT: ${LIVE_VIEW_SIGNING_SALT:0:8}..."
 # ----------------------------
 # Wait for database
 # ----------------------------
-echo "Waiting for CockroachDB to be ready..."
-until pg_isready -h db -p 26257 -U root &> /dev/null; do
+echo "Waiting for PostgreSQL to be ready..."
+until pg_isready -h db -p 5432 -U postgres &> /dev/null; do
   echo "Waiting for database..."
   sleep 2
 done
-echo "CockroachDB is ready!"
+echo "PostgreSQL is ready!"
 
 # ----------------------------
-# Create database using Ecto (temporarily disabled for debugging)
+# Create database using Ecto
 # ----------------------------
-echo "Skipping database creation for debugging..."
-# mix ecto.create --quiet || echo "Database already exists or creation failed, continuing..."
+echo "Creating database..."
+mix ecto.create --quiet || echo "Either the Database already exists or the creation failed continuing..."
 
 # ----------------------------
-# Run Ecto migrations with retry (temporarily disabled for debugging)
+# Run Ecto migrations with retry
 # ----------------------------
-echo "Skipping migrations for debugging..."
-# for i in {1..3}; do
-#   if mix ecto.migrate; then
-#     echo "Migrations completed successfully"
-#     break
-#   else
-#     echo "Migration attempt $i failed, retrying in 5 seconds..."
-#     sleep 5
-#   fi
-# done
-
-# ----------------------------
-# Install and build assets initially to avoid race condition
-# ----------------------------
-if [ -d "assets" ]; then
-  cd assets
-  echo "Installing npm dependencies..."
-  npm install
-  echo "Building initial assets..."
-  npm run build:css
-  cd ..
-else
-  echo "Assets directory not found, skipping asset build..."
-fi
-
-# ----------------------------
-# Fetch deps and compile only in dev
-# ----------------------------
-if [ "$MIX_ENV" = "dev" ]; then
-  echo "Fetching dependencies..."
-  mix deps.get
-  mix deps.compile
-fi
+echo "Running migrations..."
+for i in {1..3}; do
+  if mix ecto.migrate; then
+    echo "Migrations completed successfully"
+    break
+  else
+    echo "Migration attempt $i failed, retrying in 5 seconds..."
+    sleep 5
+  fi
+done
 
 # ----------------------------
 # Wait for Redis
 # ----------------------------
 echo "Waiting for Redis to be ready..."
-until redis-cli -h redis ping | grep -q PONG; do
-  sleep 1
+for i in {1..3}; do
+  if redis-cli -h redis ping | grep -q PONG; then
+    echo "Redis is ready!"
+    break
+  else
+   echo "Redis check $i failed, retrying in 5 seconds..."
+   sleep 5
+  fi
 done
-echo "Redis is ready!"
+
+# ----------------------------
+# Rebuild assets in development mode
+# ----------------------------
+if [ "$MIX_ENV" = "dev" ]; then
+  echo "Rebuilding assets for development..."
+  cd assets && npm install && npm run build
+  cd ..
+fi
 
 # ----------------------------
 # Start Phoenix server

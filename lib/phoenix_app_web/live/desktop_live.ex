@@ -5,7 +5,7 @@ defmodule PhoenixAppWeb.DesktopLive do
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
 
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_user
+    _user = socket.assigns.current_user
     
     # Subscribe to desktop updates for real-time collaboration
     PubSub.subscribe(PhoenixApp.PubSub, "desktop:public")
@@ -316,7 +316,6 @@ defmodule PhoenixAppWeb.DesktopLive do
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
     <div class="desktop-container starry-background">
 
       <div class="stars-container">

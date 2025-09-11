@@ -145,7 +145,6 @@ defmodule PhoenixAppWeb.UnrealLive do
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
     <div class="starry-background chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
       <div class="stars-container">
         <div class="stars"></div>

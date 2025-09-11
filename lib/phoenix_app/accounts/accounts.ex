@@ -1,7 +1,6 @@
 defmodule PhoenixApp.Accounts do
   alias PhoenixApp.Repo
   alias PhoenixApp.Accounts.User
-  alias Bcrypt
 
   # ---------------------
   # List all users
@@ -20,18 +19,45 @@ defmodule PhoenixApp.Accounts do
   # Register a new user
   # ---------------------
   def register_user(attrs) do
-    %User{}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
+    Repo.transaction(fn ->
+      # Create the user
+      case %User{}
+           |> User.registration_changeset(attrs)
+           |> Repo.insert() do
+        {:ok, user} ->
+          # Create corresponding EQEmu account
+          case PhoenixApp.EqemuGame.create_eqemu_account(user) do
+            {:ok, _account} -> user
+            {:error, reason} -> 
+              Repo.rollback("Failed to create EQEmu account: #{inspect(reason)}")
+          end
+        
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   # ---------------------
   # Update profile (name/email)
   # ---------------------
   def update_profile(%User{} = user, attrs) do
-    user
-    |> User.profile_changeset(attrs)
-    |> Repo.update()
+    Repo.transaction(fn ->
+      case user
+           |> User.profile_changeset(attrs)
+           |> Repo.update() do
+        {:ok, updated_user} ->
+          # Sync email changes to EQEmu account
+          case PhoenixApp.EqemuGame.sync_user_to_eqemu_account(updated_user) do
+            {:ok, _account} -> updated_user
+            {:error, reason} ->
+              Repo.rollback("Failed to sync EQEmu account: #{inspect(reason)}")
+          end
+        
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   # ---------------------
@@ -52,7 +78,7 @@ defmodule PhoenixApp.Accounts do
   # Check user password
   # ---------------------
   def check_password(%User{password_hash: hash}, password) when is_binary(password) do
-    Bcrypt.verify_pass(password, hash)
+    Pbkdf2.verify_pass(password, hash)
   end
 
   # ---------------------
@@ -60,8 +86,12 @@ defmodule PhoenixApp.Accounts do
   # Returns {:ok, user} or {:error, reason}
   # ---------------------
   def authenticate_user(email, password) when is_binary(email) and is_binary(password) do
-    case get_user_by_email(email) do
+    start_time = System.monotonic_time(:millisecond)
+    
+    result = case get_user_by_email(email) do
       nil ->
+        # Still run password check to prevent timing attacks
+        Pbkdf2.no_user_verify()
         {:error, :invalid_email}
 
       user ->
@@ -71,6 +101,11 @@ defmodule PhoenixApp.Accounts do
           {:error, :invalid_password}
         end
     end
+    
+    end_time = System.monotonic_time(:millisecond)
+    IO.puts("Authentication took #{end_time - start_time}ms")
+    
+    result
   end
 
   # ---------------------
@@ -195,22 +230,65 @@ defmodule PhoenixApp.Accounts do
   end
 
   # ---------------------
-  # Game server authentication
+  # Safe delete user with EQEmu cleanup
   # ---------------------
-  def authenticate_for_game_server(email, password) do
+  def delete_user_with_eqemu_cleanup(%User{} = user) do
+    Repo.transaction(fn ->
+      # Get user's EQEmu data for logging
+      eqemu_account = PhoenixApp.EqemuGame.get_account_by_user(user)
+      characters = PhoenixApp.EqemuGame.list_user_characters(user)
+      
+      # Log what will be deleted
+      IO.puts("Deleting user #{user.email} with:")
+      IO.puts("- EQEmu account: #{eqemu_account && eqemu_account.name}")
+      IO.puts("- Characters: #{length(characters)} characters")
+      
+      # Delete user (cascades to EQEmu account and characters)
+      case Repo.delete(user) do
+        {:ok, deleted_user} ->
+          IO.puts("Successfully deleted user and all EQEmu data")
+          deleted_user
+        
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  # ---------------------
+  # API server authentication
+  # ---------------------
+  def authenticate_for_api_server(email, password) do
     case authenticate_user(email, password) do
       {:ok, user} ->
-        # Generate a game session token
-        game_token = generate_game_session_token(user)
-        {:ok, %{user: user, game_token: game_token}}
+        # Generate an API session token
+        api_token = generate_api_session_token(user)
+        {:ok, %{user: user, api_token: api_token}}
       
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  def generate_game_session_token(%User{} = user) do
-    # Create a JWT-like token for game server authentication
+  # ---------------------
+  # EQEmu server authentication
+  # ---------------------
+  def authenticate_for_eqemu(email, password) do
+    case PhoenixApp.EqemuGame.authenticate_eqemu_login(email, password) do
+      {:ok, %{user: user, account: account}} ->
+        {:ok, %{user: user, account: account}}
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def verify_eqemu_account(account_name) do
+    PhoenixApp.EqemuGame.verify_eqemu_account(account_name)
+  end
+
+  def generate_api_session_token(%User{} = user) do
+    # Create a JWT-like token for API server authentication
     payload = %{
       user_id: user.id,
       email: user.email,

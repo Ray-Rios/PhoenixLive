@@ -13,24 +13,84 @@ defmodule PhoenixApp.Chat do
     |> Repo.all()
   end
 
+  def list_text_channels do
+    from(c in Channel, 
+      where: c.channel_type == "text",
+      order_by: [asc: c.position, asc: c.name]
+    )
+    |> Repo.all()
+  end
+
+  def list_voice_channels do
+    from(c in Channel, 
+      where: c.channel_type in ["voice", "video"],
+      order_by: [asc: c.position, asc: c.name]
+    )
+    |> Repo.all()
+  end
+
   def get_channel!(id) do
     Repo.get!(Channel, id)
   end
 
+  def get_channel(id) do
+    Repo.get(Channel, id)
+  end
+
   def create_channel(attrs \\ %{}) do
+    # Set position to be last
+    max_position = from(c in Channel, select: max(c.position)) |> Repo.one() || 0
+    
+    # Ensure consistent key types - use string keys to match form params
+    attrs = 
+      attrs
+      |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+      |> Map.new()
+      |> Map.put("position", max_position + 1)
+    
     %Channel{}
     |> Channel.changeset(attrs)
     |> Repo.insert()
+    |> case do
+      {:ok, channel} ->
+        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_created, channel})
+        {:ok, channel}
+      error -> error
+    end
   end
 
   def update_channel(%Channel{} = channel, attrs) do
     channel
     |> Channel.changeset(attrs)
     |> Repo.update()
+    |> case do
+      {:ok, updated_channel} ->
+        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_updated, updated_channel})
+        {:ok, updated_channel}
+      error -> error
+    end
   end
 
   def delete_channel(%Channel{} = channel) do
+    Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_deleted, channel.id})
     Repo.delete(channel)
+  end
+
+  def change_channel(%Channel{} = channel, attrs \\ %{}) do
+    Channel.changeset(channel, attrs)
+  end
+
+  def get_or_create_default_channel do
+    case Repo.get_by(Channel, name: "general") do
+      nil ->
+        {:ok, channel} = create_channel(%{
+          name: "general",
+          description: "General discussion",
+          channel_type: "text"
+        })
+        channel
+      channel -> channel
+    end
   end
 
   # Messages

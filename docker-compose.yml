@@ -1,33 +1,25 @@
 services:
+  # PostgreSQL!!
   db:
-    image: cockroachdb/cockroach:v25.2.5
-    command: start-single-node --insecure
-    env_file:
-      - .env
+    image: postgres:15
+    environment:
+      POSTGRES_DB: phoenixapp_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - "26258:26257"  # SQL port
-      - "8081:8080"    # Admin UI
+      - "5432:5432"
     volumes:
-      - cockroach_data:/cockroach/cockroach-data
-    healthcheck:
-      test: ["CMD-SHELL", "cockroach sql --insecure --host=localhost -e 'SELECT 1;'"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      - postgres_data:/var/lib/postgresql/data
 
+  # REDIS!!
   redis:
     image: redis:latest
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
 
+  # Phoenix!!
   web:
     build:
       context: .
@@ -36,88 +28,22 @@ services:
         MIX_ENV: dev
     env_file:
       - .env
-    environment:
-      - GAME_SERVER_URL=http://game_service:8080
     ports:
-      - "4000:4000"
+      - "4000:4000"  # Phoenix web interface
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - db
+      - redis
     volumes:
+      - .:/app:rw
+      # Exclude compiled assets from volume mount to preserve Docker-built assets
       - /app/priv/static/assets
+      - /app/assets/node_modules
+      - /app/_build
+      - /app/deps
     command: /usr/local/bin/start.sh
-
-  # New Rust Game Service
-  game_service:
-    build:
-      context: ./rust_game
-      dockerfile: Dockerfile
-    env_file:
-      - .env
-    environment:
-      # Override specific environment variables for the game service
-      - RUST_LOG=info
-      - GAME_SERVICE_PORT=8080
-      - DATABASE_URL=postgresql://root@db:26257/phoenix_app?sslmode=disable
-      - REDIS_URL=redis://redis:6379
-      # Phoenix service URL for inter-service communication
-      - PHOENIX_SERVICE_URL=http://web:4000
-    ports:
-      - "9069:8080"  # Game API port
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      web:
-        condition: service_started  # Game service can start after Phoenix is running
-    # volumes:
-      # - ./rust_game:/app:rw  # Mount for development (disabled for production)
     restart: unless-stopped
 
-  # UE5 Project Builder Service
-  ue5_builder:
-    image: adamrehn/ue4-runtime:4.27.2
-    # Note: Replace with UE5 image when available, or build custom
-    volumes:
-      - ./rust_game:/project:rw
-      - ue5_build_cache:/tmp/build
-    working_dir: /project
-    command: >
-      bash -c "
-        echo '🎮 UE5 Project Builder Ready';
-        echo '📋 To build your project, run:';
-        echo '   docker-compose run ue5_builder /project/build-project.sh';
-        echo '⏳ Waiting for build commands...';
-        tail -f /dev/null
-      "
-    profiles:
-      - build
-
-  # Pixel Streaming Service (Browser-based Gaming)
-  pixel_streaming:
-    build:
-      context: ./rust_game
-      dockerfile: Dockerfile.pixelstreaming
-    env_file:
-      - .env
-    environment:
-      - PIXEL_STREAMING_PORT=9070
-      - GAME_SERVER_URL=http://game_service:8080
-    ports:
-      - "9070:9070"   # Pixel streaming web interface
-      - "8888:8888"   # WebRTC signaling
-    depends_on:
-      - game_service
-    volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Uncomment when you have a packaged UE5 game:
-    # volumes:
-    #   - ./rust_game/Packaged:/app/game:ro
-    restart: unless-stopped
-
+  # Fake Email Service!!
   mailhog:
     image: mailhog/mailhog:latest
     ports:
@@ -125,6 +51,5 @@ services:
       - "8025:8025"
 
 volumes:
-  cockroach_data:
+  postgres_data:
   redis_data:
-  ue5_build_cache:

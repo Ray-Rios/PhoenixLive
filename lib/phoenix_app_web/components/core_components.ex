@@ -78,10 +78,22 @@ defmodule PhoenixAppWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={"flash-#{@kind}"}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("#flash-#{@kind}")}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide_flash("#flash-#{@kind}")}
       role="alert"
+      x-data="{ show: false }"
+      x-init="
+        setTimeout(() => show = true, 200);
+        setTimeout(() => show = false, 4200);
+      "
+      x-show="show"
+      x-transition:enter="transition ease-out duration-300"
+      x-transition:enter-start="transform translate-x-full opacity-0"
+      x-transition:enter-end="transform translate-x-0 opacity-100"
+      x-transition:leave="transition ease-in duration-300"
+      x-transition:leave-start="transform translate-x-0 opacity-100"
+      x-transition:leave-end="transform translate-x-full opacity-0"
       class={[
-        "fixed top-2 right-2 mr-2 w-80 sm:w-96 z-50 rounded-lg p-3 ring-1",
+        "fixed flash-notice w-80 sm:w-96 z-50 rounded-lg p-3 ring-1 cursor-pointer",
         @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
         @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
       ]}
@@ -548,6 +560,17 @@ defmodule PhoenixAppWeb.CoreComponents do
     |> JS.hide(to: "##{id}", transition: {"block", "block", "hidden"})
     |> JS.remove_class("overflow-hidden", to: "body")
     |> JS.pop_focus()
+  end
+
+  def hide_flash(js \\ %JS{}, selector) do
+    JS.hide(js,
+      to: selector,
+      time: 300,
+      transition:
+        {"transition-all transform ease-in duration-300",
+         "transform translate-x-0 opacity-100",
+         "transform translate-x-full opacity-0"}
+    )
   end
 
   @doc """

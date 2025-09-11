@@ -52,7 +52,6 @@ defmodule PhoenixAppWeb.BlogLive do
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
     <div class="starry-background w-full">
       <div class="max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px]">
         <div class="stars-container">

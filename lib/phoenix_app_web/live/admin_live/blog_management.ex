@@ -103,12 +103,13 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
 
   def handle_event("toggle_publish", %{"id" => id}, socket) do
     post = Content.get_post!(id)
+    new_status = if post.status == :published, do: :draft, else: :published
     
-    case Content.update_post(post, %{is_published: !post.is_published}) do
+    case Content.update_post(post, %{status: new_status}) do
       {:ok, _post} ->
         posts = Content.list_posts()
-        status = if post.is_published, do: "unpublished", else: "published"
-        {:noreply, assign(socket, posts: posts) |> put_flash(:info, "Post #{status} successfully!")}
+        status_text = if new_status == :published, do: "published", else: "unpublished"
+        {:noreply, assign(socket, posts: posts) |> put_flash(:info, "Post #{status_text} successfully!")}
       
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to update post")}
@@ -182,12 +183,22 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                 </div>
 
                 <div class="flex items-center space-x-4">
-                  <label class="flex items-center">
-                    <input type="checkbox" name="post[is_published]" 
-                           checked={Phoenix.HTML.Form.input_value(@form, :is_published)}
-                           class="mr-2" />
-                    <span class="text-gray-300">Publish immediately</span>
-                  </label>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Status</label>
+                    <select name="post[status]" class="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
+                      <option value="draft" selected={Phoenix.HTML.Form.input_value(@form, :status) == :draft}>Draft</option>
+                      <option value="published" selected={Phoenix.HTML.Form.input_value(@form, :status) == :published}>Published</option>
+                      <option value="private" selected={Phoenix.HTML.Form.input_value(@form, :status) == :private}>Private</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Post Type</label>
+                    <select name="post[post_type]" class="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
+                      <option value="post" selected={Phoenix.HTML.Form.input_value(@form, :post_type) == "post"}>Blog Post</option>
+                      <option value="page" selected={Phoenix.HTML.Form.input_value(@form, :post_type) == "page"}>Page</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div class="flex space-x-4">
@@ -223,8 +234,13 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                         <div class="flex items-center space-x-3 mb-2">
                           <h3 class="text-lg font-medium text-white"><%= post.title %></h3>
                           <span class={["px-2 py-1 text-xs rounded-full",
-                                       if(post.is_published, do: "bg-green-600 text-white", else: "bg-gray-600 text-gray-300")]}>
-                            <%= if post.is_published, do: "Published", else: "Draft" %>
+                                       case post.status do
+                                         :published -> "bg-green-600 text-white"
+                                         :draft -> "bg-gray-600 text-gray-300"
+                                         :private -> "bg-blue-600 text-white"
+                                         :trash -> "bg-red-600 text-white"
+                                       end]}>
+                            <%= String.capitalize(to_string(post.status)) %>
                           </span>
                         </div>
                         
@@ -258,8 +274,8 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                       <div class="flex space-x-2 ml-4">
                         <button phx-click="toggle_publish" phx-value-id={post.id}
                                 class={["px-3 py-1 text-sm rounded transition-colors",
-                                       if(post.is_published, do: "bg-orange-600 hover:bg-orange-700 text-white", else: "bg-green-600 hover:bg-green-700 text-white")]}>
-                          <%= if post.is_published, do: "Unpublish", else: "Publish" %>
+                                       if(post.status == :published, do: "bg-orange-600 hover:bg-orange-700 text-white", else: "bg-green-600 hover:bg-green-700 text-white")]}>
+                          <%= if post.status == :published, do: "Unpublish", else: "Publish" %>
                         </button>
                         
                         <button phx-click="edit_post" phx-value-id={post.id}

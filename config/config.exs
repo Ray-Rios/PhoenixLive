@@ -63,11 +63,11 @@ config :cors_plug,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
 # ----------------------------
-# Cockroach/Ecto Repo defaults
+# Ecto Repo defaults
 # ----------------------------
 config :phoenix_app, PhoenixApp.Repo,
   username: System.get_env("DB_USERNAME") || "root",
-  password: System.get_env("DB_PASSWORD") || "cockroachDB",
+  password: System.get_env("DB_PASSWORD") || "postgres",
   database: System.get_env("DB_NAME") || "phoenixapp_dev",
   hostname: System.get_env("DB_HOST") || "db",
   port: String.to_integer(System.get_env("DB_PORT") || "26257"),
@@ -75,6 +75,8 @@ config :phoenix_app, PhoenixApp.Repo,
   pool_size: 10,
   migration_primary_key: [type: :bigserial],
   migration_lock: false
+
+
 
 # ----------------------------
 # Import environment-specific configs

@@ -71,7 +71,6 @@ defmodule PhoenixAppWeb.CartLive do
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
     <div class="starry-background w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
       <div class="stars-container">
         <div class="stars"></div>

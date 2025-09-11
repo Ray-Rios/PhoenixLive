@@ -1,6 +1,6 @@
 defmodule PhoenixApp.Content.Post do
   use Ecto.Schema
-  use Arc.Ecto.Schema
+  # Removed Arc.Ecto.Schema - using simple string for featured_image
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -12,23 +12,28 @@ defmodule PhoenixApp.Content.Post do
     field :excerpt, :string
     field :is_published, :boolean, default: false
     field :published_at, :utc_datetime
-    field :featured_image, PhoenixApp.PostImage.Type
+    field :featured_image, :string
     field :meta_description, :string
     field :tags, {:array, :string}, default: []
 
     belongs_to :user, PhoenixApp.Accounts.User
+    # Removed parent/child relationships - not in posts table
+    has_many :comments, PhoenixApp.Content.Comment, foreign_key: :post_id
 
     timestamps(type: :utc_datetime)
   end
 
   def changeset(post, attrs) do
     post
-    |> cast(attrs, [:title, :slug, :content, :excerpt, :is_published, :published_at, :meta_description, :tags])
-    |> cast_attachments(attrs, [:featured_image])
+    |> cast(attrs, [
+      :title, :slug, :content, :excerpt, :is_published, :published_at, 
+      :meta_description, :tags, :featured_image
+    ])
     |> validate_required([:title, :content])
     |> validate_length(:title, min: 1, max: 200)
     |> validate_length(:excerpt, max: 500)
     |> validate_length(:meta_description, max: 160)
+    |> validate_inclusion(:is_published, [true, false])
     |> maybe_generate_slug()
     |> maybe_set_published_at()
     |> unique_constraint(:slug)
@@ -65,4 +70,8 @@ defmodule PhoenixApp.Content.Post do
         changeset
     end
   end
+
+  # Helper functions
+  def published?(post), do: post.is_published == true
+  def draft?(post), do: post.is_published == false
 end

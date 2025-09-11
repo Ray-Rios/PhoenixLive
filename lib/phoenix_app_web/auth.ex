@@ -74,6 +74,31 @@ defmodule PhoenixAppWeb.Auth do
     {:cont, assign_current_user(socket, session)}
   end
 
+  def on_mount(:ensure_admin, _params, session, socket) do
+    socket = assign_current_user(socket, session)
+
+    cond do
+      is_nil(socket.assigns.current_user) ->
+        socket =
+          socket
+          |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+          |> Phoenix.LiveView.redirect(to: "/login")
+
+        {:halt, socket}
+
+      not socket.assigns.current_user.is_admin ->
+        socket =
+          socket
+          |> Phoenix.LiveView.put_flash(:error, "You must be an admin to access this page.")
+          |> Phoenix.LiveView.redirect(to: "/")
+
+        {:halt, socket}
+
+      true ->
+        {:cont, socket}
+    end
+  end
+
   defp assign_current_user(socket, session) do
     Phoenix.Component.assign_new(socket, :current_user, fn ->
       case session["user_token"] do

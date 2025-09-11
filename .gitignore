@@ -4,9 +4,15 @@
 .env.prod
 config/dev.secret.exs
 config/prod.secret.exs
-
+config/runtime.exs.backup
+eqemu/server/
+eqemu/eqemu_cpp_source_code/
+AI_Docs/
+HTBX/
+assets/js/babylon/
 # Database files
 *.db
+*.sql
 *.sqlite
 *.sqlite3
 
@@ -25,16 +31,10 @@ pids
 *.seed
 *.pid.lock
 
-# Dependency directories
-node_modules/
-deps/
-_build/
-
-# Coverage directory used by tools like istanbul
-coverage/
-cover/
 
 # Editor directories and files
+.kiro
+.vs
 .vscode/
 .idea/
 *.swp
@@ -51,8 +51,14 @@ ehthumbs.db
 Thumbs.db
 
 # Elixir releases
+# Dependency build directories
+assets/node_modules/
 _build/
+build/
+target/
 deps/
+dist/
+out/
 *.ez
 
 # Phoenix artifacts
@@ -79,16 +85,10 @@ docker-compose.override.yml
 *.bak
 *.tmp
 
-# Config files with secrets
-config/runtime.exs.backup
-
 # UE5 specific files and directories
 *.uproject.DotSettings.user
 *.sln.DotSettings.user
-.vs/
-.vscode/
 Binaries/
-Build/
 DerivedDataCache/
 Intermediate/
 Saved/
@@ -107,12 +107,9 @@ _UpgradeReport_Files/
 Backup*/
 BuildLogs/
 
-# UE5 packaged builds (keep source, ignore builds)
-Packaged/
-GameBuild/
-
 # UE5 crash dumps and logs
 *.dmp
+*.dump
 CrashReportClient/
 AutoScreenshot.png
 
@@ -128,9 +125,3 @@ AutoScreenshot.png
 **/*credential*
 **/auth.json
 **/service-account*.json
-
-# Build artifacts
-target/
-dist/
-out/
-build/

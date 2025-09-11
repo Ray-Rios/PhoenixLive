@@ -5,7 +5,7 @@ defmodule PhoenixApp.MixProject do
     [
       app: :phoenix_app,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.18.4",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -47,18 +47,19 @@ defmodule PhoenixApp.MixProject do
       {:absinthe, "~> 1.7"},
       {:absinthe_plug, "~> 1.5"},
       {:absinthe_phoenix, "~> 2.0"},
+      {:dataloader, "~> 2.0"},
       {:redix, "~> 1.2"},
-      {:bcrypt_elixir, "~> 3.0"},
-      # E-commerce & Payments
-      {:stripity_stripe, "~> 3.0"},
-      {:decimal, "~> 2.0"},
+      {:pbkdf2_elixir, "~> 2.0"},
+      ## E-commerce & Payments
+      #{:stripity_stripe, "~> 3.0"},
+      #{:decimal, "~> 2.0"},
       # File uploads
       {:arc, "~> 0.11"},
       {:arc_ecto, "~> 0.11"},
-      # 2FA
-      {:pot, "~> 1.0"},
-      {:qr_code, "~> 3.1"},
-      # File handling
+      ## 2FA
+      #{:pot, "~> 1.0"},
+      #{:qr_code, "~> 3.1"},
+      ## File handling
       {:mime, "~> 2.0"},
       # Caching
       {:cachex, "~> 3.4"},
@@ -66,7 +67,8 @@ defmodule PhoenixApp.MixProject do
       {:uuid, "~> 1.1"},
       {:cors_plug, "~> 3.0"},
       {:tz, "~> 0.24"},
-      {:httpoison, "~> 2.0"}
+      {:httpoison, "~> 2.0"},
+
     ]
   end
 

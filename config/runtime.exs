@@ -6,8 +6,8 @@ import Config
 secret_key_base =
   System.get_env("SECRET_KEY_BASE") ||
     if config_env() == :dev do
-      # Dev default if not set
-      "dev_secret_key_base_#{:crypto.strong_rand_bytes(16) |> Base.encode64()}"
+      # Dev default - fixed key for development
+      "sX9/Rn5BIxDT+OD20jOYEYImGrN9SR7F9NLC1av9z+aip2mySJdALjSICoNOX5Hc"
     else
       raise """
       environment variable SECRET_KEY_BASE is missing.
@@ -44,18 +44,18 @@ guardian_secret =
     end
 
 # -------------------------------------------------
-# Cockroach / Postgres Database URL
+# PostgreSQL Database URL
 # -------------------------------------------------
-db_username = System.get_env("DB_USERNAME") || "root"
-db_password = System.get_env("DB_PASSWORD") || "cockroachDB"
-db_host = System.get_env("DB_HOST") || "db"
-db_port = String.to_integer(System.get_env("DB_PORT") || "26257")
+db_username = System.get_env("DB_USERNAME") || "postgres"
+db_password = System.get_env("DB_PASSWORD") || "postgres"
+db_host = System.get_env("DB_HOST") || if(config_env() == :dev, do: "localhost", else: "db")
+db_port = String.to_integer(System.get_env("DB_PORT") || if(config_env() == :dev, do: "5432", else: "5432"))
 db_name = System.get_env("DB_NAME") || "phoenixapp_dev"
 db_pool = String.to_integer(System.get_env("POOL_SIZE") || "10")
 
 database_url = 
   System.get_env("DATABASE_URL") || 
-  "postgresql://#{db_username}@#{db_host}:#{db_port}/#{db_name}?sslmode=disable"
+  "postgresql://#{db_username}:#{db_password}@#{db_host}:#{db_port}/#{db_name}"
 
 config :phoenix_app, PhoenixApp.Repo,
   adapter: Ecto.Adapters.Postgres,
@@ -66,9 +66,7 @@ config :phoenix_app, PhoenixApp.Repo,
   queue_target: 5000,
   queue_interval: 1000,
   migration_primary_key: [type: :bigserial],
-  migration_lock: false,
-  # CockroachDB specific settings
-  prepare: :named,
+  migration_lock: nil,
   parameters: [
     application_name: "phoenix_app"
   ]
@@ -93,7 +91,10 @@ config :phoenix_app, PhoenixApp.Auth.Guardian,
 # Redis
 # -------------------------------------------------
 config :phoenix_app, :redis_url,
-  System.get_env("REDIS_URL") || "redis://redis:6379/0"
+  System.get_env("REDIS_URL") || if(config_env() == :dev, do: "redis://localhost:6379/0", else: "redis://redis:6379/0")
+
+config :phoenix_app, :enable_redis,
+  System.get_env("ENABLE_REDIS", "false") == "true"
 
 # -------------------------------------------------
 # Swoosh / Mailer

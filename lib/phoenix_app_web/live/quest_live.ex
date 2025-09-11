@@ -1,6 +1,6 @@
 defmodule PhoenixAppWeb.QuestLive do
   use PhoenixAppWeb, :live_view
-  alias PhoenixApp.Accounts
+  # Accounts alias removed - not used
   alias Phoenix.PubSub
 
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
@@ -81,6 +81,29 @@ defmodule PhoenixAppWeb.QuestLive do
     end
   end
 
+  def handle_event("shoot_bullet", %{"x" => x, "y" => y, "target_x" => target_x, "target_y" => target_y}, socket) do
+    PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:bullet_fired, %{
+      player_id: socket.assigns.user.id,
+      x: x,
+      y: y,
+      target_x: target_x,
+      target_y: target_y,
+      timestamp: System.system_time(:millisecond)
+    }})
+    
+    {:noreply, socket}
+  end
+
+  def handle_event("alien_hit", %{"alien_id" => alien_id, "damage" => damage}, socket) do
+    PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:alien_damaged, %{
+      alien_id: alien_id,
+      damage: damage,
+      player_id: socket.assigns.user.id
+    }})
+    
+    {:noreply, socket}
+  end
+
   def handle_info({:player_joined, player}, socket) do
     {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
   end
@@ -101,6 +124,14 @@ defmodule PhoenixAppWeb.QuestLive do
     {:noreply, assign(socket, players: Map.put(socket.assigns.players, player.id, player))}
   end
 
+  def handle_info({:bullet_fired, _bullet_data}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_info({:alien_damaged, _damage_data}, socket) do
+    {:noreply, socket}
+  end
+
   def terminate(_reason, socket) do
     if socket.assigns[:user] do
       PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_left, socket.assigns.user.id})
@@ -109,13 +140,18 @@ defmodule PhoenixAppWeb.QuestLive do
 
   def render(assigns) do
     ~H"""
-    <canvas 
-      id="quest-canvas"
-      phx-hook="QuestGame"
-      data-players={Jason.encode!(@players)}
-      data-current-player={@user.id}
-      style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1000; background: #000011; cursor: crosshair;">
-    </canvas>
+    
+    <div id="game-wrapper" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; overflow: hidden; z-index: 1000; background: #000011;">
+      <canvas 
+        id="quest-canvas"
+        phx-hook="QuestGame"
+        data-players={Jason.encode!(@players)}
+        data-current-player={@user.id}
+        width="1920"
+        height="1080"
+        style="display: block; cursor: crosshair; image-rendering: pixelated; transform-origin: top left;">
+      </canvas>
+    </div>
 
     <div id="chat-overlay" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1001;">
       <form phx-submit="send_message" style="display: flex; gap: 10px; background: rgba(0,0,0,0.9); padding: 12px; border-radius: 25px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
@@ -133,14 +169,29 @@ defmodule PhoenixAppWeb.QuestLive do
     <div id="instructions" style="position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.9); color: white; padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; z-index: 1001;">
       <h3 style="margin: 0 0 12px 0; color: #a78bfa;">🌌 Galaxy Quest</h3>
       <p style="margin: 4px 0;">WASD/Arrows: Move</p>
+      <p style="margin: 4px 0;">SPACEBAR: Shoot</p>
       <p style="margin: 4px 0;">Click: Move to location</p>
-      <p style="margin: 4px 0;">Avoid aliens!</p>
+      <p style="margin: 4px 0;">Kill aliens (5hp each)!</p>
       <p style="margin: 4px 0;">Players: <%= map_size(@players) %></p>
     </div>
 
     <style>
       body { overflow: hidden; margin: 0; padding: 0; }
       html { overflow: hidden; margin: 0; padding: 0; }
+      #game-wrapper { 
+        touch-action: none; 
+        user-select: none; 
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #quest-canvas {
+        touch-action: none;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: -webkit-crisp-edges;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
     </style>
     """
   end

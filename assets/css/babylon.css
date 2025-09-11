@@ -1,0 +1,411 @@
+/* Babylon.js Component Styles */
+
+/* Main scene container */
+.babylon-scene {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Fullscreen scene styling */
+#babylon-fullscreen-scene {
+    background: #000011;
+    border-radius: 0;
+}
+
+#babylon-fullscreen-scene canvas {
+    border-radius: 0 !important;
+}
+
+.babylon-scene canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+    border-radius: 8px;
+}
+
+/* Loading state */
+.babylon-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #9ca3af;
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+}
+
+.babylon-loading .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #374151;
+    border-top: 4px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.babylon-loading p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* Fallback content */
+.babylon-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    border-radius: 8px;
+}
+
+.babylon-fallback-container {
+    border: 2px dashed #d1d5db;
+}
+
+.fallback-content {
+    text-align: center;
+    padding: 2rem;
+    max-width: 400px;
+}
+
+.fallback-icon {
+    color: #6b7280;
+    margin-bottom: 1rem;
+}
+
+.fallback-icon svg {
+    width: 64px;
+    height: 64px;
+}
+
+.fallback-image {
+    margin: 1rem 0;
+}
+
+.fallback-image img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.fallback-message h3 {
+    margin: 0 0 0.5rem 0;
+    color: #374151;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.fallback-message p {
+    margin: 0 0 1rem 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.fallback-actions {
+    margin: 1.5rem 0 1rem 0;
+}
+
+.fallback-link {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: #3b82f6;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.fallback-link:hover {
+    background: #2563eb;
+}
+
+.fallback-info {
+    margin-top: 1.5rem;
+    text-align: left;
+}
+
+.fallback-info details {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+
+.fallback-info summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: #374151;
+    font-size: 0.875rem;
+}
+
+.tech-info {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.tech-info p {
+    margin: 0.25rem 0;
+}
+
+/* Performance warning */
+.babylon-performance-warning {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 8px;
+}
+
+.warning-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.warning-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+.warning-message h4 {
+    margin: 0 0 0.5rem 0;
+    color: #dc2626;
+    font-size: 1.125rem;
+}
+
+.warning-message p {
+    margin: 0 0 0.5rem 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.warning-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.warning-actions button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-continue {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-continue:hover {
+    background: #4b5563;
+}
+
+.btn-low-quality {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-low-quality:hover {
+    background: #2563eb;
+}
+
+/* Error state */
+.babylon-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-radius: 8px;
+}
+
+.error-content {
+    text-align: center;
+    padding: 2rem;
+}
+
+.error-content h3 {
+    margin: 0 0 0.5rem 0;
+    color: #dc2626;
+    font-size: 1.125rem;
+}
+
+.error-content p {
+    margin: 0 0 1rem 0;
+    color: #7f1d1d;
+    font-size: 0.875rem;
+}
+
+.retry-button {
+    padding: 0.5rem 1rem;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.retry-button:hover {
+    background: #b91c1c;
+}
+
+/* Test results display */
+.babylon-test-results {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+.babylon-test-results h3 {
+    margin: 0 0 1rem 0;
+    color: #374151;
+    font-family: inherit;
+}
+
+.babylon-test-results ul {
+    margin: 0;
+    padding-left: 1rem;
+}
+
+.babylon-test-results li {
+    margin: 0.25rem 0;
+    color: #6b7280;
+}
+
+.babylon-test-results .errors {
+    margin-top: 1rem;
+    padding: 0.5rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+}
+
+.babylon-test-results .errors h4 {
+    margin: 0 0 0.5rem 0;
+    color: #dc2626;
+    font-size: 0.875rem;
+}
+
+.babylon-test-results .capabilities {
+    margin-top: 1rem;
+    padding: 0.5rem;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 4px;
+}
+
+.babylon-test-results .capabilities h4 {
+    margin: 0 0 0.5rem 0;
+    color: #0369a1;
+    font-size: 0.875rem;
+}
+
+.babylon-test-results .capabilities p {
+    margin: 0.25rem 0;
+    color: #0c4a6e;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .babylon-scene {
+        height: 300px;
+    }
+
+    .fallback-content,
+    .warning-content,
+    .error-content {
+        padding: 1rem;
+    }
+
+    .warning-actions {
+        flex-direction: column;
+    }
+
+    .warning-actions button {
+        width: 100%;
+    }
+
+    /* Fullscreen adjustments for mobile */
+    #babylon-fullscreen-wrapper {
+        /* Ensure fullscreen works on mobile */
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 9999 !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .babylon-scene {
+        border: 2px solid;
+    }
+
+    .babylon-fallback {
+        background: white;
+        color: black;
+    }
+
+    .fallback-link {
+        border: 2px solid;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .babylon-loading .spinner {
+        animation: none;
+    }
+
+    .fallback-link,
+    .retry-button,
+    .warning-actions button {
+        transition: none;
+    }
+}

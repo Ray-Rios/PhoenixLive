@@ -2,21 +2,29 @@ defmodule PhoenixAppWeb.ChatLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Chat
   alias Phoenix.PubSub
+  import PhoenixAppWeb.Components.PageWrapper
 
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     
     if user do
-      channels = Chat.list_channels()
-      default_channel = List.first(channels) || create_default_channel()
+      text_channels = Chat.list_text_channels()
+      voice_channels = Chat.list_voice_channels()
+      default_channel = List.first(text_channels) || Chat.get_or_create_default_channel()
+      
+      # Subscribe to channel updates
+      Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "chat:channels")
       
       {:ok, assign(socket,
-        channels: channels,
+        text_channels: text_channels,
+        voice_channels: voice_channels,
         current_channel: default_channel,
         messages: [],
         current_message: "",
         online_users: %{},
         typing_users: MapSet.new(),
+        show_create_channel: false,
+        channel_form: Chat.change_channel(%Chat.Channel{}),
         page_title: "Chat"
       )}
     else
@@ -136,6 +144,60 @@ defmodule PhoenixAppWeb.ChatLive do
     end
   end
 
+  # Channel CRUD Events
+  def handle_event("show_create_channel", _params, socket) do
+    {:noreply, assign(socket, show_create_channel: true)}
+  end
+
+  def handle_event("hide_create_channel", _params, socket) do
+    {:noreply, assign(socket, show_create_channel: false, channel_form: Chat.change_channel(%Chat.Channel{}))}
+  end
+
+  def handle_event("validate_channel", %{"channel" => channel_params}, socket) do
+    changeset = 
+      %Chat.Channel{}
+      |> Chat.change_channel(channel_params)
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign(socket, channel_form: changeset)}
+  end
+
+  def handle_event("create_channel", %{"channel" => channel_params}, socket) do
+    case Chat.create_channel(channel_params) do
+      {:ok, channel} ->
+        {:noreply, 
+         socket
+         |> assign(show_create_channel: false, channel_form: Chat.change_channel(%Chat.Channel{}))
+         |> put_flash(:info, "Channel '#{channel.name}' created successfully!")
+         |> push_navigate(to: ~p"/chat/#{channel.id}")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, channel_form: changeset)}
+    end
+  end
+
+  def handle_event("delete_channel", %{"channel_id" => channel_id}, socket) do
+    channel = Chat.get_channel!(channel_id)
+    
+    # Don't allow deleting the general channel
+    if channel.name == "general" do
+      {:noreply, put_flash(socket, :error, "Cannot delete the general channel")}
+    else
+      case Chat.delete_channel(channel) do
+        {:ok, _} ->
+          # Redirect to general channel
+          general_channel = Chat.get_or_create_default_channel()
+          {:noreply, 
+           socket
+           |> put_flash(:info, "Channel '#{channel.name}' deleted")
+           |> push_navigate(to: ~p"/chat/#{general_channel.id}")}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to delete channel")}
+      end
+    end
+  end
+
   def handle_info({:new_message, message}, socket) do
     messages = [message | socket.assigns.messages] |> Enum.take(100)
     {:noreply, assign(socket, messages: messages)}
@@ -182,18 +244,79 @@ defmodule PhoenixAppWeb.ChatLive do
     {:noreply, assign(socket, typing_users: typing_users)}
   end
 
-  defp create_default_channel do
-    {:ok, channel} = Chat.create_channel(%{
-      name: "general",
-      description: "General discussion",
-      channel_type: "text"
-    })
-    channel
+  # Channel PubSub handlers
+  def handle_info({:channel_created, channel}, socket) do
+    text_channels = if channel.channel_type == "text", do: [channel | socket.assigns.text_channels], else: socket.assigns.text_channels
+    voice_channels = if channel.channel_type in ["voice", "video"], do: [channel | socket.assigns.voice_channels], else: socket.assigns.voice_channels
+    
+    {:noreply, assign(socket, text_channels: text_channels, voice_channels: voice_channels)}
   end
+
+  def handle_info({:channel_updated, channel}, socket) do
+    text_channels = Enum.map(socket.assigns.text_channels, fn c -> if c.id == channel.id, do: channel, else: c end)
+    voice_channels = Enum.map(socket.assigns.voice_channels, fn c -> if c.id == channel.id, do: channel, else: c end)
+    
+    current_channel = if socket.assigns.current_channel.id == channel.id, do: channel, else: socket.assigns.current_channel
+    
+    {:noreply, assign(socket, text_channels: text_channels, voice_channels: voice_channels, current_channel: current_channel)}
+  end
+
+  def handle_info({:channel_deleted, channel_id}, socket) do
+    text_channels = Enum.reject(socket.assigns.text_channels, &(&1.id == channel_id))
+    voice_channels = Enum.reject(socket.assigns.voice_channels, &(&1.id == channel_id))
+    
+    {:noreply, assign(socket, text_channels: text_channels, voice_channels: voice_channels)}
+  end
+
+
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
+    <.page_with_navbar current_user={@current_user} flash={@flash}>
+      <!-- Create Channel Modal -->
+    <div :if={@show_create_channel} class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-96">
+        <h3 class="text-white text-lg font-semibold mb-4">Create Channel</h3>
+        
+        <.form for={@channel_form} phx-submit="create_channel" phx-change="validate_channel">
+          <div class="mb-4">
+            <label class="block text-gray-300 text-sm font-medium mb-2">Channel Name</label>
+            <.input field={@channel_form[:name]} 
+                    type="text" 
+                    placeholder="channel-name"
+                    class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-gray-300 text-sm font-medium mb-2">Description (Optional)</label>
+            <.input field={@channel_form[:description]} 
+                    type="text" 
+                    placeholder="What's this channel about?"
+                    class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+          </div>
+          
+          <div class="mb-6">
+            <label class="block text-gray-300 text-sm font-medium mb-2">Channel Type</label>
+            <.input field={@channel_form[:channel_type]} 
+                    type="select" 
+                    options={[{"Text Channel", "text"}, {"Voice Channel", "voice"}]}
+                    class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+          </div>
+          
+          <div class="flex justify-end space-x-3">
+            <button type="button" phx-click="hide_create_channel" 
+                    class="px-4 py-2 text-gray-300 hover:text-white transition-colors">
+              Cancel
+            </button>
+            <button type="submit" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">
+              Create Channel
+            </button>
+          </div>
+        </.form>
+      </div>
+    </div>
+
     <div class="chat-container">
       
       <!-- Chat Sidebar -->
@@ -202,26 +325,46 @@ defmodule PhoenixAppWeb.ChatLive do
           <h2 class="text-white font-bold text-lg">Phoenix Chat</h2>
         </div>
         
-        <!-- Channels List -->
+        <!-- Text Channels -->
         <div class="p-4">
-          <div class="text-gray-400 text-xs uppercase font-semibold mb-2">Text Channels</div>
-          <%= for channel <- @channels do %>
-            <.link navigate={"/chat/#{channel.id}"} 
-                   class={["flex items-center px-2 py-1 rounded text-gray-300 hover:bg-gray-700 hover:text-white transition-colors",
-                          if(@current_channel && @current_channel.id == channel.id, do: "bg-gray-700 text-white")]}>
-              <span class="mr-2">#</span>
-              <%= channel.name %>
-            </.link>
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-gray-400 text-xs uppercase font-semibold">Text Channels</div>
+            <button phx-click="show_create_channel" class="text-gray-400 hover:text-white text-lg">+</button>
+          </div>
+          <%= for channel <- @text_channels do %>
+            <div class="group flex items-center justify-between px-2 py-1 rounded hover:bg-gray-700 transition-colors">
+              <.link navigate={"/chat/#{channel.id}"} 
+                     class={["flex items-center flex-1 text-gray-300 hover:text-white transition-colors",
+                            if(@current_channel && @current_channel.id == channel.id, do: "text-white")]}>
+                <span class="mr-2">#</span>
+                <%= channel.name %>
+              </.link>
+              <%= if channel.name != "general" do %>
+                <button phx-click="delete_channel" phx-value-channel_id={channel.id}
+                        class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 text-sm ml-2"
+                        onclick="return confirm('Are you sure you want to delete this channel?')">
+                  ×
+                </button>
+              <% end %>
+            </div>
           <% end %>
         </div>
         
         <!-- Voice Channels -->
         <div class="p-4">
-          <div class="text-gray-400 text-xs uppercase font-semibold mb-2">Voice Channels</div>
-          <div class="flex items-center px-2 py-1 rounded text-gray-300 hover:bg-gray-700 hover:text-white transition-colors cursor-pointer">
-            <span class="mr-2">🔊</span>
-            General Voice
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-gray-400 text-xs uppercase font-semibold">Voice Channels</div>
+            <button class="text-gray-400 hover:text-white text-lg">+</button>
           </div>
+          <%= for channel <- @voice_channels do %>
+            <div class="flex items-center px-2 py-1 rounded text-gray-300 hover:bg-gray-700 hover:text-white transition-colors cursor-pointer">
+              <span class="mr-2">🔊</span>
+              <%= channel.name %>
+            </div>
+          <% end %>
+          <%= if @voice_channels == [] do %>
+            <div class="text-gray-500 text-sm italic px-2">No voice channels</div>
+          <% end %>
         </div>
         
         <!-- User Info -->
@@ -343,6 +486,7 @@ defmodule PhoenixAppWeb.ChatLive do
         </div>
       </div>
     </div>
+    </.page_with_navbar>
     """
   end
 

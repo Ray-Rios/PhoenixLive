@@ -23,12 +23,7 @@
             WORKDIR /app
             ARG MIX_ENV=dev
             ENV MIX_ENV=${MIX_ENV}
-                    
-        # -------------------------------
-        # Copy pre-compiled assets
-        # -------------------------------
-            COPY priv/static ./priv/static
-                    
+
         # -------------------------------
         # Copy deps files for caching
         # -------------------------------
@@ -63,7 +58,13 @@
         # -------------------------------
             COPY assets ./assets
             RUN cd assets && npm install
-            RUN mix assets.deploy
+            
+            # Build assets based on environment
+            RUN if [ "$MIX_ENV" = "prod" ]; then \
+                mix assets.deploy; \
+            else \
+                mix assets.build; \
+            fi
             
             RUN mix compile
         

@@ -6,6 +6,7 @@ defmodule PhoenixAppWeb.Layouts do
   The "root" layout is a skeleton rendered around other layouts.
   """
   use PhoenixAppWeb, :html
+  # Navigation import removed - not used
 
   embed_templates "layouts/*"
 end

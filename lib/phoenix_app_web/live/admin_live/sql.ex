@@ -1,7 +1,6 @@
 defmodule PhoenixAppWeb.AdminLive.SQL do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Repo
-  import Ecto.Query
 
   def mount(_params, _session, socket) do
     if socket.assigns.current_user && socket.assigns.current_user.is_admin do

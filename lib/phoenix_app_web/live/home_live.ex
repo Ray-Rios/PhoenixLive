@@ -9,8 +9,8 @@ defmodule PhoenixAppWeb.HomeLive do
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
-    <div class="w-Full bg-black">
+    <.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div class="w-Full bg-black">
 
 
       <!-- Main Content -->
@@ -62,6 +62,7 @@ defmodule PhoenixAppWeb.HomeLive do
         </div>
       </div>
     </div>
+    </.page_with_navbar>
     """
   end
 end

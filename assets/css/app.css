@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Babylon.js styles */
+@import "./babylon.css";
+
 /* Custom CSS for avatar shapes */
 .triangle {
   width: 0;
@@ -495,4 +498,120 @@
     opacity: 0;
   }
  }
+}
+
+/* File Manager Styles */
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.file-item {
+  @apply bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer relative;
+}
+
+.file-item.selected {
+  @apply ring-2 ring-blue-500 bg-blue-900/30;
+}
+
+.file-icon {
+  @apply text-4xl mb-2;
+}
+
+.file-name {
+  @apply text-sm font-medium truncate mb-1;
+}
+
+.file-size {
+  @apply text-xs;
+}
+
+/* Drag and Drop Styles */
+#drop-zone {
+  transition: all 0.3s ease;
+}
+
+#drop-zone.drag-over {
+  @apply border-blue-500 bg-blue-900/20 scale-105;
+}
+
+/* File Upload Progress */
+.upload-progress {
+  @apply fixed top-4 right-4 bg-gray-800 text-white p-4 rounded-lg shadow-lg z-50;
+}
+
+/* File Preview Modal */
+.file-preview-modal {
+  backdrop-filter: blur(4px);
+}
+
+/* Responsive File Grid */
+@media (max-width: 640px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+/* File Type Icons */
+.file-type-image {
+  @apply text-blue-400;
+}
+
+.file-type-video {
+  @apply text-green-400;
+}
+
+.file-type-audio {
+  @apply text-purple-400;
+}
+
+.file-type-document {
+  @apply text-yellow-400;
+}
+
+.file-type-archive {
+  @apply text-orange-400;
+}
+
+.file-type-other {
+  @apply text-gray-400;
+}
+
+/* Hover Effects */
+.file-item:hover .file-actions {
+  @apply opacity-100;
+}
+
+.file-actions {
+  @apply opacity-0 transition-opacity duration-200;
+}
+
+/* Selection Styles */
+.file-selected {
+  @apply ring-2 ring-blue-500 bg-blue-900/30;
+}
+
+/* Loading States */
+.file-loading {
+  @apply animate-pulse bg-gray-700;
+}
+
+/* Stats Cards */
+.stats-card {
+  @apply bg-gray-800 rounded-lg p-4 text-center hover:bg-gray-700 transition-colors;
+}
+
+.stats-number {
+  @apply text-2xl font-bold;
+}
+
+.stats-label {
+  @apply text-gray-400 text-sm;
 }

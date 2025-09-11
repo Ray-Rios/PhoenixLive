@@ -1,53 +1,52 @@
 services:
+  # CockroachDB!!
   db:
     image: cockroachdb/cockroach:v25.2.5
     command: start-single-node --insecure
     env_file:
-      - .env.prod
+      - .env
     ports:
       - "26258:26257"  # SQL port
       - "8081:8080"    # Admin UI
     volumes:
-      - cockroach_data_prod:/cockroach/cockroach-data
-    healthcheck:
-      test: ["CMD-SHELL", "cockroach sql --insecure --host=localhost -e 'SELECT 1;'"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      - cockroach_data:/cockroach/cockroach-data
 
+  # REDIS!!
   redis:
     image: redis:latest
     ports:
       - "6379:6379"
     volumes:
-      - redis_data_prod:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - redis_data:/data
 
+  # Phoenix!!
   web:
     build:
       context: .
+      dockerfile: Dockerfile
       args:
         MIX_ENV: prod
     env_file:
       - .env.prod
     ports:
-      - "4000:4000"
+      - "4000:4000"  # Phoenix web interface
+    depends_on:
+      - db
+      - redis
     volumes:
       - .:/app:rw
-      - /app/priv/static/assets
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - /app/deps
+      - /app/_build
     command: /usr/local/bin/start.sh
-    volumes: []  # no bind mounts in prod
+    restart: unless-stopped
+
+  # Fake Email Service!!
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
 volumes:
-  cockroach_data_prod:
-  redis_data_prod:
+  cockroach_data:
+  redis_data:

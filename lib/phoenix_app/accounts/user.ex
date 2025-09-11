@@ -2,7 +2,6 @@ defmodule PhoenixApp.Accounts.User do
   use Ecto.Schema
   use Arc.Ecto.Schema
   import Ecto.Changeset
-  alias Bcrypt
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -19,6 +18,7 @@ defmodule PhoenixApp.Accounts.User do
     field :is_online, :boolean, default: false
     field :is_admin, :boolean, default: true
     field :status, :string, default: "active"
+    field :role, :string, default: "subscriber"
     field :two_factor_secret, :string
     field :two_factor_enabled, :boolean, default: false
     field :two_factor_backup_codes, {:array, :string}, default: []
@@ -28,8 +28,14 @@ defmodule PhoenixApp.Accounts.User do
 
     has_many :orders, PhoenixApp.Commerce.Order
     has_many :posts, PhoenixApp.Content.Post
+    has_many :comments, PhoenixApp.Content.Comment
     has_many :files, PhoenixApp.Files.UserFile
     has_many :chat_messages, PhoenixApp.Chat.Message
+    
+    # Game relationships
+    has_many :game_sessions, PhoenixApp.Game.GameSession
+    has_many :game_events, PhoenixApp.Game.GameEvent, foreign_key: :player_id
+    has_one :player_stats, PhoenixApp.Game.PlayerStats
 
     timestamps(type: :utc_datetime)
   end
@@ -43,12 +49,13 @@ defmodule PhoenixApp.Accounts.User do
     |> put_password_hash()
   end
 
-  # Update profile (email/name)
+  # Update profile (email/name/avatar)
   def profile_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :email])
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
+    |> validate_inclusion(:role, ["administrator", "editor", "author", "contributor", "subscriber"])
     |> unique_constraint(:email)
   end
 
@@ -97,7 +104,7 @@ defmodule PhoenixApp.Accounts.User do
 
   # Password validation
   def valid_password?(%__MODULE__{password_hash: hash}, password) when is_binary(password) do
-    Bcrypt.verify_pass(password, hash)
+    Pbkdf2.verify_pass(password, hash)
   end
 
   def valid_password?(_, _), do: false
@@ -111,10 +118,54 @@ defmodule PhoenixApp.Accounts.User do
     for _ <- 1..10, do: :crypto.strong_rand_bytes(4) |> Base.encode16()
   end
 
+  # CMS Role capabilities (integrated from CMS system)
+  def get_capabilities(%__MODULE__{role: role}) do
+    case role do
+      "administrator" -> [
+        "manage_options", "edit_posts", "edit_others_posts", "edit_published_posts",
+        "publish_posts", "delete_posts", "delete_others_posts", "delete_published_posts",
+        "edit_pages", "edit_others_pages", "edit_published_pages", "publish_pages",
+        "delete_pages", "delete_others_pages", "delete_published_pages",
+        "manage_categories", "manage_links", "moderate_comments", "upload_files",
+        "import", "unfiltered_html", "edit_themes", "install_themes", "update_themes",
+        "delete_themes", "edit_plugins", "install_plugins", "update_plugins",
+        "delete_plugins", "edit_users", "list_users", "delete_users", "promote_users",
+        "remove_users", "add_users", "create_users", "edit_dashboard", "update_core",
+        "list_roles", "promote_users", "edit_theme_options", "delete_site", "manage_network",
+        "manage_sites", "manage_network_users", "manage_network_plugins", "manage_network_themes",
+        "manage_network_options", "upgrade_network", "setup_network"
+      ]
+      "editor" -> [
+        "edit_posts", "edit_others_posts", "edit_published_posts", "publish_posts",
+        "delete_posts", "delete_others_posts", "delete_published_posts",
+        "edit_pages", "edit_others_pages", "edit_published_pages", "publish_pages",
+        "delete_pages", "delete_others_pages", "delete_published_pages",
+        "manage_categories", "manage_links", "moderate_comments", "upload_files",
+        "unfiltered_html"
+      ]
+      "author" -> [
+        "edit_posts", "edit_published_posts", "publish_posts", "delete_posts",
+        "delete_published_posts", "upload_files"
+      ]
+      "contributor" -> [
+        "edit_posts", "delete_posts"
+      ]
+      "subscriber" -> [
+        "read"
+      ]
+      _ -> []
+    end
+  end
+
+  def can?(%__MODULE__{} = user, capability) do
+    capability in get_capabilities(user)
+  end
+
   # Internal helper
   defp put_password_hash(changeset) do
     if pwd = get_change(changeset, :password) do
-      put_change(changeset, :password_hash, Bcrypt.hash_pwd_salt(pwd))
+      hash = Pbkdf2.hash_pwd_salt(pwd)
+      put_change(changeset, :password_hash, hash)
     else
       changeset
     end

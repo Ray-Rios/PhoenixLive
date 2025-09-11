@@ -5,20 +5,20 @@ defmodule PhoenixAppWeb.Components.Navigation do
     ~H"""
     <!-- Navigation Toggle Button -->
     <button id="nav-toggle" 
-            class="fixed top-2 right-4 z-[60] bg-gray-800 hover:bg-gray-700 text-white p-2 rounded-full shadow-lg transition-all duration-300"
+            class="fixed top-0 right-0 z-[60] bg-gray-800 hover:bg-gray-700 text-white p-2 pr-4 shadow-lg transition-all duration-300"
             onclick="toggleNavbar()">
-      <svg id="nav-toggle-icon" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg id="nav-toggle-icon" class="w-3 h-3 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
       </svg>
     </button>
 
-    <nav id="main-navbar" class="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 fixed top-0 left-0 z-50 w-full h-[50px] transition-transform duration-300 ease-in-out">
-      <div class="w-full px-4">
+    <nav id="main-navbar" class="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 fixed top-0 left-0 z-50 w-full h-[47px] transition-transform duration-300 ease-in-out">
+      <div class="px-4">
         <div class="flex top-8 justify-between items-center">
           <!-- Left side - Logo and main navigation -->
           <div class="flex items-center space-x-4 flex-1 min-w-0">
             <.link navigate={~p"/dashboard"} class="text-xl font-bold text-white hover:text-blue-400 transition-colors duration-300 flex-shrink-0">
-              Phoenix CMS
+              HTBX
             </.link>
             <div class="hidden lg:flex space-x-4 flex-1 justify-center">
               <.link navigate={~p"/shop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
@@ -51,15 +51,15 @@ defmodule PhoenixAppWeb.Components.Navigation do
           </div>
           
           <!-- Right side - User menu -->
-          <div class="flex items-center space-x-2 flex-shrink-0">
+          <div class="flex items-center space-x-2 flex-shrink-0" style="margin-right: 25px;">
             <%= if @current_user do %>
               <!-- User Avatar and Dropdown -->
-              <div class="relative" x-data="{ open: false }" @click.away="open = false">
+              <div class="relative" x-data="{ open: false }" x-init="open = false" @click.away="open = false">
                 <button @click="open = !open" class="flex items-center space-x-1 text-white hover:text-blue-400 transition-colors duration-300 min-w-0">
                   <%= if get_user_avatar_url(@current_user) do %>
                     <img src={get_user_avatar_url(@current_user)} alt="Avatar" class="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                   <% else %>
-                    <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" 
+                    <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" 
                          style={"background-color: #{get_user_avatar_color(@current_user)}"}>
                       <%= get_user_initial(@current_user) %>
                     </div>
@@ -71,14 +71,15 @@ defmodule PhoenixAppWeb.Components.Navigation do
                 </button>
                 
                 <!-- Dropdown Menu -->
-                <div x-show="open" x-cloak
-                     class="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50"
-                     x-transition:enter="transition ease-out duration-100"
-                     x-transition:enter-start="transform opacity-0 scale-95"
-                     x-transition:enter-end="transform opacity-100 scale-100"
-                     x-transition:leave="transition ease-in duration-75"
-                     x-transition:leave-start="transform opacity-100 scale-100"
-                     x-transition:leave-end="transform opacity-0 scale-95">
+                <div x-show="open" 
+                     x-cloak
+                     class="absolute dropdown-menu w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="transform translate-x-full opacity-0"
+                     x-transition:enter-end="transform translate-x-0 opacity-100"
+                     x-transition:leave="transition ease-in duration-150"
+                     x-transition:leave-start="transform translate-x-0 opacity-100"
+                     x-transition:leave-end="transform translate-x-full opacity-0">
                   <.link navigate={~p"/profile"} class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
                     👤 Profile Settings
                   </.link>
@@ -116,7 +117,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
         const icon = document.getElementById('nav-toggle-icon');
         const body = document.body;
         
-        if (navbar.style.transform === 'translateY(-100%)') {
+        if (navbar.style.transform === 'translateY(-80%)') {
           // Show navbar
           navbar.style.transform = 'translateY(0)';
           icon.style.transform = 'rotate(0deg)';
@@ -147,13 +148,9 @@ defmodule PhoenixAppWeb.Components.Navigation do
           user_struct -> get_cart_item_count(user_struct)
         end
       is_map(user) ->
-        case PhoenixApp.Commerce.get_or_create_cart(user) do
-          nil -> 0
-          cart -> 
-            cart.cart_items
-            |> Enum.map(& &1.quantity)
-            |> Enum.sum()
-        end
+        # TODO: Implement cart functionality
+        # For now, return 0 until cart system is implemented
+        0
       true -> 0
     end
   end

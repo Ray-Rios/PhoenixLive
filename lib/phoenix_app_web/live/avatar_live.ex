@@ -74,7 +74,6 @@ defmodule PhoenixAppWeb.AvatarLive do
 
   def render(assigns) do
     ~H"""
-    <.navbar current_user={@current_user} />
     <div class="starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
       <!-- Starry Background -->
       <div class="stars-container">

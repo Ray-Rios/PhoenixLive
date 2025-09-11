@@ -203,7 +203,7 @@ defmodule PhoenixApp.GameEngine do
     %{spaceship | x: wrapped_x, y: wrapped_y}
   end
 
-  defp update_rocket(rocket, current_time) do
+  defp update_rocket(rocket, _current_time) do
     # Move rocket
     new_x = rocket.x + :math.cos(rocket.direction) * rocket.speed
     new_y = rocket.y + :math.sin(rocket.direction) * rocket.speed

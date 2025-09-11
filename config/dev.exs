@@ -16,9 +16,9 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "dev_secret_key_base_placeholder",
+  secret_key_base: "sX9/Rn5BIxDT+OD20jOYEYImGrN9SR7F9NLC1av9z+aip2mySJdALjSICoNOX5Hc",
   watchers: [
-    npm: ["run", "watch", cd: Path.expand("../assets", __DIR__)]
+    # npm: ["run", "watch", cd: Path.expand("../assets", __DIR__)]
   ],
   live_reload: [
     patterns: [
@@ -41,7 +41,9 @@ config :swoosh, :api_client, false
 # Redis & Mail (dev)
 # ----------------------------
 config :phoenix_app, :redis_url,
-  System.get_env("REDIS_URL") || "redis://localhost:6379"
+  System.get_env("REDIS_URL") || "redis://localhost:6379/0"
+
+config :phoenix_app, :enable_redis, false
 
 config :phoenix_app, PhoenixApp.Mailer,
   adapter: Swoosh.Adapters.SMTP,
@@ -51,3 +53,8 @@ config :phoenix_app, PhoenixApp.Mailer,
   password: System.get_env("SMTP_PASS"),
   tls: :never,
   retries: 1
+
+# ----------------------------
+# Password hashing (dev - PBKDF2)
+# ----------------------------
+config :pbkdf2_elixir, :rounds, 1  # Fast for development (default is 160000)
