@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  labels:
+    app: db-init
+spec:
+  template:
+    metadata:
+      labels:
+        app: db-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: db-init
+        image: phoenixapp:prod
+        envFrom:
+        - configMapRef:
+            name: phoenix-config
+        - secretRef:
+            name: phoenix-secrets
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - |
+          set -e
+          echo "Waiting for PostgreSQL to be ready..."
+          until pg_isready -h db -p 5432 -U postgres &> /dev/null; do
+            echo "Waiting for database..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+          
+          echo "Creating database..."
+          mix ecto.create --quiet || echo "Database already exists or creation failed, continuing..."
+          
+          echo "Running migrations..."
+          for i in {1..3}; do
+            if mix ecto.migrate; then
+              echo "Migrations completed successfully"
+              break
+            else
+              echo "Migration attempt $i failed, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+          
+          echo "Database initialization complete!"

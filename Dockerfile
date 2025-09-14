@@ -52,6 +52,7 @@
         # Copy source code and compile
         # -------------------------------
             COPY lib ./lib
+            COPY priv ./priv
             
         # -------------------------------
         # Copy assets and build them

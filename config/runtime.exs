@@ -75,11 +75,22 @@ config :phoenix_app, PhoenixApp.Repo,
 # Endpoint config
 # -------------------------------------------------
 http_port = String.to_integer(System.get_env("PORT") || "4000")
+
+# CORS origins for check_origin
+cors_origins = 
+  String.split(
+    System.get_env("CORS_ALLOWED_ORIGINS") || "http://localhost:3000,http://localhost:4000",
+    ","
+  )
+
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: http_port],
   secret_key_base: secret_key_base,
   live_view: [signing_salt: live_view_salt],
-  server: true
+  server: true,
+  check_origin: cors_origins,
+  url: [host: System.get_env("PHOENIX_HOST") || "localhost", port: http_port],
+  force_ssl: [rewrite_on: [:x_forwarded_proto]]
 
 # -------------------------------------------------
 # Guardian runtime config

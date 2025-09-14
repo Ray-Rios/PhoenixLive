@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: phoenixapp
+
+resources:
+- ../../base
+- namespace.yaml
+- configmap.yaml
+- secrets.yaml
+- ingress.yaml
+
+images:
+- name: phoenixapp
+  newTag: prod
+
+patches:
+- path: postgres-patch.yaml
+- path: phoenix-patch.yaml
+- path: service-patch.yaml

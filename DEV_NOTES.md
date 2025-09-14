@@ -1,4 +1,7 @@
 ✅ Notes:
+Dev setup: vscode, wsl, docker, rancher-desktop, 
+kubectl get svc -n ingress-nginx -o wide
+
 SECRET_KEY_BASE, LIVE_VIEW_SIGNING_SALT, and GUARDIAN_SECRET_KEY in prod must be generated.
 For prod, you must replace these with real secrets before deployment — otherwise start.sh will fail.
 Example:

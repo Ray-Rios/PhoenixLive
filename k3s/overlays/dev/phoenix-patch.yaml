@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phoenix-web
+spec:
+  template:
+    spec:
+      containers:
+      - name: phoenix
+        env:
+        - name: MIX_ENV
+          value: "dev"
