@@ -9,7 +9,8 @@ defmodule PhoenixApp.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      releases: releases()
     ]
   end
 
@@ -84,5 +85,15 @@ defmodule PhoenixApp.MixProject do
     "assets.build": ["cmd --cd assets npm run build"],
     "assets.deploy": ["cmd --cd assets npm run deploy", "phx.digest"]
   ]
+  end
+
+  defp releases do
+    [
+      phoenix_app: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent],
+        steps: [:assemble, :tar]
+      ]
+    ]
   end
 end

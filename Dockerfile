@@ -68,12 +68,20 @@
             fi
             
             RUN mix compile
+            
+        # -------------------------------
+        # Build release for production
+        # -------------------------------
+            RUN if [ "$MIX_ENV" = "prod" ]; then \
+                mix release; \
+            fi
         
     # -------------------------------
     # Expose port & start script
     # -------------------------------
     EXPOSE 4000
-    COPY start.sh /usr/local/bin/start.sh
-    RUN chmod +x /usr/local/bin/start.sh
-    CMD ["/usr/local/bin/start.sh"]
+    COPY phx-start.sh /usr/local/bin/phx-start.sh
+    RUN chmod +x /usr/local/bin/phx-start.sh
+    
+    CMD ["/usr/local/bin/phx-start.sh"]
                     

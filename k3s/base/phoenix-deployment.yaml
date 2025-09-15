@@ -24,18 +24,47 @@ spec:
             name: phoenix-config
         - secretRef:
             name: phoenix-secrets
-        command: ["/usr/local/bin/start.sh"]
+        command: ["/usr/local/bin/phx-start.sh"]
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        # Temporarily removed security context to fix permission issues
+        # securityContext:
+        #   allowPrivilegeEscalation: false
+        #   capabilities:
+        #     drop:
+        #     - ALL
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: phoenix-web
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: phoenix-web
   ports:
-  - protocol: TCP
+  - name: http
+    protocol: TCP
     port: 80
     targetPort: 4000
-    nodePort: 30080

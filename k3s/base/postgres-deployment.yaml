@@ -33,6 +33,8 @@ spec:
             secretKeyRef:
               name: phoenix-secrets
               key: DB_PASSWORD
+        - name: POSTGRES_INITDB_ARGS
+          value: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
         ports:
         - containerPort: 5432
         volumeMounts:

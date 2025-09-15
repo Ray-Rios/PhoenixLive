@@ -140,6 +140,13 @@ defmodule PhoenixAppWeb.Router do
   end
 
   # --------------------
+  # Health Check (for Kubernetes)
+  # --------------------
+  scope "/", PhoenixAppWeb do
+    get "/health", HealthController, :check
+  end
+
+  # --------------------
   # API (Rust API Migration)
   # --------------------
   scope "/api", PhoenixAppWeb do

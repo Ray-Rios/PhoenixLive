@@ -35,9 +35,7 @@ defmodule PhoenixApp.Application do
         %{
           id: Redix.PubSub,
           start: {Redix.PubSub, :start_link, [redis_url(), [name: :redix_pubsub]]}
-        },
-        # MMO Game Server Manager
-        PhoenixApp.MMO.GameServerManager
+        }
       ]
     else
       []

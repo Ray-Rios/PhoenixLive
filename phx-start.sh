@@ -57,24 +57,32 @@ done
 echo "PostgreSQL is ready!"
 
 # ----------------------------
-# Create database using Ecto
+# Database setup (production-safe)
 # ----------------------------
-echo "Creating database..."
-mix ecto.create --quiet || echo "Either the Database already exists or the creation failed continuing..."
+if [ "$MIX_ENV" = "prod" ]; then
+  echo "Production mode: Skipping database creation (should be handled by init job)"
+  echo "Production mode: Skipping migrations (should be handled by init job)"
+else
+  # ----------------------------
+  # Create database using Ecto (dev only)
+  # ----------------------------
+  echo "Creating database..."
+  mix ecto.create --quiet || echo "Either the Database already exists or the creation failed continuing..."
 
-# ----------------------------
-# Run Ecto migrations with retry
-# ----------------------------
-echo "Running migrations..."
-for i in {1..3}; do
-  if mix ecto.migrate; then
-    echo "Migrations completed successfully"
-    break
-  else
-    echo "Migration attempt $i failed, retrying in 5 seconds..."
-    sleep 5
-  fi
-done
+  # ----------------------------
+  # Run Ecto migrations with retry (dev only)
+  # ----------------------------
+  echo "Running migrations..."
+  for i in {1..3}; do
+    if mix ecto.migrate; then
+      echo "Migrations completed successfully"
+      break
+    else
+      echo "Migration attempt $i failed, retrying in 5 seconds..."
+      sleep 5
+    fi
+  done
+fi
 
 # ----------------------------
 # Wait for Redis
@@ -103,4 +111,21 @@ fi
 # Start Phoenix server
 # ----------------------------
 echo "Starting Phoenix server..."
-exec mix phx.server
+
+if [ "$MIX_ENV" = "prod" ]; then
+  echo "Production mode: Starting Phoenix application..."
+  
+  # Use the compiled release if available
+  if [ -f "/app/_build/prod/rel/phoenix_app/bin/phoenix_app" ]; then
+    echo "Using Elixir release..."
+    exec /app/_build/prod/rel/phoenix_app/bin/phoenix_app start
+  else
+    echo "Starting with compiled application..."
+    cd /app
+    # Start the application directly without Mix's file watching
+    exec elixir --erl "-detached" -pa _build/prod/lib/*/ebin -e "Application.ensure_all_started(:phoenix_app)" --no-halt
+  fi
+else
+  # Development mode
+  exec mix phx.server
+fi

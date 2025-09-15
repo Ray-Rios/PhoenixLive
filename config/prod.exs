@@ -5,18 +5,27 @@ import Config
 # ----------------------------
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
-
+  url: [host: System.get_env("PHOENIX_HOST") || "rio-tek.com", port: 443, scheme: "https"],
+  check_origin: [
+    "https://rio-tek.com",
+    "https://www.rio-tek.com"
+  ],
+  force_ssl: [rewrite_on: [:x_forwarded_proto]],
+  server: true,
   secret_key_base: (System.get_env("SECRET_KEY_BASE") ||
     raise("SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`")),
   live_view: [signing_salt: (System.get_env("LIVE_VIEW_SIGNING_SALT") ||
     raise("LIVE_VIEW_SIGNING_SALT is missing"))]
 
-# CORS origins for check_origin
-cors_origins = 
-  String.split(
-    System.get_env("CORS_ALLOWED_ORIGINS") || "http://localhost:3000,http://localhost:4000",
-    ","
-  )
+# CORS origins for production
+config :cors_plug,
+  origin: [
+    "https://rio-tek.com",
+    "https://www.rio-tek.com"
+  ],
+  max_age: 86400,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  headers: ["Authorization", "Content-Type", "Accept", "Origin", "User-Agent", "DNT", "Cache-Control", "X-Mx-ReqToken", "Keep-Alive", "X-Requested-With", "If-Modified-Since"]
 # ----------------------------
 # Guardian (prod)
 # ----------------------------

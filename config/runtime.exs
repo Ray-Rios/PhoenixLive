@@ -81,7 +81,11 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: http_port],
   secret_key_base: secret_key_base,
   live_view: [signing_salt: live_view_salt],
-  url: [host: System.get_env("PHOENIX_HOST") || "localhost", port: http_port],
+  url: [
+    host: System.get_env("PHOENIX_HOST") || "localhost", 
+    port: if(config_env() == :prod, do: 443, else: http_port),
+    scheme: if(config_env() == :prod, do: "https", else: "http")
+  ],
   force_ssl: [rewrite_on: [:x_forwarded_proto]]
 
 # -------------------------------------------------

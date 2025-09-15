@@ -9,6 +9,7 @@ resources:
 - configmap.yaml
 - secrets.yaml
 - ingress.yaml
+- mailhog-auth-secret.yaml
 
 images:
 - name: phoenixapp

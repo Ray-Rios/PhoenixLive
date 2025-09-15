@@ -1,4 +1,7 @@
 ✅ Notes:
+
+kubectl logs phoenix-web-766545c5d5-4hmfj -n phoenixapp -f
+
 Dev setup: vscode, wsl, docker, rancher-desktop, 
 kubectl get svc -n ingress-nginx -o wide
 
