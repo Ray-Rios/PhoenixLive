@@ -27,7 +27,7 @@ spec:
           service:
             name: phoenix-web
             port:
-              number: 443
+              number: 80
   - host: www.rio-tek.com
     http:
       paths:
@@ -37,7 +37,7 @@ spec:
           service:
             name: phoenix-web
             port:
-              number: 443
+              number: 80
 ---
 # Mailhog ingress for development access
 apiVersion: networking.k8s.io/v1

@@ -5,11 +5,18 @@ import Config
 # ----------------------------
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
+
   secret_key_base: (System.get_env("SECRET_KEY_BASE") ||
     raise("SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`")),
   live_view: [signing_salt: (System.get_env("LIVE_VIEW_SIGNING_SALT") ||
     raise("LIVE_VIEW_SIGNING_SALT is missing"))]
 
+# CORS origins for check_origin
+cors_origins = 
+  String.split(
+    System.get_env("CORS_ALLOWED_ORIGINS") || "http://localhost:3000,http://localhost:4000",
+    ","
+  )
 # ----------------------------
 # Guardian (prod)
 # ----------------------------

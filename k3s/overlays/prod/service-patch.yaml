@@ -3,7 +3,9 @@ kind: Service
 metadata:
   name: phoenix-web
 spec:
-  type: ClusterIP
+  type: LoadBalancer
+  selector:
+    app: phoenix-web
   ports:
-  - port: 4000
+  - port: 443
     targetPort: 4000

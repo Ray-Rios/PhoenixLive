@@ -31,7 +31,7 @@ kind: Service
 metadata:
   name: phoenix-web
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: phoenix-web
   ports:

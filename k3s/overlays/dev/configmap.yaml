@@ -16,6 +16,5 @@ data:
   SMTP_PASS: "nugent"
   CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:4000"
   RUST_LOG: "info"
-  GAME_SERVICE_PORT: "9000"
   PHOENIX_SERVICE_URL: "http://phoenix-web:4000"
   PHOENIX_HOST: "localhost"
