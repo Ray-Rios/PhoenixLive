@@ -16,26 +16,29 @@ defmodule PhoenixApp.Accounts do
   def get_user!(id), do: Repo.get!(User, id)
 
   # ---------------------
-  # Register a new user
+  # Register a new user (uses Ash API)
   # ---------------------
   def register_user(attrs) do
-    Repo.transaction(fn ->
-      # Create the user
-      case %User{}
-           |> User.registration_changeset(attrs)
-           |> Repo.insert() do
-        {:ok, user} ->
-          # Create corresponding EQEmu account
-          case PhoenixApp.EqemuGame.create_eqemu_account(user) do
-            {:ok, _account} -> user
-            {:error, reason} -> 
-              Repo.rollback("Failed to create EQEmu account: #{inspect(reason)}")
-          end
-        
-        {:error, changeset} ->
-          Repo.rollback(changeset)
-      end
-    end)
+    # Use Ash API to create the user resource instead of trying to insert an
+    # Ash.Changeset via Ecto.Repo (that caused undefined function errors).
+  changeset = User.registration_changeset(nil, attrs)
+  case PhoenixApp.Api.create(changeset) do
+      {:ok, user} ->
+        # Create corresponding EQEmu account. If that fails, attempt to
+        # clean up the created user to avoid orphaned records.
+        case PhoenixApp.EqemuGame.create_eqemu_account(user) do
+          {:ok, _account} -> {:ok, user}
+          {:error, reason} ->
+            # Best-effort cleanup via Ash API
+            case PhoenixApp.Api.destroy(user) do
+              {:ok, _} -> {:error, {:eqemu_failed, reason}}
+              {:error, _} -> {:error, {:eqemu_failed_and_cleanup_failed, reason}}
+            end
+        end
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
   end
 
   # ---------------------
@@ -156,9 +159,8 @@ defmodule PhoenixApp.Accounts do
   # User management functions
   # ---------------------
   def create_user(attrs) do
-    %User{}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
+  changeset = User.registration_changeset(nil, attrs)
+  PhoenixApp.Api.create(changeset)
   end
 
   def update_user(%User{} = user, attrs) do

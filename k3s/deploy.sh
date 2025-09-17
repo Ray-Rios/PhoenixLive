@@ -1,38 +1,9 @@
 #!/usr/bin/env bash
-# Usage examples:
-# ./deploy.sh dev
-# ./deploy.sh prod
-# ./deploy.sh dev --stream-logs
-
 set -euo pipefail
 
 # ---- Parameters ----
-ENVIRONMENT=""
-STREAM_LOGS=false
-
-usage() {
-  echo "Usage: $0 <dev|prod> [--stream-logs]"
-  exit 1
-}
-
-if [[ $# -lt 1 ]]; then
-  usage
-fi
-
-ENVIRONMENT=$1
-shift
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --stream-logs)
-      STREAM_LOGS=true
-      shift
-      ;;
-    *)
-      usage
-      ;;
-  esac
-done
+ENVIRONMENT=dev
+STREAM_LOGS=true
 
 # ---- Namespace ----
 if [[ "$ENVIRONMENT" == "dev" ]]; then
@@ -46,16 +17,24 @@ fi
 
 # ---- Docker build ----
 echo "🐳 Building Phoenix Docker image for $ENVIRONMENT..."
-#docker build --progress=plain -t "phoenixapp:$ENVIRONMENT" --build-arg "MIX_ENV=$ENVIRONMENT" .
-docker build -t "phoenixapp:$ENVIRONMENT" \
+# use git short sha for deterministic tagging
+GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+IMAGE_TAG="${GIT_SHA}"
+IMAGE_NAME="phoenixapp:${IMAGE_TAG}"
+echo "Building image ${IMAGE_NAME} (MIX_ENV=${ENVIRONMENT})"
+docker build -t "${IMAGE_NAME}" \
               --progress=plain \
-              --build-arg "MIX_ENV=$ENVIRONMENT" \
-              ../
+              --build-arg "MIX_ENV=${ENVIRONMENT}" \
+              ..
 
 # ---- Kubernetes deployment ----
 echo "🚀 Deploying to Kubernetes $ENVIRONMENT environment..."
 kubectl apply -f base/namespace.yaml
 kubectl apply -k "overlays/$ENVIRONMENT/"
+
+# Update deployment to use the newly built image so k8s uses deterministic tag
+echo "Updating deployment image to ${IMAGE_NAME}"
+kubectl set image deployment/phoenix-web phoenix=${IMAGE_NAME} -n "$NAMESPACE"
 
 echo "⏳ Waiting for deployments to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/postgres -n "$NAMESPACE"
