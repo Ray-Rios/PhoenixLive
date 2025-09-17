@@ -35,25 +35,18 @@ defmodule PhoenixApp.Accounts.User do
   #     password :password
   #   end
   # end
-  if Application.get_env(:phoenix_app, :enable_ash_authentication, false) do
-    authentication do
-      api PhoenixApp.Api
-
-      strategies do
-        password :password, user: PhoenixApp.Accounts.User do
-          identity_field :email
-          password_field :hashed_password
-        end
-      end
-
-      providers do
-        password :password
-      end
-    end
-  else
-    # Authentication DSL is currently disabled via config.
-    # Set `config :phoenix_app, :enable_ash_authentication, true` to enable.
-  end
+  # authentication do
+  #   api PhoenixApp.Api
+  #   strategies do
+  #     password :password, user: PhoenixApp.Accounts.User do
+  #       identity_field :email
+  #       password_field :hashed_password
+  #     end
+  #   end
+  #   providers do
+  #     password :password
+  #   end
+  # end
 
   attributes do
     uuid_primary_key :id
