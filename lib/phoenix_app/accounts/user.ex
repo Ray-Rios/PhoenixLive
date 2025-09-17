@@ -59,12 +59,9 @@ defmodule PhoenixApp.Accounts.User do
 
     attribute :hashed_password, :string do
       sensitive? true
-    end
-
-    # Keep compatibility with existing code that expects `password_hash`
-    attribute :password_hash, :string do
-      sensitive? true
-      source :hashed_password
+      # Database column is `password_hash` (existing migration). Ensure Ash
+      # writes to that column.
+      source :password_hash
       allow_nil? true
     end
 
@@ -93,9 +90,26 @@ defmodule PhoenixApp.Accounts.User do
   # Compatibility wrappers for existing code expecting Ecto changesets
   # These adapt to AshAuthentication or provide minimal behavior so compile succeeds.
   def registration_changeset(user, attrs) do
-    # Use the Ash create action as the authoritative create path.
-    changes = Ash.Changeset.for_create(__MODULE__, :create, attrs)
-    changes
+    # Ensure password is hashed into `hashed_password` before creating.
+    attrs =
+      case Map.get(attrs, "password") || Map.get(attrs, :password) do
+        nil -> attrs
+        password when is_binary(password) ->
+          hashed =
+            cond do
+              Code.ensure_loaded?(Argon2) -> Argon2.hash_pwd_salt(password)
+              Code.ensure_loaded?(Pbkdf2) -> Pbkdf2.hash_pwd_salt(password)
+              true -> password
+            end
+
+    attrs
+    |> Map.put(:hashed_password, hashed)
+    |> Map.put(:password_hash, hashed)
+    |> Map.delete("password")
+    |> Map.delete(:password)
+      end
+
+    Ash.Changeset.for_create(__MODULE__, :create, attrs)
   end
 
   def valid_password?(user, password) do

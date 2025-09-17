@@ -16,8 +16,7 @@ Recommended to run dev first and generate secrets in the web docker container
  > docker-compose web RUN mix phx.gen.secret
 
 
-#full database dump,create,migration rotation. It's like wiping your ass.
-docker compose exec web ./reset_migrations.sh -d
+
 mix phx.server
 
 How it works:
