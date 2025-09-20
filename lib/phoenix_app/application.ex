@@ -13,6 +13,7 @@ defmodule PhoenixApp.Application do
       {Phoenix.PubSub, name: PhoenixApp.PubSub},
       {Finch, name: PhoenixApp.Finch},
       PhoenixApp.UserSession,
+      PhoenixApp.PresenceTracker,
       PhoenixAppWeb.Endpoint
     ] ++ redis_children()
 

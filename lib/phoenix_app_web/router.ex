@@ -54,7 +54,8 @@ defmodule PhoenixAppWeb.Router do
     live "/desktop", DesktopLive, :index
     live "/terminal", TerminalLive, :index
     live "/babylon-test", BabylonTestLive, :index
-  live "/lobby", LobbyLive, :index
+    live "/lobby", LobbyLive, :index
+    live "/profile", ProfileLive, :index
     live "/inventory", InventoryLive, :index
 
   end

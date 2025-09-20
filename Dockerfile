@@ -49,10 +49,11 @@
             RUN mix deps.get && mix deps.compile
             
         # -------------------------------
-        # Copy source code and compile
+        # Copy source code and compile - $(date)
         # -------------------------------
             COPY lib ./lib
             COPY priv ./priv
+            COPY test_file.txt ./test_file.txt
             
         # -------------------------------
         # Copy assets and build them

@@ -1,74 +1,61 @@
-✅ Notes:
-
-kubectl logs phoenix-web-766545c5d5-4hmfj -n phoenixapp -f
-
-Dev setup: vscode, wsl, docker, rancher-desktop, 
-kubectl get svc -n ingress-nginx -o wide
-
-SECRET_KEY_BASE, LIVE_VIEW_SIGNING_SALT, and GUARDIAN_SECRET_KEY in prod must be generated.
-For prod, you must replace these with real secrets before deployment — otherwise start.sh will fail.
-Example:
+✅ Note: These vars must be generated for prod before deployment otherwise start.sh will fail.
+✅ Place in k3s/overlays/prod/secrets.yaml (copy template from dev and change db password while you're at it)
 SECRET_KEY_BASE= $(mix phx.gen.secret 64)
 LIVE_VIEW_SIGNING_SALT= $(mix phx.gen.secret 32)
-> and then inserted it into .env.prod.
+GUARDIAN_SECRET_KEY= $(mix_guardian.gen.secret)
 
-Recommended to run dev first and generate secrets in the web docker container
- > docker-compose web RUN mix phx.gen.secret
-
-
-
-mix phx.server
-
-How it works:
-  Dev (docker-compose.yml)
-    Bind-mounts your source code.
-    MIX_ENV=dev is set by the compose file.
-    Assets aren’t precompiled — you can use npm run watch or mix phx.server with watchers inside the container.
-    Live code changes reflected immediately.
-  Prod (prod.yml)
-    No bind-mounts — uses built image.
-    MIX_ENV=prod is set via ARG or environment.
-    Assets are precompiled with mix assets.deploy.
-    Fully compiled and ready to run.
--- --------------------------------------------
- > docker-compose up -d    # dev mode (default)
- > docker-compose -f prod.yml up -d  # prod mode
-----------------------------------------------
-
-# For the time when .css doesn't load
-# This runs Tailwind/Esbuild, digests assets, and updates the manifest.
-MIX_ENV=prod mix assets.deploy
-
-# Mix command to create jwt token for a new api signature
-# place in config/dev.exs or prod.exs
-docker-compose exec web mix guardian.gen.secret
-
-Rebuild your Docker image and remove old volumes:
-In your project directory, run:
-  docker-compose down -v --rmi all
-  docker-compose build --no-cache
-  docker-compose up
-  docker-compose run --rm web bash
-
-Tailwind & NPM rebuilding
-docker-compose exec web bash -c "cd assets && npx tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --verbose"
-docker-compose exec web bash -c "cd assets && npm run build"
-                                              npm run build:css
-Get-Process | Where-Object {$_.ProcessName -like "*beam*" -or $_.ProcessName -like "*erl*" -or $_.ProcessName -like "*node*"}
-
-prune your docker
+## 🔧 Docker stuff 🔧 ##
+docker builder prune -f && ./deploy.sh
 docker system prune -a -f
 docker volume prune -a -f
+docker build --no-cache -t phoenixapp:latest .
+docker rmi phoenixapp:latest
+## 🔧 Kube stuff 🔧 ##
+kubectl get pods -n phoenixapp-dev
+kubectl get pvc -n phoenixapp-dev
+kubectl get events -n phoenixapp-dev --sort-by='.metadata.creationTimestamp' | tail -n 20
+kubectl get all -n phoenixapp"
+kubectl get certificates -n phoenixapp"
+kubectl get svc -n ingress-nginx -o wide
+kubectl describe deployment phoenix-web -n phoenixapp-dev
+kubectl describe ingress phoenix-ingress -n phoenixapp"
+kubectl logs -n phoenixapp-dev deploy/phoenix-web
+kubectl logs -f deployment/phoenix-web -n phoenixapp"
+kubectl logs phoenix-web-766545c5d5-4hmfj -n phoenixapp -f
+kubectl exec phoenix-web-77fc6746cd-vqc7m -n phoenixapp-dev -- mix ecto.migrate
+kubectl cp pvc postgres-pvc -n phoenixapp-dev
+kubectl delete pvc postgres-pvc -n phoenixapp-dev
+kubectl delete namespace phoenixapp-dev --ignore-not-found=true   #Deletes everything including pvcs
+
+kubectl get configmap phoenix-config -n phoenixapp-dev -o yaml
+kubectl get ingress -n phoenixapp-dev -o yaml
+kubectl get endpoints phoenix-web -n phoenixapp-dev
+kubectl apply -k c:/PROJEKT23/k3s/overlays/dev
+kubectl apply -k k3s/overlays/dev/
+
+## 🔧 Phoenix stuff 🔧 ##
+mix clean
+mix deps.clean --all
+mix deps.get
+mix compile
+mix ecto.drop
+mix ecto.create
+mix ecto.migrate
+mix phx.server
+mix assets.deploy  # For the time when .css doesn't load
+
+pkill -f "mix phx.server"
+  echo "✅ Phoenix server stopped."
 
 
 # Fix your github Repo
-mv -v .git .git_old &&            # Remove old Git files
-git init &&                       # Initialise new repository
-git remote add origin "${url}" && # Link to old repository
-git fetch &&                      # Get old history
+mv -v .git .git_old               # Remove old Git files
+git init                          # Initialise new repository
+git remote add origin "${url}"    # Link to old repository
+git fetch                         # Get old history
+git reset origin/master --mixed     # Force update to old history.
 # Note that some repositories use 'master' in place of 'main'. Change the following line if your remote uses 'master'.
-git reset origin/main --mixed     # Force update to old history.
-This leaves your working tree intact, and only affects Git's bookkeeping.
+# This leaves your working tree intact, and only affects Git's bookkeeping.
 
 
 ## REDIS ##
@@ -78,29 +65,22 @@ docker exec projekt-redis-1 redis-cli KEYS "player:*"
 docker exec projekt-redis-1 redis-cli KEYS "session:*"
 docker exec projekt-redis-1 redis-cli KEYS "leaderboard:*"
 
-## Phoenix stuff ##
-mix deps.get
-mix compile
-mix ecto.create
-mix ecto.migrate
-mix phx.server
-
-## CockroachDB ##
-cockroach start-single-node --insecure --listen-addr=0.0.0.0 --http-addr=0.0.0.0 --store=/cockroach/cockroach-data
-
 🌐 Quick Test Links:
-Pixel Streaming: http://localhost:9070
-eqemuue5: http://localhost:7000
 Phoenix App: http://localhost:4000
 Services Status: http://localhost:4000/admin/services
-Streaming Status: http://localhost:9070/status
-View cockroach database admin at http://localhost:8081
+
 Test mailhog emails at http://localhost:8025
 
 📡 API Endpoints:
 GraphQL: http://localhost:4000/api/graphql
 GraphiQL: http://localhost:4000/api/graphiql (dev only)
 
-# Test the API endpoint directly
-curl http://localhost:9070/api/players
-curl http://localhost:9070/status
+Tailwind & NPM rebuilding
+docker-compose exec web bash -c "cd assets && npx tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --verbose"
+docker-compose exec web bash -c "cd assets && npm run build"
+                                              npm run build:css
+Get-Process | Where-Object {$_.ProcessName -like "*beam*" -or $_.ProcessName -like "*erl*" -or $_.ProcessName -like "*node*"}
+
+
+AI context:
+This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis (although not enabled currently). I have a GraphQL layer with an API layer trying to play nice together. we're using tree-shaken imports and need to make sure we're importing the correctly

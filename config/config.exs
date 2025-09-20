@@ -37,7 +37,7 @@ config :esbuild,
   version: "0.17.11",
   default: [
     args:
-      ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
+      ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --format=iife),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
@@ -82,12 +82,3 @@ config :phoenix_app, PhoenixApp.Repo,
 # Import environment-specific configs
 # ----------------------------
 import_config "#{config_env()}.exs"
-
-# ----------------------------
-# Ash framework config
-# ----------------------------
-config :phoenix_app, PhoenixApp.Api,
-  registry: [PhoenixApp.Accounts.Registry]
-
-config :ash_postgres, repo: PhoenixApp.Repo
-

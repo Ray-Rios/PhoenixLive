@@ -1,4 +1,4 @@
-import * as BABYLON from '@babylonjs/core';
+import { Vector3, MeshBuilder, StandardMaterial, Color3 } from './babylon_imports';
 
 /**
  * Babylon.js Scene Loader for Editor-created scenes
@@ -20,7 +20,7 @@ export class BabylonSceneLoader {
         console.log('Loading editor scene:', scenePath);
 
         try {
-            const result = await BABYLON.SceneLoader.ImportMeshAsync(
+            const result = await SceneLoader.ImportMeshAsync(
                 "", // meshNames - empty string loads all
                 this.getBasePath(scenePath),
                 this.getFileName(scenePath),
@@ -106,7 +106,7 @@ export class BabylonSceneLoader {
                 const mass = physicsData?.mass || (mesh.name.includes('static') ? 0 : 1);
                 const restitution = physicsData?.restitution || 0.7;
                 
-                mesh.physicsImpostor = new BABYLON.PhysicsImpostor(
+                mesh.physicsImpostor = new PhysicsImpostor(
                     mesh,
                     this.getPhysicsImpostorType(mesh),
                     { mass, restitution },
@@ -149,13 +149,13 @@ export class BabylonSceneLoader {
         const name = mesh.name.toLowerCase();
         
         if (name.includes('sphere') || name.includes('ball')) {
-            return BABYLON.PhysicsImpostor.SphereImpostor;
+            return PhysicsImpostor.SphereImpostor;
         } else if (name.includes('plane') || name.includes('ground') || name.includes('floor')) {
-            return BABYLON.PhysicsImpostor.PlaneImpostor;
+            return PhysicsImpostor.PlaneImpostor;
         } else if (name.includes('cylinder')) {
-            return BABYLON.PhysicsImpostor.CylinderImpostor;
+            return PhysicsImpostor.CylinderImpostor;
         } else {
-            return BABYLON.PhysicsImpostor.BoxImpostor; // Default
+            return PhysicsImpostor.BoxImpostor; // Default
         }
     }
 

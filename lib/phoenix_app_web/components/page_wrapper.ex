@@ -9,6 +9,7 @@ defmodule PhoenixAppWeb.Components.PageWrapper do
   def page_with_navbar(assigns) do
     ~H"""
     <.navbar current_user={@current_user} />
+    <.flash_group flash={@flash} />
     <div class="page-content">
       <%= render_slot(@inner_block) %>
     </div>

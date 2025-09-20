@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 # ---- Parameters ----
-ENVIRONMENT=dev
+ENVIRONMENT="dev"
 STREAM_LOGS=true
+
 
 # ---- Namespace ----
 if [[ "$ENVIRONMENT" == "dev" ]]; then
@@ -16,25 +18,18 @@ else
 fi
 
 # ---- Docker build ----
+kubectl delete namespace phoenixapp-dev --ignore-not-found=true
 echo "🐳 Building Phoenix Docker image for $ENVIRONMENT..."
-# use git short sha for deterministic tagging
-GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
-IMAGE_TAG="${GIT_SHA}"
-IMAGE_NAME="phoenixapp:${IMAGE_TAG}"
-echo "Building image ${IMAGE_NAME} (MIX_ENV=${ENVIRONMENT})"
-docker build -t "${IMAGE_NAME}" \
+#docker build --progress=plain -t "phoenixapp:$ENVIRONMENT" --build-arg "MIX_ENV=$ENVIRONMENT" .
+docker build -t "phoenixapp:$ENVIRONMENT" \
               --progress=plain \
-              --build-arg "MIX_ENV=${ENVIRONMENT}" \
-              ..
+              --build-arg "MIX_ENV=$ENVIRONMENT" \
+              .
 
 # ---- Kubernetes deployment ----
 echo "🚀 Deploying to Kubernetes $ENVIRONMENT environment..."
-kubectl apply -f base/namespace.yaml
-kubectl apply -k "overlays/$ENVIRONMENT/"
-
-# Update deployment to use the newly built image so k8s uses deterministic tag
-echo "Updating deployment image to ${IMAGE_NAME}"
-kubectl set image deployment/phoenix-web phoenix=${IMAGE_NAME} -n "$NAMESPACE"
+kubectl apply -f k3s/base/namespace.yaml
+kubectl apply -k "k3s/overlays/$ENVIRONMENT/"
 
 echo "⏳ Waiting for deployments to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/postgres -n "$NAMESPACE"
@@ -46,8 +41,6 @@ echo "✅ $ENVIRONMENT environment deployed successfully!"
 echo "🌐 Access your application at:"
 kubectl get svc phoenix-web -n "$NAMESPACE"
 
-echo -e "\n📋 To check status later, run:"
-echo "./check-status.sh $ENVIRONMENT"
 
 # ---- Optional logs ----
 if [[ "$STREAM_LOGS" == true ]]; then

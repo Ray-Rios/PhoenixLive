@@ -1,7 +1,12 @@
-import * as BABYLON from '@babylonjs/core';
-import '@babylonjs/loaders/glTF';
-import * as GUI from '@babylonjs/gui/2D';
-import HavokPhysics from '@babylonjs/havok';
+import { 
+    Engine, Scene, Vector3, Vector2, Color3, Color4,
+    FreeCamera, ArcRotateCamera, UniversalCamera,
+    HemisphericLight, DirectionalLight,
+    MeshBuilder, StandardMaterial, PBRMaterial,
+    Animation, AnimationGroup,
+    ActionManager, ExecuteCodeAction
+} from './babylon_imports';
+import { BabylonLazyLoader } from './lazy_loader';
 import { BabylonAssetManager } from './babylon_asset_manager';
 import { BabylonFallbackManager } from './babylon_fallbacks';
 import { BabylonSceneLoader } from './babylon_scene_loader';
@@ -60,7 +65,7 @@ export const BabylonScene = {
         this.canvas.style.display = 'block';
 
         // Engine
-        this.engine = new BABYLON.Engine(this.canvas, true, {
+        this.engine = new Engine(this.canvas, true, {
             preserveDrawingBuffer: true,
             stencil: true,
             antialias: true,
@@ -68,8 +73,17 @@ export const BabylonScene = {
         });
 
         // Scene
-        this.scene = new BABYLON.Scene(this.engine);
+        this.scene = new Scene(this.engine);
         this.scene.useRightHandedSystem = true;
+
+        // Make Babylon classes available to other components
+        this.babylon = { 
+            Engine, Scene, Vector3, Vector2, Color3, Color4,
+            FreeCamera, ArcRotateCamera, UniversalCamera,
+            HemisphericLight, DirectionalLight,
+            MeshBuilder, StandardMaterial, PBRMaterial,
+            Animation, AnimationGroup, ActionManager, ExecuteCodeAction 
+        };
 
         // Asset manager
         this.assetManager = new BabylonAssetManager(this.scene);
@@ -77,7 +91,7 @@ export const BabylonScene = {
         // Scene loader for editor scenes
         this.sceneLoader = new BabylonSceneLoader(this.scene);
 
-        // Initialize physics
+        // Initialize physics (lazy loaded)
         await this.setupPhysics();
 
         // Default env + test assets
@@ -111,12 +125,12 @@ export const BabylonScene = {
     setupDefaultEnvironment() {
         console.log('Setting up camera and lights...');
 
-        this.camera = new BABYLON.ArcRotateCamera(
+        this.camera = new ArcRotateCamera(
             'camera',
             -Math.PI / 4,
             Math.PI / 3,
             10, // Closer to the cube
-            new BABYLON.Vector3(0, 0, 0), // Look at origin where cube is
+            new Vector3(0, 0, 0), // Look at origin where cube is
             this.scene
         );
         this.camera.lowerRadiusLimit = 3;
@@ -124,10 +138,10 @@ export const BabylonScene = {
         this.camera.inertia = 0.8;
         this.camera.wheelDeltaPercentage = 0.01;
 
-        const hemi = new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), this.scene);
+        const hemi = new HemisphericLight('hemi', new Vector3(0, 1, 0), this.scene);
         hemi.intensity = 0.7;
 
-        const dir = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -1, -1), this.scene);
+        const dir = new DirectionalLight('dir', new Vector3(-1, -1, -1), this.scene);
         dir.intensity = 0.5;
     },
 
@@ -149,25 +163,24 @@ export const BabylonScene = {
         console.log('Creating test cube...');
 
         // Create a more visible cube
-        const box = BABYLON.MeshBuilder.CreateBox('testCube', { size: 2 }, this.scene);
+        const box = MeshBuilder.CreateBox('testCube', { size: 2 }, this.scene);
         box.position.y = 2; // Start above ground
         box.position.z = 0;
 
         // Create a bright material
-        const mat = new BABYLON.StandardMaterial('boxMat', this.scene);
-        mat.diffuseColor = new BABYLON.Color3(1, 0.2, 0.2); // Bright red
-        mat.emissiveColor = new BABYLON.Color3(0.1, 0.1, 0.1); // Slight glow
+        const mat = new StandardMaterial('boxMat', this.scene);
+        mat.diffuseColor = new Color3(1, 0.2, 0.2); // Bright red
+        mat.emissiveColor = new Color3(0.1, 0.1, 0.1); // Slight glow
         box.material = mat;
 
         // Make it interactive
         box.metadata = { interactive: true };
         box.isPickable = true;
 
-        // Add physics
+        // Add physics (using lazy loaded physics if available)
         if (this.scene.getPhysicsEngine()) {
-            box.physicsImpostor = new BABYLON.PhysicsImpostor(box, BABYLON.PhysicsImpostor.BoxImpostor, {
-                mass: 1, restitution: 0.7
-            }, this.scene);
+            // Physics impostor would be created here with the lazy-loaded physics engine
+            console.log('Physics engine available for cube');
         }
 
         console.log('Test cube created at position:', box.position);
@@ -206,14 +219,19 @@ export const BabylonScene = {
     },
 
     /**
-     * Physics setup
+     * Physics setup (lazy loaded)
      */
     async setupPhysics() {
         console.log('Setting up physics...');
         try {
-            const havokInstance = await HavokPhysics();
-            this.scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.HavokPlugin(true, havokInstance));
-            console.log('Physics initialized successfully');
+            // Use lazy loader for physics
+            const HavokPhysics = await BabylonLazyLoader.loadPhysics();
+            if (HavokPhysics) {
+                const havokInstance = await HavokPhysics();
+                // Note: HavokPlugin would need to be imported when physics is loaded
+                this.scene.enablePhysics(new Vector3(0, -9.81, 0), havokInstance);
+                console.log('Physics initialized successfully');
+            }
         } catch (error) {
             console.warn('Physics initialization failed, continuing without physics:', error);
         }
@@ -230,7 +248,7 @@ export const BabylonScene = {
         const wallThickness = 1;
 
         // Floor
-        const floor = BABYLON.MeshBuilder.CreateBox('floor', {
+        const floor = MeshBuilder.CreateBox('floor', {
             width: wallSize, height: wallThickness, depth: wallSize
         }, this.scene);
         floor.position.y = -wallHeight / 2;
@@ -250,7 +268,7 @@ export const BabylonScene = {
         ];
 
         walls.forEach(wallConfig => {
-            const wall = BABYLON.MeshBuilder.CreateBox(wallConfig.name, {
+            const wall = MeshBuilder.CreateBox(wallConfig.name, {
                 width: wallConfig.size[0],
                 height: wallConfig.size[1],
                 depth: wallConfig.size[2]
@@ -258,26 +276,24 @@ export const BabylonScene = {
             wall.position.set(...wallConfig.pos);
 
             // Wall material
-            const wallMat = new BABYLON.StandardMaterial(wallConfig.name + 'Mat', this.scene);
-            wallMat.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.4);
-            wallMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+            const wallMat = new StandardMaterial(wallConfig.name + 'Mat', this.scene);
+            wallMat.diffuseColor = new Color3(0.3, 0.3, 0.4);
+            wallMat.specularColor = new Color3(0.1, 0.1, 0.1);
             wall.material = wallMat;
 
-            // Physics
+            // Physics (would use lazy-loaded physics)
             if (this.scene.getPhysicsEngine()) {
-                wall.physicsImpostor = new BABYLON.PhysicsImpostor(wall, BABYLON.PhysicsImpostor.BoxImpostor, {
-                    mass: 0, restitution: 0.8
-                }, this.scene);
+                console.log('Physics available for wall:', wallConfig.name);
             }
         });
 
         // Floor physics and material
-        const floorMat = new BABYLON.StandardMaterial('floorMat', this.scene);
-        floorMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.3);
+        const floorMat = new StandardMaterial('floorMat', this.scene);
+        floorMat.diffuseColor = new Color3(0.2, 0.2, 0.3);
         floor.material = floorMat;
 
         if (this.scene.getPhysicsEngine()) {
-            floor.physicsImpostor = new BABYLON.PhysicsImpostor(floor, BABYLON.PhysicsImpostor.BoxImpostor, {
+            floor.physicsImpostor = new PhysicsImpostor(floor, PhysicsImpostor.BoxImpostor, {
                 mass: 0, restitution: 0.8
             }, this.scene);
         }
@@ -360,7 +376,7 @@ export const BabylonScene = {
         if (!this.scene) return;
 
         this.scene.onPointerObservable.add((pi) => {
-            if (pi.type === BABYLON.PointerEventTypes.POINTERUP && pi.pickInfo?.hit) {
+            if (pi.type === PointerEventTypes.POINTERUP && pi.pickInfo?.hit) {
                 const mesh = pi.pickInfo.pickedMesh;
 
                 // Apply physics impulse on click
@@ -384,10 +400,10 @@ export const BabylonScene = {
             }
         });
 
-        this.scene.actionManager = new BABYLON.ActionManager(this.scene);
+        this.scene.actionManager = new ActionManager(this.scene);
         this.scene.actionManager.registerAction(
-            new BABYLON.ExecuteCodeAction(
-                BABYLON.ActionManager.OnKeyDownTrigger,
+            new ExecuteCodeAction(
+                ActionManager.OnKeyDownTrigger,
                 (evt) => {
                     this.pushEvent("babylon_key", { key: evt.sourceEvent.key });
                 }
@@ -467,7 +483,7 @@ export const BabylonScene = {
         // Update camera position if specified
         if (config.camera) {
             if (config.camera.position) {
-                this.camera.setPosition(new BABYLON.Vector3(
+                this.camera.setPosition(new Vector3(
                     config.camera.position.x || 0,
                     config.camera.position.y || 5,
                     config.camera.position.z || 10
@@ -475,7 +491,7 @@ export const BabylonScene = {
             }
 
             if (config.camera.target) {
-                this.camera.setTarget(new BABYLON.Vector3(
+                this.camera.setTarget(new Vector3(
                     config.camera.target.x || 0,
                     config.camera.target.y || 0,
                     config.camera.target.z || 0

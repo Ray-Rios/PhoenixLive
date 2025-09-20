@@ -126,7 +126,7 @@ defmodule PhoenixAppWeb.AuthLive do
          |> assign(current_user: user)
          |> redirect(external: "/auth/login_success?user_id=#{user.id}")}
 
-      {:error, %Ecto.Changeset{} = changeset} ->
+      {:error, changeset} ->
         errors =
           Enum.map(changeset.errors, fn {field, {msg, opts}} ->
             msg = if opts[:count], do: String.replace(msg, "%{count}", to_string(opts[:count])), else: msg
@@ -141,23 +141,6 @@ defmodule PhoenixAppWeb.AuthLive do
          |> assign(loading: false)
          |> put_flash(:error, "Please fix the errors below")
          |> assign(form: form, errors: errors)}
-
-      {:error, other} ->
-        # Catch-all for Ash.UnknownError, Postgrex errors, and any other shapes.
-        err_msg =
-          case other do
-            %{} -> inspect(other)
-            s when is_binary(s) -> s
-            _ -> to_string(inspect(other))
-          end
-
-        form = to_form(user_params, as: "user")
-
-        {:noreply,
-         socket
-         |> assign(loading: false)
-         |> put_flash(:error, "Registration failed: #{String.slice(err_msg, 0, 200)}")
-         |> assign(form: form, errors: [err_msg])}
     end
   end
 
@@ -172,7 +155,9 @@ defmodule PhoenixAppWeb.AuthLive do
   # ----------------
   def render(assigns) do
     ~H"""
-  <!-- Starry Background -->
+      <.flash_group flash={@flash} />
+      
+      <!-- Starry Background -->
       <div class="stars-container">
         <div class="stars"></div>
         <div class="stars2"></div>

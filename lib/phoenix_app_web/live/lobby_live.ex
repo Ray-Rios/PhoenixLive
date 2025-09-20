@@ -1,8 +1,21 @@
 defmodule PhoenixAppWeb.LobbyLive do
   use PhoenixAppWeb, :live_view
+  alias PhoenixApp.PresenceTracker
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket) && socket.assigns.current_user do
+      # Join the lobby presence
+      PresenceTracker.track(self(), "lobby", socket.assigns.current_user.id, %{
+        username: socket.assigns.current_user.name,
+        position: %{x: 0, y: 0, z: 0},
+        joined_at: System.system_time(:second)
+      })
+      
+      # Subscribe to presence updates
+      Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "lobby")
+    end
+
     {:ok,
      assign(socket,
        scene_config: %{
@@ -27,7 +40,8 @@ defmodule PhoenixAppWeb.LobbyLive do
        available_panels: [
          %{id: "profile", title: "Profile", route: "/profile", position: %{x: -3, y: 1, z: 0}},
          %{id: "inventory", title: "Inventory", route: "/inventory", position: %{x: 0, y: 1, z: 0}}
-       ]
+       ],
+       users_present: list_present_users()
      )}
   end
 
@@ -268,5 +282,36 @@ defmodule PhoenixAppWeb.LobbyLive do
       <% end %>
     </div>
     """
+  end
+
+  # Handle presence updates
+  @impl true
+  def handle_info(%{event: "presence_diff"}, socket) do
+    users_present = list_present_users()
+    
+    # Push updated user list to JavaScript
+    {:noreply, 
+     socket
+     |> assign(:users_present, users_present)
+     |> push_event("update_users", %{users: users_present})}
+  end
+
+  # Handle user position updates from JavaScript
+  @impl true  
+  def handle_event("update_position", %{"x" => x, "y" => y, "z" => z}, socket) do
+    if socket.assigns.current_user do
+      PresenceTracker.update(self(), "lobby", socket.assigns.current_user.id, %{
+        username: socket.assigns.current_user.name,
+        position: %{x: x, y: y, z: z},
+        joined_at: System.system_time(:second)
+      })
+    end
+    
+    {:noreply, socket}
+  end
+
+  defp list_present_users do
+    PresenceTracker.list("lobby")
+    |> Enum.map(fn {_user_id, %{metas: [meta | _]}} -> meta end)
   end
 end

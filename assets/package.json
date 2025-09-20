@@ -16,11 +16,11 @@
   "scripts": {
     "build": "npm run build:css && npm run build:js",
     "build:css": "tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --minify",
-    "build:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/*",
+    "build:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --format=iife --target=es2020",
     "deploy": "npm run build",
     "watch": "npm run watch:css & npm run watch:js",
     "watch:css": "tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --watch",
-    "watch:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --watch"
+    "watch:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --watch --format=iife --target=es2020"
   },
   "devDependencies": {
     "tailwindcss": "^3.3.0",

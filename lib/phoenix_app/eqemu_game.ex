@@ -197,7 +197,7 @@ defmodule PhoenixApp.EqemuGame do
   # ===== EQEMU AUTHENTICATION =====
   
   def authenticate_eqemu_login(email, password) when is_binary(email) and is_binary(password) do
-    with %User{} = user <- PhoenixApp.Accounts.get_user_by_email(email),
+    with %User{} = user <- Repo.get_by(User, email: email),
          true <- User.valid_password?(user, password),
          {:ok, account} <- get_or_create_eqemu_account(user) do
       {:ok, %{user: user, account: account}}

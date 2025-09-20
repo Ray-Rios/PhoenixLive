@@ -1,4 +1,7 @@
-import * as BABYLON from '@babylonjs/core';
+import { 
+    Vector3, MeshBuilder, StandardMaterial, Color3,
+    Animation, AnimationGroup
+} from './babylon_imports';
 
 /**
  * Asset Manager for Babylon.js
@@ -74,7 +77,7 @@ export class BabylonAssetManager {
     return new Promise((resolve, reject) => {
       const { url, name, position, rotation, scale } = asset;
 
-      BABYLON.SceneLoader.ImportMesh(
+      SceneLoader.ImportMesh(
         '',
         this.getBaseUrl(url),
         this.getFileName(url),
@@ -87,7 +90,7 @@ export class BabylonAssetManager {
             // Apply transformations
             if (position) {
               processedMeshes.forEach(mesh => {
-                mesh.position = new BABYLON.Vector3(
+                mesh.position = new Vector3(
                   position.x || 0,
                   position.y || 0,
                   position.z || 0
@@ -97,7 +100,7 @@ export class BabylonAssetManager {
 
             if (rotation) {
               processedMeshes.forEach(mesh => {
-                mesh.rotation = new BABYLON.Vector3(
+                mesh.rotation = new Vector3(
                   rotation.x || 0,
                   rotation.y || 0,
                   rotation.z || 0
@@ -107,7 +110,7 @@ export class BabylonAssetManager {
 
             if (scale) {
               processedMeshes.forEach(mesh => {
-                mesh.scaling = new BABYLON.Vector3(
+                mesh.scaling = new Vector3(
                   scale.x || 1,
                   scale.y || 1,
                   scale.z || 1
@@ -151,12 +154,12 @@ export class BabylonAssetManager {
     return new Promise((resolve, reject) => {
       const { url, name } = asset;
 
-      const texture = new BABYLON.Texture(
+      const texture = new Texture(
         url,
         this.scene,
         false, // noMipmap
         true,  // invertY
-        BABYLON.Texture.TRILINEAR_SAMPLINGMODE,
+        Texture.TRILINEAR_SAMPLINGMODE,
         () => {
           // Success callback
           resolve({
@@ -186,10 +189,10 @@ export class BabylonAssetManager {
 
     switch (type) {
       case 'standard':
-        material = new BABYLON.StandardMaterial(name, this.scene);
+        material = new StandardMaterial(name, this.scene);
         break;
       case 'pbr':
-        material = new BABYLON.PBRMaterial(name, this.scene);
+        material = new PBRMaterial(name, this.scene);
         break;
       default:
         throw new Error(`Unknown material type: ${type}`);

@@ -22,8 +22,9 @@ defmodule PhoenixAppWeb.DashboardLive do
   end
 
   def render(assigns) do
-  ~H"""
-  <.navbar current_user={@current_user} />
+    ~H"""
+    <.navbar current_user={@current_user} />
+    <.flash_group flash={@flash} />
     <div class="chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
       <div class="stars-container">
         <div class="stars"></div>

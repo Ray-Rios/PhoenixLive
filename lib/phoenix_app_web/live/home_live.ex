@@ -4,7 +4,15 @@ defmodule PhoenixAppWeb.HomeLive do
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
 
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "Welcome")}
+    # If user is logged in and has a cached location, redirect there
+    # Otherwise redirect to lobby for the full 3D experience
+    if socket.assigns.current_user do
+      # Check if user has a cached location (future feature)
+      # For now, always redirect to lobby
+      {:ok, push_navigate(socket, to: ~p"/lobby")}
+    else
+      {:ok, assign(socket, page_title: "Welcome")}
+    end
   end
 
   def render(assigns) do

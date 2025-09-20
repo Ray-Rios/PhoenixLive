@@ -3,14 +3,14 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
   alias PhoenixApp.Accounts
 
   # POST /api/auth/register
-  def register(conn, %{"email" => email, "password" => password} = params) do
-    user_params = %{
+  def register(conn, %{"user" => %{"email" => email, "password" => password} = user_params}) do
+    formatted_params = %{
       "email" => email,
       "password" => password,
-      "name" => params["name"] || email
+      "name" => user_params["name"] || email
     }
 
-    case Accounts.register_user(user_params) do
+    case Accounts.register_user(formatted_params) do
       {:ok, user} ->
         # Auto-login after registration
         case Accounts.authenticate_for_api_server(email, password) do
@@ -55,6 +55,8 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
         })
     end
   end
+
+
 
   # POST /api/auth/login
   def login(conn, %{"email" => email, "password" => password}) do

@@ -20,7 +20,7 @@ if [ "$MIX_ENV" = "dev" ]; then
     echo "Generating LIVE_VIEW_SIGNING_SALT for dev..."
     export LIVE_VIEW_SIGNING_SALT=$(mix phx.gen.secret 32)
   fi
-
+  
   if [ -z "$GUARDIAN_SECRET_KEY" ] || [ "$GUARDIAN_SECRET_KEY" == "GENERATE_WITH_mix_guardian.gen.secret" ]; then
     echo "Generating GUARDIAN_SECRET_KEY for dev..."
     export GUARDIAN_SECRET_KEY=$(mix guardian.gen.secret)
@@ -99,11 +99,12 @@ for i in {1..3}; do
 done
 
 # ----------------------------
-# Rebuild assets in development mode (no-op; assets built during image build)
+# Rebuild assets in development mode
 # ----------------------------
 if [ "$MIX_ENV" = "dev" ]; then
-  # Assets are built during image build; do not rebuild at container start to avoid memory spikes
-  :
+  echo "Rebuilding assets for development..."
+  cd assets && npm install && npm run build
+  cd ..
 fi
 
 # ----------------------------

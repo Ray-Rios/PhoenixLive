@@ -69,11 +69,6 @@ defmodule PhoenixApp.MixProject do
       {:cors_plug, "~> 3.0"},
       {:tz, "~> 0.24"},
       {:httpoison, "~> 2.0"},
-      
-  # Ash framework and authentication
-  {:ash, "~> 2.0"},
-  {:ash_postgres, "~> 1.4"},
-  {:ash_authentication, "~> 3.0"},
 
     ]
   end

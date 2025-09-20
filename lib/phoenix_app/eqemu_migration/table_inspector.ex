@@ -232,9 +232,7 @@ defmodule PhoenixApp.EqemuMigration.TableInspector do
     end
   end
 
-  @doc """
-  Parse comma-separated column list.
-  """
+  # Parse comma-separated column list.
   defp parse_column_list(columns_str) do
     columns_str
     |> String.split(",")
@@ -243,9 +241,7 @@ defmodule PhoenixApp.EqemuMigration.TableInspector do
     |> Enum.map(&String.downcase/1)
   end
 
-  @doc """
-  Extract index definitions (simplified).
-  """
+  # Extract index definitions (simplified).
   defp extract_indexes(statement) do
     case Regex.run(~r/\((.*)\)/s, statement) do
       [_, content] ->
@@ -261,9 +257,7 @@ defmodule PhoenixApp.EqemuMigration.TableInspector do
     end
   end
 
-  @doc """
-  Extract index name from KEY definition.
-  """
+  # Extract index name from KEY definition.
   defp extract_index_name(line) do
     case Regex.run(~r/KEY `?(\w+)`?/i, line) do
       [_, index_name] -> String.downcase(index_name)
@@ -271,9 +265,7 @@ defmodule PhoenixApp.EqemuMigration.TableInspector do
     end
   end
 
-  @doc """
-  Extract engine information.
-  """
+  # Extract engine information.
   defp extract_engine(statement) do
     case Regex.run(~r/ENGINE=(\w+)/i, statement) do
       [_, engine] -> String.downcase(engine)
@@ -281,9 +273,7 @@ defmodule PhoenixApp.EqemuMigration.TableInspector do
     end
   end
 
-  @doc """
-  Extract charset information.
-  """
+  # Extract charset information.
   defp extract_charset(statement) do
     case Regex.run(~r/CHARSET=(\w+)/i, statement) do
       [_, charset] -> String.downcase(charset)

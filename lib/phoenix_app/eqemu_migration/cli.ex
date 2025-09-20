@@ -6,7 +6,6 @@ defmodule PhoenixApp.EqemuMigration.CLI do
 
   alias PhoenixApp.EqemuMigration.DatabaseAnalyzer
   alias PhoenixApp.EqemuMigration.RowCounter
-  alias PhoenixApp.EqemuMigration.TableInspector
   alias PhoenixApp.EqemuMigration.SqlTransformer
 
   @default_dump_path "eqemu/mySQL_to_Postgres_Tool/postgres_peq.sql"

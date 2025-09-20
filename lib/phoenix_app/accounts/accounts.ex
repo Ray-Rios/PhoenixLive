@@ -12,100 +12,30 @@ defmodule PhoenixApp.Accounts do
   # ---------------------
   # Get User by id
   # ---------------------
-  def get_user(id) when is_binary(id) do
-    case PhoenixApp.Api.read(User, id: id) do
-      {:ok, [%User{} = user]} -> user
-      {:ok, []} -> nil
-      {:error, _} ->
-        # Fallback to Repo in case Ash read isn't available in this environment
-        Repo.get(User, id)
-    end
-  end
-
-  def get_user!(id) do
-    case PhoenixApp.Api.read(User, id: id) do
-      {:ok, [%User{} = user]} -> user
-      {:ok, []} -> raise Ecto.NoResultsError, queryable: User
-      {:error, _} -> Repo.get!(User, id)
-    end
-  end
+  def get_user(id) when is_binary(id), do: Repo.get(User, id)
+  def get_user!(id), do: Repo.get!(User, id)
 
   # ---------------------
-  # Register a new user (uses Ash API)
+  # Register a new user
   # ---------------------
   def register_user(attrs) do
-    # Use Ash API to create the user resource instead of trying to insert an
-    # Ash.Changeset via Ecto.Repo (that caused undefined function errors).
-    changeset = User.registration_changeset(nil, attrs)
-    password = Map.get(attrs, "password") || Map.get(attrs, :password)
-
-    created_user =
-      case PhoenixApp.Api.create(changeset) do
+    Repo.transaction(fn ->
+      # Create the user
+      case %User{}
+           |> User.registration_changeset(attrs)
+           |> Repo.insert() do
         {:ok, user} ->
-          user
-
-        :ok ->
-          # Ash API created the resource but didn't return it. Try to read it
-          # back by the provided email so we can continue the same flow.
-          email = Map.get(attrs, "email") || Map.get(attrs, :email)
-
-          case PhoenixApp.Api.read(User, filter: [email: email]) do
-            {:ok, [u | _]} -> u
-            _ ->
-              # Fallback to Repo lookup if Ash read isn't available
-              Repo.get_by(User, email: email) || {:error, :created_but_not_readable}
+          # Create corresponding EQEmu account
+          case PhoenixApp.EqemuGame.create_eqemu_account(user) do
+            {:ok, _account} -> user
+            {:error, reason} -> 
+              Repo.rollback("Failed to create EQEmu account: #{inspect(reason)}")
           end
-
+        
         {:error, changeset} ->
-          {:error, changeset}
-
-        other ->
-          # Unexpected return; attempt to find the user by email as a best-effort
-          email = Map.get(attrs, "email") || Map.get(attrs, :email)
-          Repo.get_by(User, email: email) || {:error, {:unexpected_create_result, other}}
+          Repo.rollback(changeset)
       end
-
-    case created_user do
-      {:error, _} = err -> err
-
-      %User{} = user ->
-        # Ensure hashed_password persisted (Repo fallback)
-        user =
-          if (Map.get(user, :hashed_password) in [nil, ""]) and is_binary(password) do
-            hashed =
-              cond do
-                Code.ensure_loaded?(Argon2) -> Argon2.hash_pwd_salt(password)
-                Code.ensure_loaded?(Pbkdf2) -> Pbkdf2.hash_pwd_salt(password)
-                true -> password
-              end
-
-            case Repo.update(Ecto.Changeset.change(user, hashed_password: hashed)) do
-              {:ok, updated} -> updated
-              {:error, _} -> user
-            end
-          else
-            user
-          end
-
-        # Create corresponding EQEmu account. If that fails, attempt to
-        # clean up the created user to avoid orphaned records.
-        case PhoenixApp.EqemuGame.create_eqemu_account(user) do
-          {:ok, _account} -> {:ok, user}
-          :ok -> {:ok, user}
-          {:error, reason} ->
-            case PhoenixApp.Api.destroy(user) do
-              {:ok, _} -> {:error, {:eqemu_failed, reason}}
-              {:error, _} -> {:error, {:eqemu_failed_and_cleanup_failed, reason}}
-              _ -> {:error, {:eqemu_failed_and_cleanup_failed, reason}}
-            end
-          other ->
-            IO.inspect({:unexpected_eqemu_result, other}, label: "EQEMU create returned")
-            {:ok, user}
-        end
-
-      other ->
-        {:error, {:unexpected_created_user, other}}
-    end
+    end)
   end
 
   # ---------------------
@@ -142,22 +72,13 @@ defmodule PhoenixApp.Accounts do
   # ---------------------
   # Get user by email
   # ---------------------
-  def get_user_by_email(email) when is_binary(email) do
-    # Use Ash API to read by identity (email) if available
-    case PhoenixApp.Api.read(User, filter: [email: email]) do
-      {:ok, [user | _]} -> user
-      {:ok, []} -> nil
-      {:error, _} -> Repo.get_by(User, email: email)
-    end
-  end
+  def get_user_by_email(email) when is_binary(email), do: Repo.get_by(User, email: email)
 
   # ---------------------
   # Check user password
   # ---------------------
-  def check_password(%User{} = user, password) when is_binary(password) do
-    # Delegate to the User module which knows how to verify using available
-    # password libs and the Ash-compatible hashed_password attribute.
-    User.valid_password?(user, password)
+  def check_password(%User{password_hash: hash}, password) when is_binary(password) do
+    Pbkdf2.verify_pass(password, hash)
   end
 
   # ---------------------
@@ -235,8 +156,9 @@ defmodule PhoenixApp.Accounts do
   # User management functions
   # ---------------------
   def create_user(attrs) do
-  changeset = User.registration_changeset(nil, attrs)
-  PhoenixApp.Api.create(changeset)
+    %User{}
+    |> User.registration_changeset(attrs)
+    |> Repo.insert()
   end
 
   def update_user(%User{} = user, attrs) do
@@ -304,10 +226,7 @@ defmodule PhoenixApp.Accounts do
   # Delete user
   # ---------------------
   def delete_user(%User{} = user) do
-    case PhoenixApp.Api.destroy(user) do
-      {:ok, _} -> {:ok, user}
-      {:error, _} -> Repo.delete(user)
-    end
+    Repo.delete(user)
   end
 
   # ---------------------

@@ -58,7 +58,7 @@ echo "🔨 Building production Docker image..."
 docker build -t "phoenixapp:prod" \
               --progress=plain \
               --build-arg "MIX_ENV=prod" \
-              ../
+              .
 print_status "Production image built: phoenixapp:prod"
 
 # Deploy SSL infrastructure first
@@ -92,13 +92,13 @@ print_status "Nginx ingress controller is ready"
 # Now deploy cluster issuers
 if [ -f "ssl/cluster-issuer.yaml" ]; then
     echo "🔐 Creating Let's Encrypt cluster issuers..."
-    kubectl apply -f ssl/cluster-issuer.yaml
+    kubectl apply -f k3s/ssl/cluster-issuer.yaml
     print_status "Let's Encrypt cluster issuers deployed"
 fi
 
 # Deploy the application
 echo "🚀 Deploying Phoenix application..."
-kubectl apply -k overlays/prod/
+kubectl apply -k k3s/overlays/prod/
 print_status "Application deployed"
 
 # Wait for deployment to be ready
@@ -120,7 +120,6 @@ echo "🔗 Getting external access information..."
 EXTERNAL_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "pending")
 if [ "$EXTERNAL_IP" != "pending" ] && [ "$EXTERNAL_IP" != "" ]; then
     print_status "External IP: $EXTERNAL_IP"
-    echo "📝 Make sure your DNS points rio-tek.com to $EXTERNAL_IP"
 else
     print_warning "External IP is still pending. Check your LoadBalancer service."
 fi

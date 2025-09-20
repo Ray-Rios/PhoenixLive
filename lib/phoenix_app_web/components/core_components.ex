@@ -74,13 +74,11 @@ defmodule PhoenixAppWeb.CoreComponents do
   slot :inner_block
 
   def flash(assigns) do
-    assigns = assign_new(assigns, :id_prefix, fn -> "flash-#{System.unique_integer([:positive])}" end)
-
     ~H"""
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
-      id={"#{@id_prefix}-#{@kind}"}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide_flash("##{@id_prefix}-#{@kind}")}
+      id={"flash-#{@kind}"}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide_flash("#flash-#{@kind}")}
       role="alert"
       x-data="{ show: false }"
       x-init="
@@ -121,8 +119,6 @@ defmodule PhoenixAppWeb.CoreComponents do
   attr :id, :string, default: "flash-group", doc: "the optional id of flash container"
 
   def flash_group(assigns) do
-    assigns = assign_new(assigns, :id, fn -> "flash-group-#{System.unique_integer([:positive])}" end)
-
     ~H"""
     <div id={@id}>
       <.flash kind={:info} title="Success!" flash={@flash} />
