@@ -15,14 +15,14 @@ defmodule PhoenixApp.Content do
   end
 
   def list_published_posts do
-    from(p in Post, where: p.status == :published, order_by: [desc: p.inserted_at])
+    from(p in Post, where: p.is_published == true, order_by: [desc: p.inserted_at])
     |> Repo.all()
     |> Repo.preload(:user)
   end
 
   def get_recent_posts(limit \\ 5) do
     from(p in Post, 
-      where: p.status == :published, 
+      where: p.is_published == true, 
       order_by: [desc: p.inserted_at], 
       limit: ^limit
     )
@@ -79,14 +79,20 @@ defmodule PhoenixApp.Content do
   end
 
   # CMS-style functions
-  def list_posts_by_status(status) do
-    from(p in Post, where: p.status == ^status, order_by: [desc: p.inserted_at])
+  def list_posts_by_status(status) when status in [:published, :draft] do
+    is_published = case status do
+      :published -> true
+      :draft -> false
+    end
+    from(p in Post, where: p.is_published == ^is_published, order_by: [desc: p.inserted_at])
     |> Repo.all()
     |> Repo.preload(:user)
   end
 
   def list_posts_by_type(post_type) do
-    from(p in Post, where: p.post_type == ^post_type, order_by: [desc: p.inserted_at])
+    # Post type functionality not implemented in current schema
+    # Return all posts for now
+    from(p in Post, order_by: [desc: p.inserted_at])
     |> Repo.all()
     |> Repo.preload(:user)
   end
@@ -103,13 +109,18 @@ defmodule PhoenixApp.Content do
   end
 
   defp maybe_filter_by_status(query, nil), do: query
-  defp maybe_filter_by_status(query, status) do
-    from(p in query, where: p.status == ^status)
+  defp maybe_filter_by_status(query, status) when status in [:published, :draft] do
+    is_published = case status do
+      :published -> true
+      :draft -> false
+    end
+    from(p in query, where: p.is_published == ^is_published)
   end
 
   defp maybe_filter_by_type(query, nil), do: query
-  defp maybe_filter_by_type(query, post_type) do
-    from(p in query, where: p.post_type == ^post_type)
+  defp maybe_filter_by_type(query, _post_type) do
+    # Post type functionality not implemented in current schema
+    query
   end
 
   defp maybe_filter_by_user(query, nil), do: query
@@ -132,7 +143,7 @@ defmodule PhoenixApp.Content do
 
   def list_approved_comments(post_id) do
     from(c in Comment, 
-      where: c.post_id == ^post_id and c.status == :approved,
+      where: c.post_id == ^post_id and c.is_approved == true,
       order_by: [asc: c.inserted_at]
     )
     |> Repo.all()
@@ -172,8 +183,12 @@ defmodule PhoenixApp.Content do
     Repo.aggregate(Post, :count)
   end
 
-  def count_posts_by_status(status) do
-    from(p in Post, where: p.status == ^status)
+  def count_posts_by_status(status) when status in [:published, :draft] do
+    is_published = case status do
+      :published -> true
+      :draft -> false
+    end
+    from(p in Post, where: p.is_published == ^is_published)
     |> Repo.aggregate(:count)
   end
 
@@ -181,8 +196,12 @@ defmodule PhoenixApp.Content do
     Repo.aggregate(Comment, :count)
   end
 
-  def count_comments_by_status(status) do
-    from(c in Comment, where: c.status == ^status)
+  def count_comments_by_status(status) when status in [:approved, :pending] do
+    is_approved = case status do
+      :approved -> true
+      :pending -> false
+    end
+    from(c in Comment, where: c.is_approved == ^is_approved)
     |> Repo.aggregate(:count)
   end
 end

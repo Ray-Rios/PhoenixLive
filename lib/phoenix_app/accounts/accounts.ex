@@ -1,6 +1,8 @@
 defmodule PhoenixApp.Accounts do
   alias PhoenixApp.Repo
   alias PhoenixApp.Accounts.User
+  
+  require Logger
 
   # ---------------------
   # List all users
@@ -16,13 +18,81 @@ defmodule PhoenixApp.Accounts do
   def get_user!(id), do: Repo.get!(User, id)
 
   # ---------------------
-  # Register a new user
+  # Enhanced registration with security checks
   # ---------------------
-  def register_user(attrs) do
+  def register_user(attrs, opts \\ []) do
+    ip_address = Keyword.get(opts, :ip_address)
+    email = String.trim(attrs["email"] || "")
+    
+    # Check if user already exists with this email (with proper email normalization)
+    case get_user_by_email(email) do
+      nil ->
+        # No existing user, proceed with normal registration
+        with :ok <- check_registration_rate_limit(ip_address),
+             {:ok, user} <- create_user_with_verification(attrs, ip_address) do
+          
+          # Record the registration attempt for rate limiting
+          if ip_address, do: PhoenixApp.Accounts.RateLimit.record_registration_attempt(ip_address)
+          
+          # Send verification email
+          case PhoenixApp.Accounts.EmailVerification.send_verification_email(user) do
+            {:ok, message} ->
+              {:ok, user, message}
+            {:error, _email_error} ->
+              # User created but email failed - still return success
+              {:ok, user, "Account created but verification email could not be sent. Please contact support."}
+          end
+        else
+          {:error, %Ecto.Changeset{} = changeset} ->
+            # Check if this is a unique constraint error for email
+            case changeset.errors do
+              [email: {_msg, [constraint: :unique, constraint_name: _]}] ->
+                # This could happen in a race condition, re-check for existing user
+                case get_user_by_email(email) do
+                  nil -> {:error, changeset}  # Still no user found, return original error
+                  existing_user -> handle_existing_user_registration(existing_user)
+                end
+              _ ->
+                {:error, changeset}
+            end
+          error ->
+            error
+        end
+        
+      existing_user ->
+        handle_existing_user_registration(existing_user)
+    end
+  end
+  
+  defp handle_existing_user_registration(existing_user) do
+    # User exists, check if email is verified
+    if existing_user.email_verified_at do
+      # Email is already verified, return normal error
+      {:error, :email_already_exists_verified}
+    else
+      # Email is not verified, allow "re-registration" by redirecting to verification
+      # Resend verification email for convenience
+      case PhoenixApp.Accounts.EmailVerification.send_verification_email(existing_user) do
+        {:ok, message} ->
+          {:ok, existing_user, message}
+        {:error, _email_error} ->
+          {:ok, existing_user, "Please check your email for the verification code."}
+      end
+    end
+  end
+
+  defp check_registration_rate_limit(nil), do: :ok
+  defp check_registration_rate_limit(ip_address) do
+    PhoenixApp.Accounts.RateLimit.check_registration_limit(ip_address)
+  end
+
+  defp create_user_with_verification(attrs, ip_address) do
+    attrs_with_ip = if ip_address, do: Map.put(attrs, "registration_ip", ip_address), else: attrs
+    
     Repo.transaction(fn ->
       # Create the user
       case %User{}
-           |> User.registration_changeset(attrs)
+           |> User.registration_changeset(attrs_with_ip)
            |> Repo.insert() do
         {:ok, user} ->
           # Create corresponding EQEmu account
@@ -75,6 +145,19 @@ defmodule PhoenixApp.Accounts do
   def get_user_by_email(email) when is_binary(email), do: Repo.get_by(User, email: email)
 
   # ---------------------
+  # Get user by email or username  
+  # ---------------------
+  def get_user_by_email_or_username(identifier) when is_binary(identifier) do
+    # Check if identifier contains @ (likely email) or not (likely username/name)
+    if String.contains?(identifier, "@") do
+      Repo.get_by(User, email: identifier)
+    else
+      # Try to find by name field (which serves as username)
+      Repo.get_by(User, name: identifier)
+    end
+  end
+
+  # ---------------------
   # Check user password
   # ---------------------
   def check_password(%User{password_hash: hash}, password) when is_binary(password) do
@@ -82,9 +165,107 @@ defmodule PhoenixApp.Accounts do
   end
 
   # ---------------------
-  # Authenticate user (web & API)
-  # Returns {:ok, user} or {:error, reason}
+  # Enhanced authentication with security checks
   # ---------------------
+  def authenticate_user_secure(identifier, password, opts \\ []) when is_binary(identifier) and is_binary(password) do
+    ip_address = Keyword.get(opts, :ip_address)
+    
+    # Check rate limiting first
+    with :ok <- check_login_rate_limit(ip_address) do
+      start_time = System.monotonic_time(:millisecond)
+      
+      result = case get_user_by_email_or_username(identifier) do
+        nil ->
+          # Still run password check to prevent timing attacks
+          Pbkdf2.no_user_verify()
+          {:error, :invalid_credentials}
+
+        user ->
+          if check_password(user, password) do
+            # Additional security checks
+            cond do
+              user.locked_until && DateTime.utc_now() < user.locked_until ->
+                {:error, :account_locked}
+              
+              is_nil(user.email_verified_at) ->
+                {:error, :email_not_verified}
+              
+              true ->
+                # Reset failed login attempts on successful login
+                reset_failed_login_attempts(user, ip_address)
+                {:ok, user}
+            end
+          else
+            # Record failed login attempt
+            record_failed_login(ip_address, user)
+            {:error, :invalid_credentials}
+          end
+      end
+      
+      end_time = System.monotonic_time(:millisecond)
+      Logger.info("Authentication took #{end_time - start_time}ms")
+      
+      result
+    else
+      {:error, rate_limit_error} when is_binary(rate_limit_error) ->
+        {:error, rate_limit_error}
+      
+      {:error, _} ->
+        {:error, "Too many login attempts. Please try again later."}
+    end
+  end
+
+  defp check_login_rate_limit(nil), do: :ok
+  defp check_login_rate_limit(ip_address) do
+    PhoenixApp.Accounts.RateLimit.check_login_limit(ip_address)
+  end
+
+  defp authenticate_existing_user(user, password, ip_address) do
+    cond do
+      User.account_locked?(user) ->
+        record_failed_login(ip_address)
+        {:error, :account_locked}
+      
+      PhoenixApp.Accounts.EmailVerification.verification_required?(user) ->
+        if check_password(user, password) do
+          {:error, :email_not_verified}
+        else
+          record_failed_login(ip_address, user)
+          {:error, :invalid_credentials}
+        end
+      
+      check_password(user, password) ->
+        # Successful login - reset failed attempts
+        user
+        |> User.reset_failed_login_changeset(ip_address)
+        |> Repo.update()
+        
+        {:ok, user}
+      
+      true ->
+        # Failed password - increment attempts and possibly lock account
+        user
+        |> User.increment_failed_login_changeset()
+        |> Repo.update()
+        
+        record_failed_login(ip_address, user)
+        {:error, :invalid_credentials}
+    end
+  end
+
+  defp record_failed_login(nil), do: :ok
+  defp record_failed_login(nil, _user), do: :ok
+  defp record_failed_login(ip_address), do: PhoenixApp.Accounts.RateLimit.record_login_attempt(ip_address)
+  defp record_failed_login(ip_address, _user), do: PhoenixApp.Accounts.RateLimit.record_login_attempt(ip_address)
+
+  defp reset_failed_login_attempts(user, ip_address) do
+    # Reset failed login attempts and update last login information
+    user
+    |> User.reset_failed_login_changeset(ip_address)
+    |> Repo.update()
+  end
+
+  # Keep the original authenticate_user for backward compatibility
   def authenticate_user(email, password) when is_binary(email) and is_binary(password) do
     start_time = System.monotonic_time(:millisecond)
     
@@ -106,6 +287,37 @@ defmodule PhoenixApp.Accounts do
     IO.puts("Authentication took #{end_time - start_time}ms")
     
     result
+  end
+
+  # Email verification functions
+  def verify_user_email(token) do
+    PhoenixApp.Accounts.EmailVerification.verify_email(token)
+  end
+
+  def verify_user_with_code(email, code) do
+    PhoenixApp.Accounts.EmailVerification.verify_email_with_code(email, code)
+  end
+
+  def verify_user_email_direct(user) do
+    # Direct email verification without token (for development)
+    user
+    |> User.verify_email_changeset()
+    |> Repo.update()
+  end
+
+  def resend_verification_email(email) do
+    PhoenixApp.Accounts.EmailVerification.resend_verification_email(email)
+  end
+
+  # Account management
+  def unlock_user_account(user) do
+    user
+    |> User.reset_failed_login_changeset()
+    |> Repo.update()
+  end
+
+  def is_account_secure?(user) do
+    User.email_verified?(user) and not User.account_locked?(user)
   end
 
   # ---------------------

@@ -3,7 +3,7 @@ defmodule PhoenixAppWeb.AuthController do
   alias PhoenixApp.Accounts
 
   # Called when login succeeds
-  def login_success(conn, %{"user_id" => user_id}) do
+  def login_success(conn, %{"user_id" => user_id} = params) do
     case Accounts.get_user(user_id) do
       nil ->
         conn
@@ -11,9 +11,18 @@ defmodule PhoenixAppWeb.AuthController do
         |> redirect(to: ~p"/login")
 
       user ->
+        conn = conn
+               |> put_session(:user_id, user.id)
+               |> configure_session(renew: false)
+
+        # If JWT token is provided, store it for unified API access
+        conn = case params["token"] do
+          nil -> conn
+          token -> put_session(conn, :jwt_token, token)
+        end
+
         conn
-        |> put_session(:user_id, user.id)
-        |> configure_session(renew: false) # true helps prevent session fixation
+        |> put_flash(:info, "Successfully logged in! You now have unified access to all features.")
         |> redirect(to: ~p"/dashboard")
     end
   end

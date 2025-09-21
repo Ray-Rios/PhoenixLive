@@ -16,6 +16,23 @@ defmodule PhoenixAppWeb.Router do
     plug :fetch_session
   end
 
+  pipeline :api_auth do
+    plug :accepts, ["json"]
+    plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
+                                  error_handler: PhoenixAppWeb.AuthErrorHandler
+    plug Guardian.Plug.VerifyHeader, realm: "Bearer"
+    plug Guardian.Plug.LoadResource, allow_blank: true
+  end
+
+  pipeline :api_authenticated do
+    plug :accepts, ["json"]
+    plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
+                                  error_handler: PhoenixAppWeb.AuthErrorHandler
+    plug Guardian.Plug.VerifyHeader, realm: "Bearer"
+    plug Guardian.Plug.EnsureAuthenticated
+    plug Guardian.Plug.LoadResource
+  end
+
 
   pipeline :game_auth do
     plug PhoenixAppWeb.Plugs.GameAuthPlug
@@ -38,6 +55,9 @@ defmodule PhoenixAppWeb.Router do
     # Public auth routes
     live "/login", AuthLive, :login
     live "/register", AuthLive, :register
+    live "/auth/verify", AuthLive, :verify_code
+    live "/auth/verify-email", AuthLive, :verify_email
+    live "/auth/resend-verification", AuthLive, :resend_verification
 
     # Public blog/shop/chat/etc.
     live "/blog", BlogLive, :index
@@ -52,7 +72,6 @@ defmodule PhoenixAppWeb.Router do
     live "/quest", QuestLive, :index
     live "/unreal", UnrealLive, :index
     live "/desktop", DesktopLive, :index
-    live "/terminal", TerminalLive, :index
     live "/babylon-test", BabylonTestLive, :index
     live "/lobby", LobbyLive, :index
     live "/profile", ProfileLive, :index
@@ -134,9 +153,30 @@ defmodule PhoenixAppWeb.Router do
     post "/login", Api.ApiAuthController, :login
     post "/authenticate", Api.ApiAuthController, :authenticate
     post "/verify", Api.ApiAuthController, :verify_token
+    post "/verify-bearer", Api.ApiAuthController, :verify_bearer
+    post "/logout", Api.ApiAuthController, :logout
+    
+    # Email verification endpoints
+    post "/verify-email", Api.ApiAuthController, :verify_email
+    post "/verify-code", Api.ApiAuthController, :verify_code  # New 6-digit code verification
+    post "/resend-verification", Api.ApiAuthController, :resend_verification
+    post "/dev-verify", Api.ApiAuthController, :dev_verify  # Development only
     
     # Admin-only endpoints
     get "/users", Api.ApiAuthController, :list_users
+  end
+
+  # --------------------
+  # Protected Game API endpoints (require JWT authentication)
+  # --------------------
+  scope "/api/game", PhoenixAppWeb do
+    pipe_through :api_authenticated
+
+    get "/profile", Api.GameController, :get_profile
+    get "/characters", Api.GameController, :list_characters
+    post "/characters", Api.GameController, :create_character
+    get "/inventory/:character_id", Api.GameController, :get_inventory
+    post "/login-game", Api.GameController, :login_to_game
   end
 
   # --------------------

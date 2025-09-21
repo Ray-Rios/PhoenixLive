@@ -18,7 +18,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
           <!-- Left side - Logo and main navigation -->
           <div class="flex items-center space-x-4 flex-1 min-w-0">
             <.link navigate={~p"/dashboard"} class="text-xl font-bold text-white hover:text-blue-400 transition-colors duration-300 flex-shrink-0">
-              HTBX
+              Phx<span class="rainbow-text">Live</span>
             </.link>
             <div class="hidden lg:flex space-x-4 flex-1 justify-center">
               <.link navigate={~p"/shop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
@@ -40,9 +40,6 @@ defmodule PhoenixAppWeb.Components.Navigation do
               </.link>
               <.link navigate={~p"/desktop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 🖥️ Desktop
-              </.link>
-              <.link navigate={~p"/terminal"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                💻 Terminal
               </.link>
               <.link navigate={~p"/blog"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 📝 Blog

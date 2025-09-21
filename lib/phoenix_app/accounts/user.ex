@@ -26,6 +26,21 @@ defmodule PhoenixApp.Accounts.User do
     field :position_y, :float, default: 300.0
     field :last_activity, :utc_datetime
 
+    # Email verification & security fields
+    field :email_verified_at, :utc_datetime
+    field :email_verification_token, :string
+    field :email_verification_sent_at, :utc_datetime
+    field :failed_login_attempts, :integer, default: 0
+    field :locked_until, :utc_datetime
+    field :password_reset_token, :string
+    field :password_reset_sent_at, :utc_datetime
+    field :approved_at, :utc_datetime
+    field :registration_ip, :string
+    field :last_login_ip, :string
+    field :last_login_at, :utc_datetime
+
+    belongs_to :approved_by, __MODULE__, foreign_key: :approved_by_id
+
     has_many :orders, PhoenixApp.Commerce.Order
     has_many :posts, PhoenixApp.Content.Post
     has_many :comments, PhoenixApp.Content.Comment
@@ -40,13 +55,62 @@ defmodule PhoenixApp.Accounts.User do
     timestamps(type: :utc_datetime)
   end
 
-  # Registration (new user)
+  # Registration (new user) - Enhanced security validation
   def registration_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :name, :password])
+    |> cast(attrs, [:email, :name, :password, :registration_ip])
     |> validate_required([:email, :password])
-    |> unique_constraint(:email)
+    |> validate_email()
+    |> validate_password()
+    |> validate_name()
+    |> unique_constraint(:email, message: "An account with this email already exists")
+    |> put_email_verification_token()
     |> put_password_hash()
+  end
+
+  # Enhanced email validation
+  defp validate_email(changeset) do
+    changeset
+    |> validate_format(:email, ~r/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 
+        message: "Please enter a valid email address")
+    |> validate_length(:email, max: 255)
+    |> update_change(:email, &String.downcase/1)
+  end
+
+  # Enhanced password validation
+  defp validate_password(changeset) do
+    changeset
+    |> validate_length(:password, min: 8, max: 128, 
+        message: "Password must be between 8 and 128 characters")
+    |> validate_format(:password, ~r/[a-z]/, 
+        message: "Password must contain at least one lowercase letter")
+    |> validate_format(:password, ~r/[A-Z]/, 
+        message: "Password must contain at least one uppercase letter")
+    |> validate_format(:password, ~r/[0-9]/, 
+        message: "Password must contain at least one number")
+    |> validate_format(:password, ~r/[^a-zA-Z0-9]/, 
+        message: "Password must contain at least one special character")
+  end
+
+  # Name validation
+  defp validate_name(changeset) do
+    changeset
+    |> validate_length(:name, min: 2, max: 100)
+    |> validate_format(:name, ~r/^[a-zA-Z0-9\s\-_\.]+$/, 
+        message: "Name can only contain letters, numbers, spaces, hyphens, underscores, and periods")
+  end
+
+  # Generate email verification token
+  defp put_email_verification_token(changeset) do
+    if changeset.valid? do
+      token = :crypto.strong_rand_bytes(32) |> Base.url_encode64()
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      changeset
+      |> put_change(:email_verification_token, token)
+      |> put_change(:email_verification_sent_at, now)
+    else
+      changeset
+    end
   end
 
   # Update profile (email/name/avatar)
@@ -166,6 +230,73 @@ defmodule PhoenixApp.Accounts.User do
     if pwd = get_change(changeset, :password) do
       hash = Pbkdf2.hash_pwd_salt(pwd)
       put_change(changeset, :password_hash, hash)
+    else
+      changeset
+    end
+  end
+
+  # Security helper functions
+  def email_verified?(user), do: !is_nil(user.email_verified_at)
+  def account_locked?(user), do: !is_nil(user.locked_until) && DateTime.after?(user.locked_until, DateTime.utc_now())
+  def account_approved?(user), do: !is_nil(user.approved_at)
+
+  # For dev environment - auto-verify emails from localhost/test domains
+  def auto_verify_dev_emails?(email) do
+    dev_domains = ["localhost", "test.com", "example.com", "dev.local"]
+    domain = email |> String.split("@") |> List.last()
+    Enum.member?(dev_domains, domain)
+  end
+
+  # Generate password reset token
+  def password_reset_changeset(user) do
+    token = :crypto.strong_rand_bytes(32) |> Base.url_encode64()
+    user
+    |> change()
+    |> put_change(:password_reset_token, token)
+    |> put_change(:password_reset_sent_at, DateTime.utc_now() |> DateTime.truncate(:second))
+  end
+
+  # Verify email changeset
+  def verify_email_changeset(user) do
+    user
+    |> change()
+    |> put_change(:email_verified_at, DateTime.utc_now() |> DateTime.truncate(:second))
+    |> put_change(:email_verification_token, nil)
+  end
+
+  # Lock account changeset
+  def lock_account_changeset(user, lock_duration_minutes \\ 30) do
+    locked_until = DateTime.utc_now() |> DateTime.add(lock_duration_minutes * 60, :second) |> DateTime.truncate(:second)
+    user
+    |> change()
+    |> put_change(:locked_until, locked_until)
+  end
+
+  # Increment failed login attempts
+  def increment_failed_login_changeset(user) do
+    attempts = (user.failed_login_attempts || 0) + 1
+    changeset = user
+    |> change()
+    |> put_change(:failed_login_attempts, attempts)
+    
+    # Lock account after 5 failed attempts
+    if attempts >= 5 do
+      lock_account_changeset(user)
+    else
+      changeset
+    end
+  end
+
+  # Reset failed login attempts
+  def reset_failed_login_changeset(user, login_ip \\ nil) do
+    changeset = user
+    |> change()
+    |> put_change(:failed_login_attempts, 0)
+    |> put_change(:locked_until, nil)
+    |> put_change(:last_login_at, DateTime.utc_now() |> DateTime.truncate(:second))
+    
+    if login_ip do
+      put_change(changeset, :last_login_ip, login_ip)
     else
       changeset
     end

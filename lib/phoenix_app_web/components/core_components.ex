@@ -65,35 +65,41 @@ defmodule PhoenixAppWeb.CoreComponents do
 
   @doc """
   Renders flash notices.
+  Updated: 2025-09-21 05:21 - Fixed delay option issue
   """
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :id_suffix, :any, default: nil, doc: "suffix to make flash IDs unique"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
   
   slot :inner_block
 
   def flash(assigns) do
+    flash_id = if assigns.id_suffix do
+      "flash-#{assigns.kind}-#{assigns.id_suffix}"
+    else
+      "flash-#{assigns.kind}"
+    end
+    
+    assigns = assign(assigns, :flash_id, flash_id)
+    
     ~H"""
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
-      id={"flash-#{@kind}"}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide_flash("#flash-#{@kind}")}
+      id={@flash_id}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind})}
       role="alert"
-      x-data="{ show: false }"
-      x-init="
-        setTimeout(() => show = true, 200);
-        setTimeout(() => show = false, 4200);
-      "
-      x-show="show"
-      x-transition:enter="transition ease-out duration-300"
-      x-transition:enter-start="transform translate-x-full opacity-0"
-      x-transition:enter-end="transform translate-x-0 opacity-100"
-      x-transition:leave="transition ease-in duration-300"
-      x-transition:leave-start="transform translate-x-0 opacity-100"
-      x-transition:leave-end="transform translate-x-full opacity-0"
+      phx-hook="FlashNotification"
+      style={
+        case @kind do
+          :info -> "position: fixed; top: 1rem; right: 1rem; z-index: 50;"
+          :error -> "position: fixed; top: 6rem; right: 1rem; z-index: 50;"
+        end
+      }
       class={[
-        "fixed flash-notice w-80 sm:w-96 z-50 rounded-lg p-3 ring-1 cursor-pointer",
+        "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer",
+        "transform translate-x-0 opacity-100 transition-all duration-300 ease-out",
         @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
         @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
       ]}
@@ -116,13 +122,14 @@ defmodule PhoenixAppWeb.CoreComponents do
   Shows the flash group with standard titles and content.
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
-  attr :id, :string, default: "flash-group", doc: "the optional id of flash container"
+  attr :id, :string, default: nil, doc: "the optional id of flash container"
 
   def flash_group(assigns) do
+    assigns = assign(assigns, :flash_id, assigns.id || "flash-group-#{System.unique_integer([:positive])}")
     ~H"""
-    <div id={@id}>
-      <.flash kind={:info} title="Success!" flash={@flash} />
-      <.flash kind={:error} title="Error!" flash={@flash} />
+    <div id={@flash_id}>
+      <.flash kind={:info} title="Success!" flash={@flash} id_suffix={System.unique_integer([:positive])} />
+      <.flash kind={:error} title="Error!" flash={@flash} id_suffix={System.unique_integer([:positive])} />
     </div>
     """
   end

@@ -11,6 +11,11 @@ spec:
         env:
         - name: MIX_ENV
           value: "prod"
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: phoenix-secrets
+              key: SENDGRID_API_KEY
         resources:
           requests:
             memory: "512Mi"

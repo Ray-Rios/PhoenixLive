@@ -56,14 +56,112 @@ const QuestGame = {
   }
 };
 
+// Message Reactions Hook for chat functionality
+const MessageReactions = {
+  mounted() {
+    this.setupMessageReactions();
+  },
+
+  updated() {
+    this.setupMessageReactions();
+  },
+
+  setupMessageReactions() {
+    // Add hover effects for message reactions
+    this.el.querySelectorAll('.message').forEach(message => {
+      if (!message.dataset.reactionsSetup) {
+        message.addEventListener('mouseenter', () => {
+          this.showReactionButtons(message);
+        });
+        
+        message.addEventListener('mouseleave', () => {
+          this.hideReactionButtons(message);
+        });
+        
+        message.dataset.reactionsSetup = 'true';
+      }
+    });
+  },
+
+  showReactionButtons(messageEl) {
+    // Add reaction buttons if they don't exist
+    let reactionBar = messageEl.querySelector('.reaction-bar');
+    if (!reactionBar) {
+      reactionBar = document.createElement('div');
+      reactionBar.className = 'reaction-bar absolute right-0 top-0 bg-gray-800 rounded p-1 opacity-0 transition-opacity';
+      reactionBar.innerHTML = `
+        <button class="reaction-btn" data-emoji="👍">👍</button>
+        <button class="reaction-btn" data-emoji="❤️">❤️</button>
+        <button class="reaction-btn" data-emoji="😄">😄</button>
+        <button class="reaction-btn" data-emoji="😮">😮</button>
+      `;
+      messageEl.style.position = 'relative';
+      messageEl.appendChild(reactionBar);
+      
+      // Add click handlers
+      reactionBar.querySelectorAll('.reaction-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const emoji = e.target.dataset.emoji;
+          this.addReaction(messageEl, emoji);
+        });
+      });
+    }
+    
+    reactionBar.style.opacity = '1';
+  },
+
+  hideReactionButtons(messageEl) {
+    const reactionBar = messageEl.querySelector('.reaction-bar');
+    if (reactionBar) {
+      reactionBar.style.opacity = '0';
+    }
+  },
+
+  addReaction(messageEl, emoji) {
+    // This would normally send to the server
+    console.log('Adding reaction:', emoji, 'to message');
+    // You can extend this to send phx events for persistence
+  }
+};
+
+// Flash Notification Hook for smooth animations
+const FlashNotification = {
+  mounted() {
+    // Auto-hide after 4 seconds
+    this.hideTimer = setTimeout(() => {
+      this.hide();
+    }, 4000);
+  },
+
+  destroyed() {
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer);
+    }
+  },
+
+  hide() {
+    this.el.style.transform = 'translateX(100%)';
+    this.el.style.opacity = '0';
+    
+    // Remove element after animation
+    setTimeout(() => {
+      if (this.el.parentNode) {
+        this.el.parentNode.removeChild(this.el);
+      }
+    }, 300);
+  }
+};
+
 // Clean hooks object with quest game, CMS components, file management, and Babylon.js
 let Hooks = {
   QuestGame,
+  MessageReactions,
   RichEditor,
   FileDragDrop,
   FileUpload,
   BabylonScene,
-  LobbyScene
+  LobbyScene,
+  FlashNotification
 };
 
 let liveSocket = new LiveSocket("/live", Socket, {

@@ -30,9 +30,11 @@ kubectl delete namespace phoenixapp-dev --ignore-not-found=true   #Deletes every
 kubectl get configmap phoenix-config -n phoenixapp-dev -o yaml
 kubectl get ingress -n phoenixapp-dev -o yaml
 kubectl get endpoints phoenix-web -n phoenixapp-dev
-kubectl apply -k c:/PROJEKT23/k3s/overlays/dev
+kubectl apply -k k3s/overlays/dev
 kubectl apply -k k3s/overlays/dev/
+docker build --build-arg ENV=prod -t phoenixapp:prod . && kubectl rollout restart deployment/phoenix-web -n phoenixapp
 
+kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp && sleep 5 && kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
 ## 🔧 Phoenix stuff 🔧 ##
 mix clean
 mix deps.clean --all
@@ -81,6 +83,17 @@ docker-compose exec web bash -c "cd assets && npm run build"
                                               npm run build:css
 Get-Process | Where-Object {$_.ProcessName -like "*beam*" -or $_.ProcessName -like "*erl*" -or $_.ProcessName -like "*node*"}
 
+Register a user:
+curl -X POST http://localhost/api/auth/register -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"TestUser","password":"SecurePass123!"}'
+Verify their email (development only):
+curl -X POST http://localhost/api/auth/dev-verify -H "Content-Type: application/json" -d '{"email":"test@example.com"}'
+Login successfully:
+curl -X POST http://localhost/api/auth/login -H "Content-Type: application/json" -d '{"email":"test@example.com","password":"SecurePass123!"}'
+
 
 AI context:
-This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis (although not enabled currently). I have a GraphQL layer with an API layer trying to play nice together. we're using tree-shaken imports and need to make sure we're importing the correctly
+This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis (although not enabled currently). I have a GraphQL layer with an API layer trying to play nice together. For Babylon.js we're using tree-shaken imports and need to make sure we're importing the correctly
+
+AI context: please do no execute migrations in the pods themselves. update the files and re-deploy the kubernetes manifest. We've been down this road before and it causes severe docker issues.
+
+
