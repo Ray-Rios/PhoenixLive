@@ -14,6 +14,7 @@ defmodule PhoenixAppWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
+    plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "api_general"
   end
 
   pipeline :api_auth do
@@ -22,6 +23,7 @@ defmodule PhoenixAppWeb.Router do
                                   error_handler: PhoenixAppWeb.AuthErrorHandler
     plug Guardian.Plug.VerifyHeader, realm: "Bearer"
     plug Guardian.Plug.LoadResource, allow_blank: true
+    plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "auth_login"
   end
 
   pipeline :api_authenticated do
@@ -212,7 +214,7 @@ defmodule PhoenixAppWeb.Router do
   # GraphQL API
   # --------------------
   scope "/api" do
-    pipe_through :api
+    pipe_through [:api, PhoenixAppWeb.Plugs.RateLimitPlug]
 
     forward "/graphql", Absinthe.Plug,
       schema: PhoenixAppWeb.Schema

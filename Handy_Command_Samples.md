@@ -1,5 +1,5 @@
 ✅ Note: These vars must be generated for prod before deployment otherwise start.sh will fail.
-✅ Place in k3s/overlays/prod/secrets.yaml (copy template from dev and change db password while you're at it)
+🐛 Place in k3s/overlays/prod/secrets.yaml (copy template from dev and change db password while you're at it)
 SECRET_KEY_BASE= $(mix phx.gen.secret 64)
 LIVE_VIEW_SIGNING_SALT= $(mix phx.gen.secret 32)
 GUARDIAN_SECRET_KEY= $(mix_guardian.gen.secret)

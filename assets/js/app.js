@@ -28,6 +28,15 @@ import { FileDragDrop, FileUpload } from "./file_drag_drop";
 import { BabylonScene } from "./babylon/babylon_hooks"
 import { LobbyScene } from "./babylon/lobby_hooks";
 
+// Import CAPTCHA hook
+import { HCaptcha } from "./hcaptcha";
+
+// Import form handler to prevent CAPTCHA destruction
+import { FormHandler } from "./form_handler";
+
+// Import form preserver to maintain form data during LiveView updates
+import { FormPreserver } from "./form_preserver";
+
 
 // Quest Game Hook
 const QuestGame = {
@@ -161,7 +170,10 @@ let Hooks = {
   FileUpload,
   BabylonScene,
   LobbyScene,
-  FlashNotification
+  FlashNotification,
+  HCaptcha,
+  FormHandler,
+  FormPreserver
 };
 
 let liveSocket = new LiveSocket("/live", Socket, {

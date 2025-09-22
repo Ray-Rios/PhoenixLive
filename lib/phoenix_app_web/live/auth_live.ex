@@ -20,14 +20,20 @@ defmodule PhoenixAppWeb.AuthLive do
     if current_user do
       {:ok, redirect(socket, to: ~p"/dashboard")}
     else
+      form_data = %{}
+      form = to_form(form_data, as: "user")
+      
       {:ok,
        assign(socket,
          current_user: current_user,
-         form: to_form(%{}, as: "user"),
+         form: form,
+         form_data: form_data,  # Track form data separately
          errors: [],
          action: :login,
          loading: false,
-         ip_address: ip_address
+         ip_address: ip_address,
+         captcha_token: nil,
+         show_captcha: captcha_required?()
        )}
     end
   end
@@ -98,25 +104,36 @@ defmodule PhoenixAppWeb.AuthLive do
   end
 
   # ----------------
-  # Handle submit
+  # Handle submit (updated to work with plain HTML form)
   # ----------------
   def handle_event("submit", %{"user" => user_params}, socket) do
-    # Basic validation
+    # Get form data directly from submit params
     email = String.trim(user_params["email"] || "")
     password = user_params["password"] || ""
+    
+    # Store the form data for potential error state preservation
+    form_data = user_params
+    form = to_form(form_data, as: "user")
+    socket = assign(socket, form_data: form_data, form: form)
     
     cond do
       email == "" ->
         {:noreply, 
          socket
          |> put_flash(:error, "Email or username is required")
-         |> assign(errors: ["Email or username is required"])}
+         |> assign(errors: ["Email or username is required"], loading: false)}
       
       password == "" ->
         {:noreply, 
          socket
          |> put_flash(:error, "Password is required")
-         |> assign(errors: ["Password is required"])}
+         |> assign(errors: ["Password is required"], loading: false)}
+      
+      socket.assigns.show_captcha and is_nil(socket.assigns.captcha_token) ->
+        {:noreply, 
+         socket
+         |> put_flash(:error, "Please complete the CAPTCHA verification")
+         |> assign(errors: ["CAPTCHA verification required"], loading: false)}
       
       true ->
         # Set loading state
@@ -152,21 +169,23 @@ defmodule PhoenixAppWeb.AuthLive do
          |> redirect(external: "/auth/login_success?user_id=#{user.id}&token=#{jwt_token}")}
 
       {:ok, {:error, :invalid_credentials}} ->
-        # Preserve entered identifier, clear password
-        form = to_form(%{"email" => identifier}, as: "user")
+        # Preserve entered identifier, clear password but keep form_data
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
 
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Invalid email/username or password")
          |> assign(form: form, errors: ["Invalid email/username or password"])}
       
       {:ok, {:error, :account_locked}} ->
-        form = to_form(%{"email" => identifier}, as: "user")
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
 
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Account temporarily locked due to multiple failed attempts. Please try again later.")
          |> assign(form: form, errors: ["Account locked"])}
 
@@ -202,31 +221,34 @@ defmodule PhoenixAppWeb.AuthLive do
          |> redirect(to: ~p"/auth/verify?#{redirect_params}")}
 
       {:ok, {:error, rate_limit_message}} when is_binary(rate_limit_message) ->
-        form = to_form(%{"email" => identifier}, as: "user")
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
 
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, rate_limit_message)
          |> assign(form: form, errors: [rate_limit_message])}
       
       {:ok, {:error, _reason}} ->
         # Generic error fallback
-        form = to_form(%{"email" => identifier}, as: "user")
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
 
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Login failed. Please try again.")
          |> assign(form: form, errors: ["Login failed"])}
       
       nil ->
         # Timeout occurred
-        form = to_form(%{"email" => identifier}, as: "user")
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
         
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Login timeout - please try again")
          |> assign(form: form, errors: ["Login timeout"])}
     end
@@ -278,21 +300,23 @@ defmodule PhoenixAppWeb.AuthLive do
           end)
 
         # Preserve form data on error
-        form = to_form(user_params, as: "user")
+        form_data = Map.put(user_params, "password", "")  # Clear password for security
+        form = to_form(form_data, as: "user")
 
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Please fix the errors below")
          |> assign(form: form, errors: errors)}
          
       {:error, :email_already_exists_verified} ->
         # Email exists and is verified - show standard error
-        form = to_form(user_params, as: "user")
+        form_data = Map.put(user_params, "password", "")  # Clear password for security
+        form = to_form(form_data, as: "user")
 
         {:noreply,
          socket
-         |> assign(loading: false)
+         |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "An account with this email already exists. Please try logging in instead.")
          |> assign(form: form, errors: ["An account with this email already exists"])}
 
@@ -375,9 +399,53 @@ defmodule PhoenixAppWeb.AuthLive do
   def handle_event("resend_verification", _params, socket) do
     {:noreply, put_flash(socket, :error, "Please enter your email address")}
   end
+
+  # ----------------
+  # CAPTCHA Events - Optimized to prevent widget destruction
+  # ----------------
+  def handle_event("captcha_verified", %{"token" => token}, socket) do
+    # Only update captcha_token, avoid unnecessary re-renders
+    # The minimal assign change reduces DOM updates
+    {:noreply, assign(socket, captcha_token: token)}
+  end
+
+  def handle_event("captcha_error", _params, socket) do
+    # Only update captcha_token, avoid form re-render
+    {:noreply, 
+     socket
+     |> assign(captcha_token: nil)
+     |> put_flash(:error, "CAPTCHA failed. Please try again.")}
+  end
+
+  def handle_event("captcha_expired", _params, socket) do
+    # Only update captcha_token, avoid form re-render
+    {:noreply, 
+     socket
+     |> assign(captcha_token: nil)
+     |> put_flash(:warning, "CAPTCHA expired. Please complete it again.")}
+  end
+
+  def handle_event("captcha_timeout", _params, socket) do
+    # Only update captcha_token, avoid form re-render
+    {:noreply, 
+     socket
+     |> assign(captcha_token: nil)
+     |> put_flash(:error, "CAPTCHA timed out. Please try again.")}
+  end
+
   # ----------------
   defp maybe_fetch_user(nil), do: nil
   defp maybe_fetch_user(user_id), do: Accounts.get_user(user_id)
+
+  defp captcha_required? do
+    System.get_env("HCAPTCHA_SITE_KEY") != nil and 
+    System.get_env("HCAPTCHA_SITE_KEY") != ""
+  end
+
+  defp get_hcaptcha_site_key do
+    System.get_env("HCAPTCHA_SITE_KEY") || 
+    Application.get_env(:phoenix_app, :hcaptcha_site_key)
+  end
 
   # ----------------
   # Render
@@ -495,7 +563,12 @@ defmodule PhoenixAppWeb.AuthLive do
               </div>
             <% end %>
             
-            <.form for={@form} phx-submit="submit" class="space-y-4">
+            <form 
+              id="auth-form"
+              phx-submit="submit"
+              phx-hook="FormPreserver"
+              class="space-y-4"
+            >
               <div>
                 <label class="block text-white text-sm font-medium mb-2">
                   <%= if @action == :login, do: "Email or Username", else: "Email" %>
@@ -503,7 +576,7 @@ defmodule PhoenixAppWeb.AuthLive do
                 <input 
                   type={if @action == :login, do: "text", else: "email"} 
                   name="user[email]" 
-                  value={@form.data["email"] || ""}
+                  id="user_email"
                   required
                   class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                   placeholder={if @action == :login, do: "Enter your email or username", else: "Enter your email"}
@@ -515,7 +588,7 @@ defmodule PhoenixAppWeb.AuthLive do
                 <input 
                   type="text" 
                   name="user[name]" 
-                  value={@form.data["name"] || ""}
+                  id="user_name"
                   class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                   placeholder="Enter your name"
                 />
@@ -526,17 +599,29 @@ defmodule PhoenixAppWeb.AuthLive do
                 <input 
                   type="password" 
                   name="user[password]" 
-                  value={if @action == :register, do: @form.data["password"] || "", else: ""}
+                  id="user_password"
                   required
                   class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                   placeholder="Enter your password"
                 />
               </div>
               
+              <!-- CAPTCHA Widget -->
+              <%= if @show_captcha do %>
+                <div class="captcha-container">
+                  <div 
+                    id="hcaptcha-widget" 
+                    phx-hook="HCaptcha" 
+                    data-sitekey={get_hcaptcha_site_key()}
+                    class="flex justify-center"
+                  ></div>
+                </div>
+              <% end %>
+              
               <button 
                 type="submit"
-                disabled={@loading}
-                class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading, do: "opacity-50 cursor-not-allowed", else: ""}"}
+                disabled={@loading or (@show_captcha and is_nil(@captcha_token))}
+                class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading or (@show_captcha and is_nil(@captcha_token)), do: "opacity-50 cursor-not-allowed", else: ""}"}
               >
                 <%= if @loading do %>
                   <div class="flex items-center justify-center">
@@ -550,7 +635,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   <%= if @action == :login, do: "Sign In", else: "Create Account" %>
                 <% end %>
               </button>
-            </.form>
+            </form>
             
             <div class="mt-6 text-center">
               <%= if @action == :login do %>
