@@ -31,8 +31,8 @@ export const HCaptcha = {
   },
 
   loadHCaptcha() {
-    // If API is already confirmed loaded, render immediately
-    if (hCaptchaApiLoaded && window.hcaptcha) {
+    // If API is already confirmed loaded and render method is available, render immediately
+    if (hCaptchaApiLoaded && window.hcaptcha && typeof window.hcaptcha.render === 'function') {
       this.renderCaptcha();
       return;
     }
@@ -40,7 +40,7 @@ export const HCaptcha = {
     // If we already have a load promise, wait for it
     if (hCaptchaLoadPromise) {
       hCaptchaLoadPromise.then(() => {
-        if (this.el && !this.widgetId) {
+        if (this.el && !this.widgetId && window.hcaptcha && typeof window.hcaptcha.render === 'function') {
           this.renderCaptcha();
         }
       });
@@ -52,14 +52,20 @@ export const HCaptcha = {
       // Set up global callback for when hCaptcha API is ready (only once)
       if (!window.hCaptchaLoaded) {
         window.hCaptchaLoaded = () => {
-          hCaptchaApiLoaded = true;
-          // Find all mounted hCaptcha hooks and render them
-          document.querySelectorAll('[data-sitekey]').forEach(el => {
-            if (el.phxHook && el.phxHook.renderCaptcha && !el.phxHook.widgetId) {
-              el.phxHook.renderCaptcha();
-            }
-          });
-          resolve();
+          // Add a small delay to ensure the API is fully initialized
+          setTimeout(() => {
+            hCaptchaApiLoaded = true;
+            // Find all mounted hCaptcha hooks and render them
+            document.querySelectorAll('[data-sitekey]').forEach(el => {
+              if (el.phxHook && el.phxHook.renderCaptcha && !el.phxHook.widgetId) {
+                // Double-check that API is ready before rendering
+                if (window.hcaptcha && typeof window.hcaptcha.render === 'function') {
+                  el.phxHook.renderCaptcha();
+                }
+              }
+            });
+            resolve();
+          }, 50); // Small delay to ensure API is fully ready
         };
       }
 
@@ -75,16 +81,22 @@ export const HCaptcha = {
 
     // Wait for the API to load
     hCaptchaLoadPromise.then(() => {
-      if (this.el && !this.widgetId) {
+      if (this.el && !this.widgetId && window.hcaptcha && typeof window.hcaptcha.render === 'function') {
         this.renderCaptcha();
       }
     });
   },
 
   renderCaptcha() {
-    // Double-check that API is loaded and we have a sitekey
+    // Comprehensive check that API is loaded and fully ready
     if (!hCaptchaApiLoaded || !window.hcaptcha || !this.sitekey) {
       console.warn('hCaptcha API not ready or missing sitekey, skipping render');
+      return;
+    }
+
+    // Additional check to ensure the hcaptcha.render method is available and ready
+    if (typeof window.hcaptcha.render !== 'function') {
+      console.warn('hCaptcha render method not available, API may not be fully loaded');
       return;
     }
 
