@@ -341,13 +341,13 @@ defmodule PhoenixAppWeb.ChatLive do
               </.link>
               <%= if channel.name != "general" do %>
                 <button phx-click="delete_channel" phx-value-channel_id={channel.id}
-                        class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 text-sm ml-2"
-                        onclick="return confirm('Are you sure you want to delete this channel?')">
-                  ×
-                </button>
-              <% end %>
-            </div>
-          <% end %>
+                          class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 text-sm ml-2"
+                          onclick="return confirm('Are you sure you want to delete this channel?')">
+                    ×
+                  </button>
+                <% end %>
+              </div>
+            <% end %>
         </div>
         
         <!-- Voice Channels -->

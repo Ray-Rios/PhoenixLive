@@ -10,6 +10,8 @@ docker system prune -a -f
 docker volume prune -a -f
 docker build --no-cache -t phoenixapp:latest .
 docker rmi phoenixapp:latest
+docker system prune -a -f && docker volume prune -f && docker builder prune -f
+docker system prune --volume
 ## 🔧 Kube stuff 🔧 ##
 kubectl get pods -n phoenixapp-dev
 kubectl get pvc -n phoenixapp-dev
@@ -32,7 +34,7 @@ kubectl get ingress -n phoenixapp-dev -o yaml
 kubectl get endpoints phoenix-web -n phoenixapp-dev
 kubectl apply -k k3s/overlays/dev
 kubectl apply -k k3s/overlays/dev/
-docker build --build-arg ENV=prod -t phoenixapp:prod . && kubectl rollout restart deployment/phoenix-web -n phoenixapp
+docker build --no-cache -t phoenix-app . && kubectl rollout restart deployment/phoenix-web -n phoenixapp
 
 kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp && sleep 5 && kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
 ## 🔧 Phoenix stuff 🔧 ##
@@ -89,6 +91,9 @@ Verify their email (development only):
 curl -X POST http://localhost/api/auth/dev-verify -H "Content-Type: application/json" -d '{"email":"test@example.com"}'
 Login successfully:
 curl -X POST http://localhost/api/auth/login -H "Content-Type: application/json" -d '{"email":"test@example.com","password":"SecurePass123!"}'
+
+# JS bundled file inspection (used to verify caching issues)
+ curl -Ik https://localhost/assets/app.js
 
 
 AI context:

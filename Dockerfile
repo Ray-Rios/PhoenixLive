@@ -59,7 +59,7 @@
         # Copy assets and build them
         # -------------------------------
             COPY assets ./assets
-            RUN cd assets && npm install
+            RUN cd assets && npm cache clean --force && npm install
             
             # Build assets based on environment
             RUN if [ "$MIX_ENV" = "prod" ]; then \

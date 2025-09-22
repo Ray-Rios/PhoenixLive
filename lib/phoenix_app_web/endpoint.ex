@@ -16,7 +16,9 @@ defmodule PhoenixAppWeb.Endpoint do
   plug Plug.Static,
     at: "/",
     from: :phoenix_app,
-    gzip: false,
+    gzip: true,
+    brotli: true,
+    cache_control_for_etags: "public, max-age=31536000",
     only: ~w(assets css js fonts images favicon.ico robots.txt uploads)
 
   if code_reloading? do

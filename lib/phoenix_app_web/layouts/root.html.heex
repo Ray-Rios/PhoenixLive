@@ -8,29 +8,15 @@
       <%= assigns[:page_title] || "… . . ᘛ⁐̤ᕐᐷ" %>
     </.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
+    
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
     </script>
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
     <style>
-      /* Ensure Alpine.js elements are hidden before Alpine loads */
-      [x-cloak] { display: none !important; }
-      
-      /* Custom dropdown positioning */
-      .dropdown-menu {
-        right: 15px;
-        top: calc(100% + 6px);
-      }
-      
-      /* Ensure dropdown stays hidden until Alpine.js shows it */
-      .dropdown-menu.hidden {
-        display: none !important;
-      }
-      
       /* Flash notice positioning */
       .flash-notice {
         right: 15px;
-        top: calc(47px + 2px);
+        top: calc(30px + 2px);
       }
     </style>
 

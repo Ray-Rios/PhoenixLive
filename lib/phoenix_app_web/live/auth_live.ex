@@ -570,7 +570,7 @@ defmodule PhoenixAppWeb.AuthLive do
               <% end %>
             </div>
           <% end %>
-        </div>
+          </div>
       </div>
     """
   end

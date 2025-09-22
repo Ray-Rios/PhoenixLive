@@ -11,6 +11,8 @@ class QuestEngine {
     this.bullets = [];
     this.isTyping = false;
     this.lastShot = 0;
+    this.lastMoveUpdate = 0; // Add throttling for movement updates
+    this.moveUpdateDelay = 100; // Update position every 100ms instead of every frame
     
     this.init();
   }
@@ -151,7 +153,16 @@ class QuestEngine {
     }
     
     if (moved) {
-      this.hook.pushEvent('move_player', { x: Math.floor(newX), y: Math.floor(newY) });
+      // Update local position immediately for smooth movement
+      this.players[this.currentPlayerId].x = newX;
+      this.players[this.currentPlayerId].y = newY;
+      
+      // Throttle server updates to reduce log spam
+      const now = Date.now();
+      if (now - this.lastMoveUpdate > this.moveUpdateDelay) {
+        this.hook.pushEvent('move_player', { x: Math.floor(newX), y: Math.floor(newY) });
+        this.lastMoveUpdate = now;
+      }
     }
   }
   

@@ -15,7 +15,8 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   secret_key_base: (System.get_env("SECRET_KEY_BASE") ||
     raise("SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`")),
   live_view: [signing_salt: (System.get_env("LIVE_VIEW_SIGNING_SALT") ||
-    raise("LIVE_VIEW_SIGNING_SALT is missing"))]
+    raise("LIVE_VIEW_SIGNING_SALT is missing"))],
+  cache_static_manifest: "priv/static/cache_manifest.json"
 
 # CORS origins for production
 config :cors_plug,

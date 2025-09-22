@@ -5,6 +5,19 @@
 /* Import Babylon.js styles */
 @import "./babylon.css";
 
+/* Alpine.js dropdown fix - ensure dropdowns are hidden by default until Alpine.js loads */
+[x-cloak] { 
+  display: none !important; 
+}
+
+.dropdown-menu {
+  display: none;
+}
+
+.dropdown-menu[x-show="open"][style*="display: block"] {
+  display: block !important;
+}
+
 /* Custom CSS for avatar shapes */
 .triangle {
   width: 0;

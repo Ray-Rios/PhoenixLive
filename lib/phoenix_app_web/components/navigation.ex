@@ -12,7 +12,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
       </svg>
     </button>
 
-    <nav id="main-navbar" class="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 fixed top-0 left-0 z-50 w-full h-[47px] transition-transform duration-300 ease-in-out">
+    <nav id="main-navbar" class="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 fixed top-0 left-0 z-50 w-full h-[30px] transition-transform duration-300 ease-in-out">
       <div class="px-4">
         <div class="flex top-8 justify-between items-center">
           <!-- Left side - Logo and main navigation -->
@@ -51,8 +51,13 @@ defmodule PhoenixAppWeb.Components.Navigation do
           <div class="flex items-center space-x-2 flex-shrink-0" style="margin-right: 25px;">
             <%= if @current_user do %>
               <!-- User Avatar and Dropdown -->
-              <div class="relative" x-data="{ open: false }" x-init="open = false" @click.away="open = false">
-                <button @click="open = !open" class="flex items-center space-x-1 text-white hover:text-blue-400 transition-colors duration-300 min-w-0">
+              <.live_component 
+                module={PhoenixAppWeb.Components.Dropdown}
+                id="user-dropdown"
+                trigger_class="flex items-center space-x-1 text-white hover:text-blue-400 transition-colors duration-300 min-w-0"
+                dropdown_class="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50"
+              >
+                <:trigger>
                   <%= if get_user_avatar_url(@current_user) do %>
                     <img src={get_user_avatar_url(@current_user)} alt="Avatar" class="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                   <% else %>
@@ -65,18 +70,8 @@ defmodule PhoenixAppWeb.Components.Navigation do
                   <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                   </svg>
-                </button>
-                
-                <!-- Dropdown Menu -->
-                <div x-show="open" 
-                     x-cloak
-                     class="absolute dropdown-menu w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50"
-                     x-transition:enter="transition ease-out duration-200"
-                     x-transition:enter-start="transform translate-x-full opacity-0"
-                     x-transition:enter-end="transform translate-x-0 opacity-100"
-                     x-transition:leave="transition ease-in duration-150"
-                     x-transition:leave-start="transform translate-x-0 opacity-100"
-                     x-transition:leave-end="transform translate-x-full opacity-0">
+                </:trigger>
+                <:content>
                   <.link navigate={~p"/profile"} class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
                     👤 Profile Settings
                   </.link>
@@ -92,8 +87,8 @@ defmodule PhoenixAppWeb.Components.Navigation do
                   <.link navigate={~p"/auth/logout"} class="block px-4 py-2 text-sm text-red-300 hover:bg-gray-700 hover:text-red-200">
                     🚪 Logout
                   </.link>
-                </div>
-              </div>
+                </:content>
+              </.live_component>
             <% else %>
               <!-- Login/Register buttons -->
               <.link navigate={~p"/login"} class="text-white hover:text-blue-400 transition-colors duration-300">
@@ -114,11 +109,11 @@ defmodule PhoenixAppWeb.Components.Navigation do
         const icon = document.getElementById('nav-toggle-icon');
         const body = document.body;
         
-        if (navbar.style.transform === 'translateY(-80%)') {
+        if (navbar.style.transform === 'translateY(-100%)') {
           // Show navbar
           navbar.style.transform = 'translateY(0)';
           icon.style.transform = 'rotate(0deg)';
-          body.style.paddingTop = '50px';
+          body.style.paddingTop = '30px';
         } else {
           // Hide navbar
           navbar.style.transform = 'translateY(-100%)';
@@ -129,7 +124,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
       
       // Initialize navbar state
       document.addEventListener('DOMContentLoaded', function() {
-        document.body.style.paddingTop = '50px';
+        document.body.style.paddingTop = '30px';
       });
     </script>
     """
