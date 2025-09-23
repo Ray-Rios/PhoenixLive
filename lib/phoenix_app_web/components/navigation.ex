@@ -5,7 +5,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
     ~H"""
     <!-- Navigation Toggle Button -->
     <button id="nav-toggle" 
-            class="fixed top-0 right-0 z-[60] bg-gray-800 hover:bg-gray-700 text-white p-2 pr-4 shadow-lg transition-all duration-300"
+            class="fixed top-0 right-0 z-[60] bg-gray-800 hover:bg-gray-700 text-white p-2 pr-2 shadow-lg transition-all duration-300"
             onclick="toggleNavbar()">
       <svg id="nav-toggle-icon" class="w-3 h-3 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
@@ -22,7 +22,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
             </.link>
             <div class="hidden lg:flex space-x-4 flex-1 justify-center">
               <.link navigate={~p"/shop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                Shop
+                💰 Shop
               </.link>
               <.link navigate={~p"/cart"} class="text-white hover:text-blue-400 transition-colors duration-300 relative text-sm">
                 🛒 Cart
@@ -33,16 +33,16 @@ defmodule PhoenixAppWeb.Components.Navigation do
                 <% end %>
               </.link>
               <.link navigate={~p"/chat"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                💬 Chat
+                🎭 Chat
               </.link>
-              <.link navigate={~p"/quest"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                🎮 Quest
+              <.link navigate={~p"/dashboard"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
+                🍖 dashboard
               </.link>
-              <.link navigate={~p"/desktop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                🖥️ Desktop
+              <.link navigate={~p"/lobby"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
+                ⛺ Lobby
               </.link>
               <.link navigate={~p"/blog"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                📝 Blog
+                🚬 Blog
               </.link>
             </div>
           </div>
@@ -85,7 +85,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
                   <% end %>
                   <hr class="border-gray-600 my-1">
                   <.link navigate={~p"/auth/logout"} class="block px-4 py-2 text-sm text-red-300 hover:bg-gray-700 hover:text-red-200">
-                    🚪 Logout
+                    😎 Logout
                   </.link>
                 </:content>
               </.live_component>
@@ -94,7 +94,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
               <.link navigate={~p"/login"} class="text-white hover:text-blue-400 transition-colors duration-300">
                 Login
               </.link>
-              <.link navigate={~p"/register"} class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-300">
+              <.link navigate={~p"/register"} class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-2 transition-colors duration-300">
                 Register
               </.link>
             <% end %>
@@ -107,24 +107,31 @@ defmodule PhoenixAppWeb.Components.Navigation do
       function toggleNavbar() {
         const navbar = document.getElementById('main-navbar');
         const icon = document.getElementById('nav-toggle-icon');
-        const body = document.body;
+        const pageContent = document.querySelector('.page-content');
+        const chatContainer = document.querySelector('.chat-container');
         
         if (navbar.style.transform === 'translateY(-100%)') {
           // Show navbar
           navbar.style.transform = 'translateY(0)';
           icon.style.transform = 'rotate(0deg)';
-          body.style.paddingTop = '30px';
+          if (pageContent) pageContent.classList.remove('navbar-hidden');
+          if (chatContainer) chatContainer.classList.remove('navbar-hidden');
         } else {
           // Hide navbar
           navbar.style.transform = 'translateY(-100%)';
           icon.style.transform = 'rotate(180deg)';
-          body.style.paddingTop = '0px';
+          if (pageContent) pageContent.classList.add('navbar-hidden');
+          if (chatContainer) chatContainer.classList.add('navbar-hidden');
         }
       }
       
       // Initialize navbar state
       document.addEventListener('DOMContentLoaded', function() {
-        document.body.style.paddingTop = '30px';
+        // Ensure content has proper spacing for navbar
+        const pageContent = document.querySelector('.page-content');
+        if (pageContent) pageContent.classList.remove('navbar-hidden');
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) chatContainer.classList.remove('navbar-hidden');
       });
     </script>
     """

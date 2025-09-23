@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.UnrealLive do
   use PhoenixAppWeb, :live_view
   alias Phoenix.PubSub
+  import PhoenixAppWeb.Components.PageWrapper
 
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
@@ -145,7 +146,8 @@ defmodule PhoenixAppWeb.UnrealLive do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
+    <.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div class="starry-background chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
       <div class="stars-container">
         <div class="stars"></div>
         <div class="stars2"></div>
@@ -385,7 +387,8 @@ defmodule PhoenixAppWeb.UnrealLive do
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </.page_with_navbar>
     """
   end
 end

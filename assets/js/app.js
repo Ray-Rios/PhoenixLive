@@ -27,6 +27,10 @@ import { FileDragDrop, FileUpload } from "./file_drag_drop";
 // Import Babylon.js hooks
 import { BabylonScene } from "./babylon/babylon_hooks"
 import { LobbyScene } from "./babylon/lobby_hooks";
+import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
+
+// Import terminal typewriter effect
+import { TerminalTypewriter } from "./terminal_typewriter";
 
 // Import CAPTCHA hook
 import { HCaptcha } from "./hcaptcha";
@@ -170,10 +174,12 @@ let Hooks = {
   FileUpload,
   BabylonScene,
   LobbyScene,
+  HomeGalaxyScene,
   FlashNotification,
   HCaptcha,
   FormHandler,
-  FormPreserver
+  FormPreserver,
+  TerminalTypewriter
 };
 
 let liveSocket = new LiveSocket("/live", Socket, {

@@ -57,6 +57,14 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
           redirect_to: "login"
         })
 
+      {:error, :username_taken, message} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          success: false,
+          message: message
+        })
+
       {:error, rate_limit_message} when is_binary(rate_limit_message) ->
         conn
         |> put_status(:too_many_requests)

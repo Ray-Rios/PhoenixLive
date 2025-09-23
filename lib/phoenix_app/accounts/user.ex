@@ -98,6 +98,9 @@ defmodule PhoenixApp.Accounts.User do
     |> validate_length(:name, min: 2, max: 100)
     |> validate_format(:name, ~r/^[a-zA-Z0-9\s\-_\.]+$/, 
         message: "Name can only contain letters, numbers, spaces, hyphens, underscores, and periods")
+    |> unique_constraint(:name, 
+        name: :users_name_unique_index,
+        message: "This username is already taken. Please choose a different one.")
   end
 
   # Generate email verification token
@@ -248,12 +251,26 @@ defmodule PhoenixApp.Accounts.User do
   end
 
   # Generate password reset token
-  def password_reset_changeset(user) do
-    token = :crypto.strong_rand_bytes(32) |> Base.url_encode64()
+  def password_reset_changeset(user, attrs \\ %{}) do
+    token = attrs["password_reset_token"] || attrs[:password_reset_token] || 
+            (:crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false))
+    sent_at = attrs["password_reset_sent_at"] || attrs[:password_reset_sent_at] ||
+              (DateTime.utc_now() |> DateTime.truncate(:second))
+    
     user
     |> change()
     |> put_change(:password_reset_token, token)
-    |> put_change(:password_reset_sent_at, DateTime.utc_now() |> DateTime.truncate(:second))
+    |> put_change(:password_reset_sent_at, sent_at)
+  end
+
+  # Update password and clear reset token
+  def password_update_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:password])
+    |> validate_password()
+    |> put_password_hash()
+    |> put_change(:password_reset_token, nil)
+    |> put_change(:password_reset_sent_at, nil)
   end
 
   # Verify email changeset

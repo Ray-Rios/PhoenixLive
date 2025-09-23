@@ -49,7 +49,7 @@ defmodule PhoenixAppWeb.Api.ApiController do
         |> put_resp_header("content-type", "application/json")
         |> json(response)
 
-      {:error, changeset} ->
+      {:error, _changeset} ->
         response = %{
           success: false,
           data: nil,

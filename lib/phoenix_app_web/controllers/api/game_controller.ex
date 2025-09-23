@@ -1,7 +1,5 @@
 defmodule PhoenixAppWeb.Api.GameController do
   use PhoenixAppWeb, :controller
-  alias PhoenixApp.Accounts
-  alias PhoenixApp.EqemuGame
 
   # GET /api/game/profile - Get current user profile
   def get_profile(conn, _params) do

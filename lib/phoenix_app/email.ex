@@ -1,0 +1,22 @@
+defmodule PhoenixApp.Email do
+  @moduledoc """
+  Main email interface module that wraps the Email.Service functionality.
+  """
+
+  alias PhoenixApp.Email.Service
+
+  def send_password_reset_email(%{password_reset_token: token} = user) when not is_nil(token) do
+    case Service.send_password_reset_email(user, token) do
+      {:ok, _} -> {:ok, "Password reset email sent"}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def send_password_reset_email(_user) do
+    {:error, "No password reset token found"}
+  end
+
+  def send_verification_email(user, verification_code) do
+    Service.send_verification_email(user, verification_code)
+  end
+end

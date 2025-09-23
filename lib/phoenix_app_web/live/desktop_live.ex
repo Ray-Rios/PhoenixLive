@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.DesktopLive do
   use PhoenixAppWeb, :live_view
   alias Phoenix.PubSub
+  import PhoenixAppWeb.Components.PageWrapper
 
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
 
@@ -316,7 +317,8 @@ defmodule PhoenixAppWeb.DesktopLive do
 
   def render(assigns) do
     ~H"""
-    <div class="desktop-container starry-background">
+    <.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div class="desktop-container starry-background">
 
       <div class="stars-container">
         <div class="stars"></div>
@@ -520,7 +522,8 @@ defmodule PhoenixAppWeb.DesktopLive do
           <span><%= Date.utc_today() |> Calendar.strftime("%m/%d/%Y") %></span>
         </div>
       </div>
-    </div>
+      </div>
+    </.page_with_navbar>
     """
   end
 end

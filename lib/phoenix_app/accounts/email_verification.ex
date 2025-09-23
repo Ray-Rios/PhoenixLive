@@ -60,8 +60,8 @@ defmodule PhoenixApp.Accounts.EmailVerification do
 
     case Repo.one(query) do
       %User{} = user ->
-        # In dev mode, generate code from token for comparison
-        expected_code = if get_env() == "dev" and user.email_verification_token do
+        # Generate expected code from token for comparison (works for both dev and prod)
+        expected_code = if user.email_verification_token do
           user.email_verification_token
           |> String.slice(0, 6)
           |> String.to_charlist()
@@ -70,12 +70,11 @@ defmodule PhoenixApp.Accounts.EmailVerification do
           |> Enum.join()
           |> String.pad_leading(6, "0")
         else
-          # In production, you'd store the actual 6-digit code in the database
-          # For now, we'll accept any 6-digit code in prod (you should implement proper code storage)
-          code
+          # No token available
+          nil
         end
 
-        if code == expected_code do
+        if expected_code && code == expected_code do
           user
           |> User.verify_email_changeset()
           |> Repo.update()

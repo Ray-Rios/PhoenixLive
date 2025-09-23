@@ -70,7 +70,12 @@ class QuestEngine {
       const y = (e.clientY - rect.top) * scaleY;
       
       if (this.currentPlayerId && this.players[this.currentPlayerId]) {
-        this.hook.pushEvent('move_player', { x: Math.floor(x), y: Math.floor(y) });
+        // Use the same throttling mechanism for click movements
+        const now = Date.now();
+        if (now - this.lastMoveUpdate > this.moveUpdateDelay) {
+          this.hook.pushEvent('move_player', { x: Math.floor(x), y: Math.floor(y) });
+          this.lastMoveUpdate = now;
+        }
       }
     });
   }

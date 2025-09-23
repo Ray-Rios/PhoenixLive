@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.BlogLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
+  alias PhoenixAppWeb.Components.PageWrapper
 
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
 
@@ -52,7 +53,8 @@ defmodule PhoenixAppWeb.BlogLive do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background w-full">
+    <PageWrapper.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div class="starry-background w-full">
       <div class="max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px]">
         <div class="stars-container">
           <div class="stars"></div>
@@ -196,6 +198,7 @@ defmodule PhoenixAppWeb.BlogLive do
         }
       }, 5000);
     </script>
+    </PageWrapper.page_with_navbar>
     """
   end
 end

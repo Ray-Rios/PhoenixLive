@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.LobbyLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.PresenceTracker
+  import PhoenixAppWeb.Components.PageWrapper
 
   @impl true
   def mount(_params, _session, socket) do
@@ -172,17 +173,18 @@ defmodule PhoenixAppWeb.LobbyLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="lobby-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000;">
-      <!-- Main 3D Scene -->
-      <div id="scene-wrapper" style="width: 100%; height: 100%;">
-        <canvas id="lobby-scene"
-                phx-hook="LobbyScene"
-                data-scene-config={Jason.encode!(@scene_config)}
-                data-user={Jason.encode!(@user)}
-                data-panels={Jason.encode!(@active_panels)}
-                style="display: block; cursor: crosshair; image-rendering: pixelated; width: 100%; height: 100%;">
-        </canvas>
-      </div>
+    <.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div id="lobby-container" style="position: fixed; top: 30px; left: 0; width: 100vw; height: calc(100vh - 30px); background: #000;">
+        <!-- Main 3D Scene -->
+        <div id="scene-wrapper" style="width: 100%; height: 100%;">
+          <canvas id="lobby-scene"
+                  phx-hook="LobbyScene"
+                  data-scene-config={Jason.encode!(@scene_config)}
+                  data-user={Jason.encode!(@user)}
+                  data-panels={Jason.encode!(@active_panels)}
+                  style="display: block; cursor: crosshair; image-rendering: pixelated; width: 100%; height: 100%;">
+          </canvas>
+        </div>
 
       <!-- UI Overlay -->
       <div id="lobby-ui" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100;">
@@ -280,7 +282,8 @@ defmodule PhoenixAppWeb.LobbyLive do
                 style="position: absolute; left: -9999px; width: 800px; height: 600px; border: none; background: white;">
         </iframe>
       <% end %>
-    </div>
+      </div>
+    </.page_with_navbar>
     """
   end
 

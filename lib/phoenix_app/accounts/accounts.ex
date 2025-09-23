@@ -23,10 +23,29 @@ defmodule PhoenixApp.Accounts do
   def register_user(attrs, opts \\ []) do
     ip_address = Keyword.get(opts, :ip_address)
     email = String.trim(attrs["email"] || "")
+    username = String.trim(attrs["name"] || "")
     
-    # Check if user already exists with this email (with proper email normalization)
-    case get_user_by_email(email) do
-      nil ->
+    # Check if user already exists with this email or username
+    cond do
+      get_user_by_email(email) != nil ->
+        existing_user = get_user_by_email(email)
+        # Check if email is verified - allow re-registration if not verified
+        if existing_user.email_verified_at do
+          {:error, :email_taken, "An account with this email address already exists."}
+        else
+          # Email not verified, resend verification email
+          case PhoenixApp.Accounts.EmailVerification.send_verification_email(existing_user) do
+            {:ok, message} ->
+              {:ok, existing_user, message}
+            {:error, _email_error} ->
+              {:ok, existing_user, "Please check your email for the verification code."}
+          end
+        end
+      
+      get_user_by_username(username) != nil ->
+        {:error, :username_taken, "This username is already taken. Please choose a different one."}
+      
+      true ->
         # No existing user, proceed with normal registration
         with :ok <- check_registration_rate_limit(ip_address),
              {:ok, user} <- create_user_with_verification(attrs, ip_address) do
@@ -44,43 +63,20 @@ defmodule PhoenixApp.Accounts do
           end
         else
           {:error, %Ecto.Changeset{} = changeset} ->
-            # Check if this is a unique constraint error for email
+            # Check if this is a unique constraint error
             case changeset.errors do
               [email: {_msg, [constraint: :unique, constraint_name: _]}] ->
-                # This could happen in a race condition, re-check for existing user
-                case get_user_by_email(email) do
-                  nil -> {:error, changeset}  # Still no user found, return original error
-                  existing_user -> handle_existing_user_registration(existing_user)
-                end
+                {:error, :email_taken, "An account with this email address already exists."}
+              [name: {_msg, [constraint: :unique, constraint_name: _]}] ->
+                {:error, :username_taken, "This username is already taken. Please choose a different one."}
               _ ->
                 {:error, changeset}
             end
           error ->
             error
         end
-        
-      existing_user ->
-        handle_existing_user_registration(existing_user)
     end
   end
-  
-  defp handle_existing_user_registration(existing_user) do
-    # User exists, check if email is verified
-    if existing_user.email_verified_at do
-      # Email is already verified, return normal error
-      {:error, :email_already_exists_verified}
-    else
-      # Email is not verified, allow "re-registration" by redirecting to verification
-      # Resend verification email for convenience
-      case PhoenixApp.Accounts.EmailVerification.send_verification_email(existing_user) do
-        {:ok, message} ->
-          {:ok, existing_user, message}
-        {:error, _email_error} ->
-          {:ok, existing_user, "Please check your email for the verification code."}
-      end
-    end
-  end
-
   defp check_registration_rate_limit(nil), do: :ok
   defp check_registration_rate_limit(ip_address) do
     PhoenixApp.Accounts.RateLimit.check_registration_limit(ip_address)
@@ -143,6 +139,22 @@ defmodule PhoenixApp.Accounts do
   # Get user by email
   # ---------------------
   def get_user_by_email(email) when is_binary(email), do: Repo.get_by(User, email: email)
+
+  # ---------------------
+  # Get user by username (name field)
+  # ---------------------
+  def get_user_by_username(username) when is_binary(username), do: Repo.get_by(User, name: username)
+
+  # ---------------------
+  # Check if username is available
+  # ---------------------
+  def username_available?(username) when is_binary(username) do
+    username = String.trim(username)
+    case get_user_by_username(username) do
+      nil -> true
+      _user -> false
+    end
+  end
 
   # ---------------------
   # Get user by email or username  
@@ -533,6 +545,109 @@ defmodule PhoenixApp.Accounts do
       end
     rescue
       _ -> {:error, :invalid_token}
+    end
+  end
+
+  # ---------------------
+  # Password Reset Functions
+  # ---------------------
+  
+  def send_password_reset_email(identifier, ip_address \\ nil) when is_binary(identifier) do
+    identifier = String.trim(identifier)
+    
+    # Check rate limiting first (use email/username for rate limiting)
+    with :ok <- check_password_reset_rate_limit(identifier) do
+      # Find user by email or username
+      case get_user_by_email_or_username(identifier) do
+        nil ->
+          # Don't reveal if user exists or not - always return success message
+          # But record the attempt for rate limiting
+          PhoenixApp.Accounts.RateLimit.record_password_reset_attempt(identifier)
+          {:ok, "If an account with that email/username exists, you should receive an email with instructions shortly."}
+          
+        %User{} = user ->
+          # Generate reset token and send email
+          with {:ok, user_with_token} <- generate_password_reset_token(user) do
+            case PhoenixApp.Email.send_password_reset_email(user_with_token) do
+              {:ok, _} -> 
+                # Record the attempt for rate limiting (use the identifier, not IP)
+                PhoenixApp.Accounts.RateLimit.record_password_reset_attempt(identifier)
+                {:ok, "If an account with that email/username exists, you should receive an email with instructions shortly."}
+              {:error, reason} ->
+                {:error, "Unable to send password reset email. Please try again later."}
+            end
+          else
+            {:error, changeset} ->
+              {:error, "Unable to send password reset email. Please try again later."}
+          end
+      end
+    else
+      {:error, :rate_limited} ->
+        {:error, :rate_limited}
+    end
+  end
+
+  defp generate_password_reset_token(%User{} = user) do
+    # Generate a secure random token
+    token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+    
+    # Update user with token and timestamp
+    changeset = User.password_reset_changeset(user, %{
+      password_reset_token: token,
+      password_reset_sent_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    
+    case Repo.update(changeset) do
+      {:ok, updated_user} -> {:ok, updated_user}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  def reset_password_with_token(token, new_password) when is_binary(token) and is_binary(new_password) do
+    with %User{} = user <- get_user_by_reset_token(token),
+         :ok <- validate_reset_token_expiry(user),
+         {:ok, updated_user} <- update_user_password_and_clear_token(user, new_password) do
+      {:ok, updated_user}
+    else
+      nil -> {:error, :invalid_token}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def get_user_by_reset_token(token) when is_binary(token) do
+    Repo.get_by(User, password_reset_token: token)
+  end
+
+  def validate_reset_token_expiry(%User{password_reset_sent_at: nil}), do: {:error, :invalid_token}
+  def validate_reset_token_expiry(%User{password_reset_sent_at: sent_at}) do
+    # Token expires after 1 hour
+    expiry_time = DateTime.add(sent_at, 3600, :second)
+    
+    if DateTime.compare(DateTime.utc_now(), expiry_time) == :lt do
+      :ok
+    else
+      {:error, :token_expired}
+    end
+  end
+
+  defp update_user_password_and_clear_token(%User{} = user, new_password) do
+    changeset = User.password_update_changeset(user, %{
+      password: new_password,
+      password_reset_token: nil,
+      password_reset_sent_at: nil
+    })
+    
+    case Repo.update(changeset) do
+      {:ok, updated_user} -> {:ok, updated_user}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp check_password_reset_rate_limit(nil), do: :ok
+  defp check_password_reset_rate_limit(identifier) do
+    case PhoenixApp.Accounts.RateLimit.check_password_reset_limit(identifier) do
+      :ok -> :ok
+      :rate_limited -> {:error, :rate_limited}
     end
   end
 end

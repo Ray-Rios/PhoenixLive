@@ -551,6 +551,21 @@ defmodule PhoenixAppWeb.AuthLive do
             
           <% else %>
             <!-- Login/Register Form -->
+            <!-- Back to Home Link (only show on login) -->
+            <%= if @action == :login do %>
+              <div class="mb-4">
+                <.link 
+                  navigate={~p"/"} 
+                  class="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors text-sm"
+                >
+                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                  </svg>
+                  Back to Home
+                </.link>
+              </div>
+            <% end %>
+            
             <h2 class="text-3xl font-bold text-white text-center mb-6">
               <%= if @action == :login, do: "Sign In", else: "Create Account" %>
             </h2>
@@ -605,6 +620,15 @@ defmodule PhoenixAppWeb.AuthLive do
                   placeholder="Enter your password"
                 />
               </div>
+
+              <!-- Forgot Password Link (only show on login) -->
+              <%= if @action == :login do %>
+                <div class="text-right">
+                  <.link navigate={~p"/forgot-password"} class="text-sm text-blue-400 hover:text-blue-300 transition-colors duration-300">
+                    Forgot your password?
+                  </.link>
+                </div>
+              <% end %>
               
               <!-- CAPTCHA Widget -->
               <%= if @show_captcha do %>

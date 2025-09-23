@@ -2,6 +2,7 @@ defmodule PhoenixAppWeb.QuestLive do
   use PhoenixAppWeb, :live_view
   # Accounts alias removed - not used
   alias Phoenix.PubSub
+  import PhoenixAppWeb.Components.PageWrapper
 
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
 
@@ -20,7 +21,8 @@ defmodule PhoenixAppWeb.QuestLive do
         message: nil,
         message_time: nil,
         avatar_url: user.avatar_url,
-        last_seen: System.system_time(:millisecond)
+        last_seen: System.system_time(:millisecond),
+        last_move_update: 0
       }
 
       PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_joined, player})
@@ -39,11 +41,25 @@ defmodule PhoenixAppWeb.QuestLive do
   def handle_event("move_player", %{"x" => x, "y" => y}, socket) do
     user = socket.assigns.user
     player = socket.assigns.players[user.id]
+    current_time = System.system_time(:millisecond)
 
-    updated_player = %{player | x: x, y: y}
-    PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_moved, updated_player})
+    # Server-side rate limiting: only process move updates every 200ms (5 updates per second)
+    min_update_interval = 200
 
-    {:noreply, assign(socket, players: Map.put(socket.assigns.players, user.id, updated_player))}
+    if current_time - player.last_move_update >= min_update_interval do
+      updated_player = %{player | 
+        x: x, 
+        y: y, 
+        last_seen: current_time,
+        last_move_update: current_time
+      }
+      
+      PubSub.broadcast(PhoenixApp.PubSub, "galaxy:quest", {:player_moved, updated_player})
+      {:noreply, assign(socket, players: Map.put(socket.assigns.players, user.id, updated_player))}
+    else
+      # Ignore the update if it's too frequent
+      {:noreply, socket}
+    end
   end
 
   def handle_event("send_message", %{"message" => message}, socket) when message != "" do
@@ -140,18 +156,18 @@ defmodule PhoenixAppWeb.QuestLive do
 
   def render(assigns) do
     ~H"""
-    
-    <div id="game-wrapper" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; overflow: hidden; z-index: 1000; background: #000011;">
-      <canvas 
-        id="quest-canvas"
-        phx-hook="QuestGame"
-        data-players={Jason.encode!(@players)}
-        data-current-player={@user.id}
-        width="1920"
-        height="1080"
-        style="display: block; cursor: crosshair; image-rendering: pixelated; transform-origin: top left;">
-      </canvas>
-    </div>
+    <.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div id="game-wrapper" style="position: fixed; top: 30px; left: 0; width: 100vw; height: calc(100vh - 30px); overflow: hidden; z-index: 1000; background: #000011;">
+        <canvas 
+          id="quest-canvas"
+          phx-hook="QuestGame"
+          data-players={Jason.encode!(@players)}
+          data-current-player={@user.id}
+          width="1920"
+          height="1080"
+          style="display: block; cursor: crosshair; image-rendering: pixelated; transform-origin: top left;">
+        </canvas>
+      </div>
 
     <div id="chat-overlay" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1001;">
       <form phx-submit="send_message" style="display: flex; gap: 10px; background: rgba(0,0,0,0.9); padding: 12px; border-radius: 25px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
@@ -193,6 +209,7 @@ defmodule PhoenixAppWeb.QuestLive do
         image-rendering: crisp-edges;
       }
     </style>
+    </.page_with_navbar>
     """
   end
 end

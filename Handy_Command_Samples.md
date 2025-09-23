@@ -5,6 +5,25 @@ LIVE_VIEW_SIGNING_SALT= $(mix phx.gen.secret 32)
 GUARDIAN_SECRET_KEY= $(mix_guardian.gen.secret)
 
 ## 🔧 Docker stuff 🔧 ##
+# Recommended: Phoenix-specific cleanup only
+./cleanup-docker.sh phoenix
+
+# Preview what will be cleaned
+./cleanup-docker.sh preview
+
+# Clean containers only (keeps images/volumes)
+./cleanup-docker.sh containers
+
+# Nuclear option (destroys everything - requires confirmation)
+./cleanup-docker.sh nuclear
+
+# Manual selective cleanup commands:
+docker images --filter=reference="phoenixapp*" -q | xargs -r docker rmi -f  # Remove Phoenix images only
+docker container prune -f  # Remove stopped containers
+docker image prune -f      # Remove dangling images
+docker builder prune -f    # Clean build cache
+
+# Old destructive commands (use with caution):
 docker builder prune -f && ./deploy.sh
 docker system prune -a -f
 docker volume prune -a -f
@@ -20,9 +39,9 @@ kubectl get all -n phoenixapp"
 kubectl get certificates -n phoenixapp"
 kubectl get svc -n ingress-nginx -o wide
 kubectl describe deployment phoenix-web -n phoenixapp-dev
-kubectl describe ingress phoenix-ingress -n phoenixapp"
+kubectl describe ingress phoenix-ingress -n phoenixapp
 kubectl logs -n phoenixapp-dev deploy/phoenix-web
-kubectl logs -f deployment/phoenix-web -n phoenixapp"
+kubectl logs -f deployment/phoenix-web -n phoenixapp
 kubectl logs phoenix-web-766545c5d5-4hmfj -n phoenixapp -f
 kubectl exec phoenix-web-77fc6746cd-vqc7m -n phoenixapp-dev -- mix ecto.migrate
 kubectl cp pvc postgres-pvc -n phoenixapp-dev

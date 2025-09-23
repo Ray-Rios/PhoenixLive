@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
-
-echo "🚀 Phoenix Production Deployment Script"
+echo "🧹 Cleaning up old deployment..."
+kubectl delete namespace phoenixapp --ignore-not-found=true
+echo "🚀 Deploying Production"
 echo "======================================"
 
 # Colors for output

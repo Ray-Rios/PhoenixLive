@@ -37,6 +37,7 @@ defmodule PhoenixApp.MixProject do
       {:phoenix_live_dashboard, "~> 0.8.0"},
       {:esbuild, "~> 0.7", runtime: Mix.env() == :dev},
       {:swoosh, "~> 1.3"},
+      {:gen_smtp, "~> 1.0"},
       {:finch, "~> 0.13"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_poller, "~> 1.0"},

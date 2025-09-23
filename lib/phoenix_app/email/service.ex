@@ -255,44 +255,131 @@ defmodule PhoenixApp.Email.Service do
   end
 
   # Development email handling
+  # Development email sending (using Swoosh + Mailhog)
   defp send_via_dev(to_email, subject, template_data, template_type) do
-    case template_type do
+    import Swoosh.Email
+    alias PhoenixApp.Mailer
+    
+    from_email = get_from_email()
+    from_name = get_from_name()
+    
+    # Create email based on template type
+    email = case template_type do
       :verification ->
         %{verification_code: code} = template_data
-        
-        IO.puts("""
-        
-        📧 DEV EMAIL VERIFICATION
-        ========================
-        To: #{to_email}
-        Subject: #{subject}
-        
-        Your verification code is: #{code}
-        
-        This email would be sent via SendGrid in production.
-        Check Mailhog at: http://localhost:8025
-        ========================
-        """)
+        new()
+        |> to(to_email)
+        |> from({from_name, from_email})
+        |> subject(subject)
+        |> html_body(verification_html_dev(template_data))
+        |> text_body("Your verification code is: #{code}")
         
       :password_reset ->
         %{reset_url: url} = template_data
-        
-        IO.puts("""
-        
-        📧 DEV PASSWORD RESET
-        ====================
-        To: #{to_email}
-        Subject: #{subject}
-        
-        Reset your password at: #{url}
-        
-        This email would be sent via SendGrid in production.
-        Check Mailhog at: http://localhost:8025
-        ====================
-        """)
+        new()
+        |> to(to_email)
+        |> from({from_name, from_email})
+        |> subject(subject)
+        |> html_body(password_reset_html_dev(template_data))
+        |> text_body("Reset your password at: #{url}")
     end
+    
+    # Send via Swoosh (to Mailhog in development)
+    case Mailer.deliver(email) do
+      {:ok, _} -> 
+        # Also log to console for debugging
+        case template_type do
+          :verification ->
+            %{verification_code: code} = template_data
+            IO.puts("""
+            
+            📧 DEV EMAIL VERIFICATION (sent to Mailhog)
+            =============================================
+            To: #{to_email}
+            Subject: #{subject}
+            
+            Your verification code is: #{code}
+            
+            ✓ Email sent to Mailhog at: http://localhost:8025
+            =============================================
+            """)
+            
+          :password_reset ->
+            %{reset_url: url} = template_data
+            IO.puts("""
+            
+            📧 DEV PASSWORD RESET (sent to Mailhog)
+            =======================================
+            To: #{to_email}
+            Subject: #{subject}
+            
+            Reset your password at: #{url}
+            
+            ✓ Email sent to Mailhog at: http://localhost:8025
+            =======================================
+            """)
+        end
+        
+        {:ok, "Development email sent to Mailhog"}
+        
+      {:error, reason} ->
+        Logger.error("Failed to send development email: #{inspect(reason)}")
+        # Fall back to console logging
+        case template_type do
+          :verification ->
+            %{verification_code: code} = template_data
+            IO.puts("""
+            
+            📧 DEV EMAIL VERIFICATION (Mailhog failed, console only)
+            ========================================================
+            To: #{to_email}
+            Subject: #{subject}
+            
+            Your verification code is: #{code}
+            
+            ⚠️ Could not send to Mailhog, check if it's running
+            ========================================================
+            """)
+            
+          :password_reset ->
+            %{reset_url: url} = template_data
+            IO.puts("""
+            
+            📧 DEV PASSWORD RESET (Mailhog failed, console only)
+            ====================================================
+            To: #{to_email}
+            Subject: #{subject}
+            
+            Reset your password at: #{url}
+            
+            ⚠️ Could not send to Mailhog, check if it's running
+            ====================================================
+            """)
+        end
+        
+        {:ok, "Development email logged to console (Mailhog unavailable)"}
+    end
+  end
 
-    {:ok, "Development email logged to console"}
+  # HTML templates for development emails
+  defp verification_html_dev(%{user_name: name, verification_code: code}) do
+    """
+    <h2>Welcome to PhxLive!</h2>
+    <p>Hi #{name},</p>
+    <p>Your verification code is: <strong style="font-size: 24px; color: #3B82F6;">#{code}</strong></p>
+    <p>This code expires in 24 hours.</p>
+    """
+  end
+
+  defp password_reset_html_dev(%{user_name: name, reset_url: url}) do
+    """
+    <h2>Reset Your Password</h2>
+    <p>Hi #{name},</p>
+    <p>Click the link below to reset your password:</p>
+    <p><a href="#{url}" style="background: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Reset Password</a></p>
+    <p>This link expires in 1 hour.</p>
+    <p>If the button doesn't work, copy and paste this URL: #{url}</p>
+    """
   end
 
   defp get_sendgrid_api_key do
@@ -302,7 +389,7 @@ defmodule PhoenixApp.Email.Service do
 
   defp get_password_reset_url(token) do
     base_url = get_base_url()
-    "#{base_url}/auth/reset-password?token=#{token}"
+    "#{base_url}/reset-password?token=#{token}"
   end
 
   defp get_base_url do

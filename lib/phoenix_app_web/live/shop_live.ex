@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.ShopLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Commerce
+  alias PhoenixAppWeb.Components.PageWrapper
 
   on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
 
@@ -106,14 +107,15 @@ defmodule PhoenixAppWeb.ShopLive do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-      
-      <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
+    <PageWrapper.page_with_navbar current_user={@current_user} flash={@flash}>
+      <div class="starry-background chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
+        <div class="stars-container">
+          <div class="stars"></div>
+          <div class="stars2"></div>
+          <div class="stars3"></div>
+        </div>
+        
+        <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
         <!-- Product List View -->
         <div :if={@view != :product_detail}>
           <div class="flex justify-between items-center mb-8">
@@ -247,8 +249,9 @@ defmodule PhoenixAppWeb.ShopLive do
             </div>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </PageWrapper.page_with_navbar>
     """
   end
 end

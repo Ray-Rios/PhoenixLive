@@ -19,6 +19,8 @@ fi
 
 # ---- Docker build ----
 kubectl delete namespace phoenixapp-dev --ignore-not-found=true
+echo "🧹 Cleaning up old Phoenix Docker images..."
+docker images --filter=reference="phoenixapp*" -q | xargs -r docker rmi -f || true
 echo "🐳 Building Phoenix Docker image for $ENVIRONMENT..."
 #docker build --progress=plain -t "phoenixapp:$ENVIRONMENT" --build-arg "MIX_ENV=$ENVIRONMENT" .
 docker build -t "phoenixapp:$ENVIRONMENT" \

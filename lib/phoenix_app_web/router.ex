@@ -21,7 +21,7 @@ defmodule PhoenixAppWeb.Router do
     plug :accepts, ["json"]
     plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
                                   error_handler: PhoenixAppWeb.AuthErrorHandler
-    plug Guardian.Plug.VerifyHeader, realm: "Bearer"
+    plug Guardian.Plug.VerifyHeader, scheme: "Bearer"
     plug Guardian.Plug.LoadResource, allow_blank: true
     plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "auth_login"
   end
@@ -30,7 +30,7 @@ defmodule PhoenixAppWeb.Router do
     plug :accepts, ["json"]
     plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
                                   error_handler: PhoenixAppWeb.AuthErrorHandler
-    plug Guardian.Plug.VerifyHeader, realm: "Bearer"
+    plug Guardian.Plug.VerifyHeader, scheme: "Bearer"
     plug Guardian.Plug.EnsureAuthenticated
     plug Guardian.Plug.LoadResource
   end
@@ -57,6 +57,8 @@ defmodule PhoenixAppWeb.Router do
     # Public auth routes
     live "/login", AuthLive, :login
     live "/register", AuthLive, :register
+    live "/forgot-password", ForgotPasswordLive, :index
+    live "/reset-password", ResetPasswordLive, :index
     live "/auth/verify", AuthLive, :verify_code
     live "/auth/verify-email", AuthLive, :verify_email
     live "/auth/resend-verification", AuthLive, :resend_verification
@@ -76,7 +78,6 @@ defmodule PhoenixAppWeb.Router do
     live "/desktop", DesktopLive, :index
     live "/babylon-test", BabylonTestLive, :index
     live "/lobby", LobbyLive, :index
-    live "/profile", ProfileLive, :index
     live "/inventory", InventoryLive, :index
 
   end
