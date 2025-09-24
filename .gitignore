@@ -2,7 +2,7 @@
 k3s/overlays/prod/ingress.yaml
 k3s/overlays/prod/mailhog-auth-secret.yaml
 k3s/overlays/prod/secrets.yaml
-
+backups/
 # Database files
 *.db
 *.sql

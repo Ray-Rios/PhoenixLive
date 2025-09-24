@@ -16,7 +16,8 @@
     "build": "npm run build:css && npm run build:js",
     "build:css": "tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --minify",
     "build:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --format=iife --target=es2020 --minify --sourcemap --tree-shaking=true",
-    "deploy": "npm run build",
+    "deploy": "npm run build && npm run copy:fonts",
+    "copy:fonts": "mkdir -p ../priv/static/fonts && cp -r fonts/* ../priv/static/fonts/",
     "watch": "npm run watch:css & npm run watch:js",
     "watch:css": "tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --watch",
     "watch:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --watch --format=iife --target=es2020"

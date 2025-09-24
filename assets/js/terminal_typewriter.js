@@ -3,11 +3,13 @@
 
 const TerminalTypewriter = {
   mounted() {
-    this.typewriterSpeed = 80; // milliseconds per character
+    this.typewriterSpeed = 80; // ms per character
     this.blinkSpeed = 530; // cursor blink speed
-    this.startDelay = 1000; // delay before typing starts
+    this.fallbackStartDelay = 1500; // safety fallback if events fail
+    this._typingStarted = false;
+    this._blinkInterval = null;
     
-    // Get the text container
+    // Get the text container and cursor
     this.container = this.el.querySelector('.typewriter-text');
     this.cursorContainer = this.el.querySelector('.typewriter-cursor');
     
@@ -16,23 +18,48 @@ const TerminalTypewriter = {
       return;
     }
     
-    // Get the target text and clear the container
-    this.targetText = this.container.dataset.text || "... it's a secret to Everybody.";
+    // Get the target text from data attribute or use default, then clear the container
+    this.targetText = this.container.dataset.text || "IT'S A SECRET TO EVERYBODY.";
     this.container.textContent = '';
     
-    // Start cursor blinking immediately
+    // Start cursor blinking immediately (even before typing)
     this.startCursorBlink();
-    
-    // Start typing after delay
-    setTimeout(() => {
+
+    // Prefer full window load; LiveView partial patches can arrive before images/fonts
+    const startIfReady = () => {
+      if (this._typingStarted) return; // idempotent
+      this._typingStarted = true;
       this.startTyping();
-    }, this.startDelay);
+      this.detachLoadListeners();
+    };
+
+    // Track listeners so we can detach on destroy
+    this._loadListeners = [];
+
+    // 1. If document already fully loaded, start immediately next tick
+    if (document.readyState === 'complete') {
+      setTimeout(startIfReady, 10);
+    } else {
+      // 2. Listen for full window load
+      const onWindowLoad = () => startIfReady();
+      window.addEventListener('load', onWindowLoad, { once: true });
+      this._loadListeners.push(['load', onWindowLoad]);
+
+      // 3. Also listen for LiveView page-loading-stop which signals DOM settled
+      const onLVStop = () => startIfReady();
+      window.addEventListener('phx:page-loading-stop', onLVStop, { once: true });
+      this._loadListeners.push(['phx:page-loading-stop', onLVStop]);
+
+      // 4. Fallback timeout to guarantee it eventually starts
+      this._fallbackTimer = setTimeout(() => startIfReady(), this.fallbackStartDelay);
+    }
   },
   
   startCursorBlink() {
     if (this.cursorContainer) {
-      setInterval(() => {
-        this.cursorContainer.style.opacity = 
+      this.cursorContainer.style.opacity = '1';
+      this._blinkInterval = setInterval(() => {
+        this.cursorContainer.style.opacity =
           this.cursorContainer.style.opacity === '0' ? '1' : '0';
       }, this.blinkSpeed);
     }
@@ -51,9 +78,26 @@ const TerminalTypewriter = {
     
     typeNextCharacter();
   },
+
+  detachLoadListeners() {
+    if (this._fallbackTimer) {
+      clearTimeout(this._fallbackTimer);
+      this._fallbackTimer = null;
+    }
+    if (this._loadListeners) {
+      this._loadListeners.forEach(([evt, handler]) => {
+        window.removeEventListener(evt, handler);
+      });
+      this._loadListeners = null;
+    }
+  },
   
   destroyed() {
-    // Clean up any intervals if needed
+    this.detachLoadListeners();
+    if (this._blinkInterval) {
+      clearInterval(this._blinkInterval);
+      this._blinkInterval = null;
+    }
   }
 };
 

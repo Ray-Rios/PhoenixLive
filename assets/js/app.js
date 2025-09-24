@@ -2,7 +2,7 @@
 import "phoenix_html";
 
 // Topbar for progress indicators
-import topbar from "../vendor/topbar";
+import topbar from "./topbar";
 
 // Phoenix LiveView
 import { Socket } from "phoenix";
@@ -15,31 +15,26 @@ let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("
 // Hooks
 // ---------------------------
 
-// Import quest engine
-import "./quest_engine";
-
-// Import rich editor components
-import { RichEditor } from "./rich_editor";
-
-// Import file drag-drop hooks
-import { FileDragDrop, FileUpload } from "./file_drag_drop";
-
+// Import terminal typewriter effect
+import { TerminalTypewriter } from "./terminal_typewriter";
+// Import CAPTCHA hook
+import { HCaptcha } from "./hcaptcha";
+// Import form handler to prevent CAPTCHA destruction
+import { FormHandler } from "./form_handler";
+// Import form preserver to maintain form data during LiveView updates
+import { FormPreserver } from "./form_preserver";
 // Import Babylon.js hooks
 import { BabylonScene } from "./babylon/babylon_hooks"
 import { LobbyScene } from "./babylon/lobby_hooks";
 import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
 
-// Import terminal typewriter effect
-import { TerminalTypewriter } from "./terminal_typewriter";
+// Import rich editor components
+import { RichEditor } from "./rich_editor";
+// Import file drag-drop hooks
+import { FileDragDrop, FileUpload } from "./file_drag_drop";
+// Import quest engine
+import "./quest_engine";
 
-// Import CAPTCHA hook
-import { HCaptcha } from "./hcaptcha";
-
-// Import form handler to prevent CAPTCHA destruction
-import { FormHandler } from "./form_handler";
-
-// Import form preserver to maintain form data during LiveView updates
-import { FormPreserver } from "./form_preserver";
 
 
 // Quest Game Hook

@@ -46,14 +46,15 @@ defmodule PhoenixAppWeb.HomeLive do
                   phx-hook="TerminalTypewriter" 
                   class="mb-8"
                 >
-                  <div class="font-mono text-2xl md:text-4xl text-green-400 mb-4">
-                    <span class="typewriter-text" data-text="... it's a secret to Everybody."></span>
-                    <span class="typewriter-cursor text-green-400">_</span>
+                  <!-- Removed invalid Tailwind class 'text-md'; font-size now controlled by CSS on .typewriter-text -->
+                  <div class="text-green-400">
+                    <span class="typewriter-text font-sad-machine" data-text="IT'S A SECRET TO EVERYBODY."></span>
+                    <span class="typewriter-cursor">_</span>
                   </div>
                 </div>
                 
                 <!-- Main Welcome Content -->
-                <h1 class="text-4xl md:text-6xl font-bold mb-6 animate-pulse">
+                <h1 class="text-4xl md:text-5xl font-bold mb-6 animate-pulse">
                   Welcome to Rio-Tek
                 </h1>
                 <p class="text-xl mb-8 opacity-80">

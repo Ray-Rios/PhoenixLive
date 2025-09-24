@@ -1,9 +1,5 @@
 #!/bin/bash
 set -e
-echo "🧹 Cleaning up old deployment..."
-kubectl delete namespace phoenixapp --ignore-not-found=true
-echo "🚀 Deploying Production"
-echo "======================================"
 
 # Colors for output
 RED='\033[0;31m'
@@ -23,6 +19,44 @@ print_warning() {
 print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
+
+# Database configuration
+DB_USER=${DB_USER:-postgres}
+DB_NAME=${DB_NAME:-phoenixapp_prod}
+PGPASSWORD=${PGPASSWORD:-postgres}  # Set appropriately
+
+# Backup directory
+BACKUP_DIR=${BACKUP_DIR:-./backups}
+mkdir -p "$BACKUP_DIR"
+echo "📁 Using backup directory: $BACKUP_DIR"
+
+if kubectl get namespace phoenixapp &> /dev/null; then
+    echo "🍑 Backin'dat sql up (if exists)"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    
+    if ! kubectl get deployment -n phoenixapp postgres &>/dev/null; then
+        print_warning "Postgres deployment not found, skipping database backup."
+    else
+        POD_NAME=$(kubectl get pods -n phoenixapp -l app=postgres -o jsonpath="{.items[0].metadata.name}")
+        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" pg_dump -U "$DB_USER" -h db -d "$DB_NAME" > "$BACKUP_DIR/db_backup_$TIMESTAMP.sql"
+        # Keep only 10 most recent backups
+        ls -t "$BACKUP_DIR"/db_backup_*.sql 2>/dev/null | tail -n +11 | xargs rm -f
+        print_status "Database backed up"
+    fi
+
+    echo "🔐 Backing up Let's Encrypt certificates..."
+    if kubectl get secret -n phoenixapp -l cert-manager.io/certificate-name -o yaml > "$BACKUP_DIR/letsencrypt_backup.yaml" 2>/dev/null; then
+        print_status "Certificates backed up to $BACKUP_DIR/letsencrypt_backup.yaml"
+    else
+        print_warning "No certificates found to backup (this is normal for first deployment)"
+    fi
+fi
+
+echo "🧹 Cleaning up old deployment..."
+
+kubectl delete namespace phoenixapp --ignore-not-found=true
+echo "🚀 Deploying Production"
+echo "======================================"
 
 # Pre-flight checks
 echo "🔍 Running pre-flight checks..."
@@ -107,6 +141,37 @@ echo "⏳ Waiting for deployment to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/phoenix-web -n phoenixapp
 kubectl wait --for=condition=available --timeout=300s deployment/postgres -n phoenixapp
 print_status "Deployments are ready"
+
+# Import database if backup exists
+if [ -d "$BACKUP_DIR" ] && ls "$BACKUP_DIR"/db_backup_*.sql 1> /dev/null 2>&1; then
+    echo "📥 Importing database..."
+    LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/db_backup_*.sql | head -1)
+    
+    if ! kubectl get deployment -n phoenixapp postgres &>/dev/null; then
+        print_warning "Postgres deployment not found, skipping database import."
+    else
+        POD_NAME=$(kubectl get pods -n phoenixapp -l app=postgres -o jsonpath="{.items[0].metadata.name}")
+        cat "$LATEST_BACKUP" | kubectl exec -i -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d "$DB_NAME"
+        print_status "Database imported from $LATEST_BACKUP"
+    fi
+fi
+
+# Restore certificates if backup exists and contains certificates
+if [ -f "$BACKUP_DIR/letsencrypt_backup.yaml" ]; then
+    # Check if the backup file contains actual certificates (more than just empty YAML structure)
+    if [ $(cat "$BACKUP_DIR/letsencrypt_backup.yaml" | wc -l) -gt 5 ]; then
+        echo "🔓 Restoring Let's Encrypt certificates..."
+        if kubectl apply -f "$BACKUP_DIR/letsencrypt_backup.yaml"; then
+            print_status "Certificates restored from $BACKUP_DIR/letsencrypt_backup.yaml"
+        else
+            print_warning "Failed to restore certificates, new ones will be generated"
+        fi
+    else
+        print_warning "No existing certificates to restore, new ones will be generated"
+    fi
+else
+    print_warning "No certificate backup found, new certificates will be generated"
+fi
 
 # Check pod status
 echo "📊 Checking pod status..."

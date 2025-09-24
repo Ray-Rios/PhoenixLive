@@ -85,7 +85,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
                   <% end %>
                   <hr class="border-gray-600 my-1">
                   <.link navigate={~p"/auth/logout"} class="block px-4 py-2 text-sm text-red-300 hover:bg-gray-700 hover:text-red-200">
-                    😎 Logout
+                   🚪 Logout
                   </.link>
                 </:content>
               </.live_component>
@@ -94,7 +94,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
               <.link navigate={~p"/login"} class="text-white hover:text-blue-400 transition-colors duration-300">
                 Login
               </.link>
-              <.link navigate={~p"/register"} class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-2 transition-colors duration-300">
+              <.link navigate={~p"/register"} class="bg-blue-600 hover:bg-blue-700 text-white rounded-sm px-2 transition-colors duration-300">
                 Register
               </.link>
             <% end %>

@@ -24,6 +24,36 @@ export const LobbyScene = {
         this.el._babylonHook = this;
 
         this.showLoadingIndicator();
+        // Added: resolution integrity tracking + helpers
+        this._lastDPR = window.devicePixelRatio || 1;
+        this._lastCanvasClientW = 0;
+        this._lastCanvasClientH = 0;
+        this._framesSinceLastIntegrityCheck = 0;
+        this.debouncedResize = (() => {
+            let rafId = null;
+            return () => {
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = requestAnimationFrame(() => {
+                    if (this.engine) {
+                        try {
+                            this.engine.setHardwareScalingLevel(1 / (window.devicePixelRatio || 1));
+                            this.engine.resize();
+                        } catch (e) {
+                            console.debug('Lobby resize failed (ignored):', e);
+                        }
+                    }
+                });
+            };
+        })();
+        this.visibilityHandler = () => {
+            if (document.visibilityState === 'visible') {
+                setTimeout(() => this.debouncedResize(), 60);
+            }
+        };
+        document.addEventListener('visibilitychange', this.visibilityHandler);
+        this.pageLoadingStopHandler = () => this.debouncedResize();
+        window.addEventListener('phx:page-loading-stop', this.pageLoadingStopHandler);
+
         this.initializeLobbyScene()
             .then(() => {
                 this.hideLoadingIndicator();
@@ -54,6 +84,8 @@ export const LobbyScene = {
         const container = this.canvas.parentElement;
         this.canvas.width = container.clientWidth;
         this.canvas.height = container.clientHeight;
+        this._lastCanvasClientW = this.canvas.clientWidth;
+        this._lastCanvasClientH = this.canvas.clientHeight;
 
         // Engine with optimized settings
         this.engine = new Engine(this.canvas, true, {
@@ -76,7 +108,6 @@ export const LobbyScene = {
         // Setup camera (first-person view for lobby)
         this.camera = new UniversalCamera("lobbyCamera", new Vector3(0, 1.6, -5), this.scene);
         this.camera.setTarget(Vector3.Zero());
-        // Note: Camera controls disabled for now due to tree-shaking issues
 
         // Lighting
         this.light = new HemisphericLight("lobbyLight", new Vector3(1, 1, 0), this.scene);
@@ -87,25 +118,59 @@ export const LobbyScene = {
 
         // Load character controller
         const { CharacterController } = await import('./character_controller');
-        
-        // Load default lobby zone
         await this.zoneManager.loadZone('lobby');
-
-        // Create character controller
         this.characterController = new CharacterController(this.scene, this.camera);
 
-        // Start render loop
+        // Start render loop with integrity checks
+        const integrityEvery = 10;
         this.engine.runRenderLoop(() => {
-            this.scene.render();
+            if (this.scene && this.scene.activeCamera) {
+                if (++this._framesSinceLastIntegrityCheck >= integrityEvery) {
+                    this._framesSinceLastIntegrityCheck = 0;
+                    this.ensureResolutionIntegrity(this.canvas);
+                }
+                this.scene.render();
+            }
         });
 
-        // Handle resize
-        this.resizeHandler = () => {
-            this.engine.resize();
-        };
+        // Debounced resize listener
+        this.resizeHandler = () => this.debouncedResize();
         window.addEventListener('resize', this.resizeHandler);
 
         console.log('Lobby scene initialized with zone system');
+    },
+
+    // Added: resolution integrity
+    ensureResolutionIntegrity(canvas) {
+        if (!this.engine || !canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        const cw = canvas.clientWidth || this._lastCanvasClientW;
+        const ch = canvas.clientHeight || this._lastCanvasClientH;
+        const expectedW = Math.round(cw * dpr);
+        const expectedH = Math.round(ch * dpr);
+        const currentW = this.engine.getRenderWidth();
+        const currentH = this.engine.getRenderHeight();
+        let changed = false;
+        if (dpr !== this._lastDPR) {
+            this.engine.setHardwareScalingLevel(1 / dpr);
+            this._lastDPR = dpr;
+            changed = true;
+        }
+        if (cw !== this._lastCanvasClientW || ch !== this._lastCanvasClientH) {
+            this._lastCanvasClientW = cw;
+            this._lastCanvasClientH = ch;
+            changed = true;
+        }
+        if (currentW !== expectedW || currentH !== expectedH) {
+            changed = true;
+        }
+        if (changed) {
+            try {
+                this.engine.resize();
+            } catch (e) {
+                console.debug('Engine resize skipped (lobby transient):', e);
+            }
+        }
     },
 
     /**
@@ -250,6 +315,8 @@ export const LobbyScene = {
         if (this.resizeHandler) {
             window.removeEventListener('resize', this.resizeHandler);
         }
+        if (this.visibilityHandler) { document.removeEventListener('visibilitychange', this.visibilityHandler); this.visibilityHandler = null; }
+        if (this.pageLoadingStopHandler) { window.removeEventListener('phx:page-loading-stop', this.pageLoadingStopHandler); this.pageLoadingStopHandler = null; }
     },
 
     // Handle presence updates from Phoenix

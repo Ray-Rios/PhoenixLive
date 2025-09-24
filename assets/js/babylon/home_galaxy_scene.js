@@ -26,6 +26,43 @@ export const HomeGalaxyScene = {
             return;
         }
 
+        // Setup helpers before init
+        this._lastDPR = window.devicePixelRatio || 1;
+        this._lastCanvasClientW = canvas.clientWidth;
+        this._lastCanvasClientH = canvas.clientHeight;
+        this._framesSinceLastIntegrityCheck = 0;
+
+        // Debounced resize (RAF based)
+        this.debouncedResize = (() => {
+            let rafId = null;
+            return () => {
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = requestAnimationFrame(() => {
+                    if (this.engine) {
+                        try {
+                            this.engine.setHardwareScalingLevel(1 / (window.devicePixelRatio || 1));
+                            this.engine.resize();
+                        } catch (e) {
+                            console.warn('Resize failure (ignored):', e);
+                        }
+                    }
+                });
+            };
+        })();
+
+        // Visibility handling (LiveView patches / tab switches)
+        this.visibilityHandler = () => {
+            if (document.visibilityState === 'visible') {
+                // Slight delay to allow layout to settle
+                setTimeout(() => this.debouncedResize(), 60);
+            }
+        };
+        document.addEventListener('visibilitychange', this.visibilityHandler);
+
+        // LiveView navigation stop event often signals DOM settled
+        this.pageLoadingStopHandler = () => this.debouncedResize();
+        window.addEventListener('phx:page-loading-stop', this.pageLoadingStopHandler);
+
         this.initializeGalaxyScene(canvas)
             .then(() => {
                 console.log('Home Galaxy Scene initialized successfully');
@@ -199,22 +236,72 @@ export const HomeGalaxyScene = {
      */
     startRenderLoop() {
         this.animationRunning = true;
+        const canvas = this.engine.getRenderingCanvas();
+        const integrityEvery = 10; // Only run expensive checks every N frames
+
         this.engine.runRenderLoop(() => {
             if (this.scene && this.scene.activeCamera) {
+                // Periodic integrity check to fight post-LiveView blur
+                if (++this._framesSinceLastIntegrityCheck >= integrityEvery) {
+                    this._framesSinceLastIntegrityCheck = 0;
+                    this.ensureResolutionIntegrity(canvas);
+                }
                 this.scene.render();
             }
         });
     },
 
     /**
+     * Ensure canvas / engine render size matches CSS size * DPR
+     * (Fixes occasional blur after LiveView patch or tab restore)
+     */
+    ensureResolutionIntegrity(canvas) {
+        if (!this.engine || !canvas) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const cw = canvas.clientWidth || this._lastCanvasClientW;
+        const ch = canvas.clientHeight || this._lastCanvasClientH;
+
+        const expectedW = Math.round(cw * dpr);
+        const expectedH = Math.round(ch * dpr);
+        const currentW = this.engine.getRenderWidth();
+        const currentH = this.engine.getRenderHeight();
+
+        let changed = false;
+
+        if (dpr !== this._lastDPR) {
+            this.engine.setHardwareScalingLevel(1 / dpr);
+            this._lastDPR = dpr;
+            changed = true;
+        }
+
+        // Detect client size changes (potential LiveView patch or layout shift)
+        if (cw !== this._lastCanvasClientW || ch !== this._lastCanvasClientH) {
+            this._lastCanvasClientW = cw;
+            this._lastCanvasClientH = ch;
+            changed = true;
+        }
+
+        // If internal buffer mismatch, trigger resize
+        if (currentW !== expectedW || currentH !== expectedH) {
+            changed = true;
+        }
+
+        if (changed) {
+            try {
+                this.engine.resize();
+            } catch (e) {
+                console.debug('Engine resize skipped (transient):', e);
+            }
+        }
+    },
+
+    /**
      * Handle window resize
      */
     handleResize() {
-        window.addEventListener("resize", () => {
-            if (this.engine) {
-                this.engine.resize();
-            }
-        });
+        this.windowResizeHandler = () => this.debouncedResize();
+        window.addEventListener("resize", this.windowResizeHandler);
     },
 
     /**
@@ -236,6 +323,19 @@ export const HomeGalaxyScene = {
      */
     cleanup() {
         this.animationRunning = false;
+        // Remove listeners
+        if (this.windowResizeHandler) {
+            window.removeEventListener('resize', this.windowResizeHandler);
+            this.windowResizeHandler = null;
+        }
+        if (this.visibilityHandler) {
+            document.removeEventListener('visibilitychange', this.visibilityHandler);
+            this.visibilityHandler = null;
+        }
+        if (this.pageLoadingStopHandler) {
+            window.removeEventListener('phx:page-loading-stop', this.pageLoadingStopHandler);
+            this.pageLoadingStopHandler = null;
+        }
         
         if (this.stars) {
             this.stars.forEach(star => star.dispose());
