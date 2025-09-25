@@ -57,6 +57,16 @@ docker build --no-cache -t phoenix-app . && kubectl rollout restart deployment/p
 
 kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp && sleep 5 && kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
 ## 🔧 Phoenix stuff 🔧 ##
+# PostgreSQL Operations Script
+./postgres-ops.sh backup                # Backup PostgreSQL database
+./postgres-ops.sh restore               # Choose from backup list and restore
+./postgres-ops.sh list                  # Show all available backups
+./postgres-ops.sh clean                 # Remove old backups (keep 10)
+./postgres-ops.sh connect               # Connect to PostgreSQL shell
+./postgres-ops.sh size                  # Show database sizes
+./postgres-ops.sh logs                  # Show PostgreSQL logs
+
+# Phoenix commands
 mix clean
 mix deps.clean --all
 mix deps.get
@@ -82,6 +92,16 @@ git reset origin/master --mixed     # Force update to old history.
 
 
 ## REDIS ##
+# Redis Operations Script
+./redis-ops.sh backup                    # Backup Redis data
+./redis-ops.sh restore                   # Restore latest backup
+./redis-ops.sh monitor                   # Monitor all Redis commands
+./redis-ops.sh keys "chat:*"            # Show chat-related keys
+./redis-ops.sh keys "player:*"          # Show player-related keys
+./redis-ops.sh keys "session:*"         # Show session keys
+./redis-ops.sh flush                     # DANGEROUS: Delete all data
+
+# Manual Redis commands (legacy)
 docker exec projekt-redis-1 redis-cli MONITOR
 # Check specific data types
 docker exec projekt-redis-1 redis-cli KEYS "player:*"

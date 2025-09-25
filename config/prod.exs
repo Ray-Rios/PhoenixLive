@@ -41,7 +41,7 @@ config :phoenix_app, :redis_url,
   System.get_env("REDIS_URL") || "redis://redis:6379/0"
 
 config :phoenix_app, :enable_redis, 
-  System.get_env("ENABLE_REDIS", "false") == "true"
+  System.get_env("ENABLE_REDIS", "true") == "true"
 
 config :phoenix_app, PhoenixApp.Mailer,
   adapter: Swoosh.Adapters.SMTP,

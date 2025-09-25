@@ -44,6 +44,35 @@ if kubectl get namespace phoenixapp &> /dev/null; then
         print_status "Database backed up"
     fi
 
+    echo "🔴 Backing up Redis data..."
+    if ! kubectl get deployment -n phoenixapp redis &>/dev/null; then
+        print_warning "Redis deployment not found, skipping Redis backup."
+    else
+        REDIS_POD=$(kubectl get pods -n phoenixapp -l app=redis -o jsonpath="{.items[0].metadata.name}")
+        if [ -n "$REDIS_POD" ]; then
+            # Check if Redis is running
+            if kubectl exec -n phoenixapp "$REDIS_POD" -- redis-cli ping 2>/dev/null | grep -q PONG; then
+                # Create Redis backup using BGSAVE and copy the dump
+                kubectl exec -n phoenixapp "$REDIS_POD" -- redis-cli BGSAVE
+                # Wait for background save to complete
+                echo "Waiting for Redis background save to complete..."
+                sleep 10
+                # Copy the dump file from the container to local backup directory
+                if kubectl cp "phoenixapp/$REDIS_POD:/data/dump.rdb" "$BACKUP_DIR/redis_backup_$TIMESTAMP.rdb" 2>/dev/null; then
+                    # Keep only 10 most recent Redis backups
+                    ls -t "$BACKUP_DIR"/redis_backup_*.rdb 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+                    print_status "Redis data backed up to redis_backup_$TIMESTAMP.rdb"
+                else
+                    print_warning "Failed to copy Redis dump file - Redis may be empty"
+                fi
+            else
+                print_warning "Redis is not responding, skipping backup"
+            fi
+        else
+            print_warning "No Redis pod found to backup"
+        fi
+    fi
+
     echo "🔐 Backing up Let's Encrypt certificates..."
     if kubectl get secret -n phoenixapp -l cert-manager.io/certificate-name -o yaml > "$BACKUP_DIR/letsencrypt_backup.yaml" 2>/dev/null; then
         print_status "Certificates backed up to $BACKUP_DIR/letsencrypt_backup.yaml"
@@ -151,8 +180,29 @@ if [ -d "$BACKUP_DIR" ] && ls "$BACKUP_DIR"/db_backup_*.sql 1> /dev/null 2>&1; t
         print_warning "Postgres deployment not found, skipping database import."
     else
         POD_NAME=$(kubectl get pods -n phoenixapp -l app=postgres -o jsonpath="{.items[0].metadata.name}")
+        
+        # Scale down Phoenix pods to disconnect from database
+        echo "📉 Scaling down Phoenix pods to release database connections..."
+        kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp
+        kubectl wait --for=delete pod -l app=phoenix-web -n phoenixapp --timeout=120s
+        
+        # Wait a bit for connections to close
+        sleep 5
+        
+        # Terminate remaining connections and drop database
+        echo "🗑️ Dropping existing database for clean restore..."
+        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
+        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "DROP DATABASE IF EXISTS $DB_NAME;"
+        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "CREATE DATABASE $DB_NAME;"
+        
+        # Import the backup
         cat "$LATEST_BACKUP" | kubectl exec -i -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d "$DB_NAME"
         print_status "Database imported from $LATEST_BACKUP"
+        
+        # Scale Phoenix pods back up
+        echo "📈 Scaling Phoenix pods back up..."
+        kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
+        kubectl wait --for=condition=available --timeout=300s deployment/phoenix-web -n phoenixapp
     fi
 fi
 
