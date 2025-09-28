@@ -26,6 +26,7 @@ import { FormPreserver } from "./form_preserver";
 // Import Babylon.js hooks
 import { BabylonScene } from "./babylon/babylon_hooks"
 import { LobbyScene } from "./babylon/lobby_hooks";
+import { OpenWorldLobbyScene } from "./babylon/open_world_lobby_scene";
 import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
 
 // Import rich editor components
@@ -169,6 +170,7 @@ let Hooks = {
   FileUpload,
   BabylonScene,
   LobbyScene,
+  OpenWorldLobbyScene,
   HomeGalaxyScene,
   FlashNotification,
   HCaptcha,

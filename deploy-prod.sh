@@ -73,11 +73,42 @@ if kubectl get namespace phoenixapp &> /dev/null; then
         fi
     fi
 
-    echo "🔐 Backing up Let's Encrypt certificates..."
-    if kubectl get secret -n phoenixapp -l cert-manager.io/certificate-name -o yaml > "$BACKUP_DIR/letsencrypt_backup.yaml" 2>/dev/null; then
-        print_status "Certificates backed up to $BACKUP_DIR/letsencrypt_backup.yaml"
+    echo "🔐 Backing up Let's Encrypt certificates (multi-doc YAML)..."
+    CERT_BACKUP_FILE="$BACKUP_DIR/letsencrypt_backup_${TIMESTAMP}.yaml"
+    : > "$CERT_BACKUP_FILE"
+    # Primary labeled secrets (each becomes its own document)
+    for S in $(kubectl get secret -n phoenixapp -l cert-manager.io/certificate-name -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true); do
+        kubectl get secret "$S" -n phoenixapp -o yaml 2>/dev/null >> "$CERT_BACKUP_FILE" || true
+        echo "---" >> "$CERT_BACKUP_FILE"
+    done
+    # Additional TLS secrets with cert-manager annotations
+    TLS_SECRET_NAMES=$(kubectl get secret -n phoenixapp -o jsonpath='{range .items[?(@.type=="kubernetes.io/tls")]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+    for S in $TLS_SECRET_NAMES; do
+        HAS_CM=$(kubectl get secret "$S" -n phoenixapp -o jsonpath='{.metadata.annotations.cert-manager\.io/certificate-name}' 2>/dev/null || true)
+        if [ -n "$HAS_CM" ]; then
+            # Avoid duplicate (skip if already included above)
+            if ! grep -q "name: $S" "$CERT_BACKUP_FILE"; then
+                kubectl get secret "$S" -n phoenixapp -o yaml 2>/dev/null >> "$CERT_BACKUP_FILE" || true
+                echo "---" >> "$CERT_BACKUP_FILE"
+            fi
+        fi
+    done
+    # Certificate CRs (each as its own document)
+    for C in $(kubectl get certificates.cert-manager.io -n phoenixapp -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true); do
+        kubectl get certificate "$C" -n phoenixapp -o yaml 2>/dev/null >> "$CERT_BACKUP_FILE" || true
+        echo "---" >> "$CERT_BACKUP_FILE"
+    done
+    # Trim trailing separator if file ends with ---
+    sed -i '$ {/^---$/d;}' "$CERT_BACKUP_FILE" 2>/dev/null || true
+    # Symlink / copy latest for convenience
+    if [ -s "$CERT_BACKUP_FILE" ]; then
+        cp "$CERT_BACKUP_FILE" "$BACKUP_DIR/letsencrypt_backup.yaml"
+        print_status "Certificates backed up to $CERT_BACKUP_FILE (latest copy: letsencrypt_backup.yaml)"
+        # Keep only 10 most recent cert backups
+        ls -t "$BACKUP_DIR"/letsencrypt_backup_*.yaml 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
     else
-        print_warning "No certificates found to backup (this is normal for first deployment)"
+        print_warning "No certificate data found to backup (possibly first issuance pending)"
+        rm -f "$CERT_BACKUP_FILE" 2>/dev/null || true
     fi
 fi
 
@@ -153,14 +184,48 @@ kubectl wait --namespace ingress-nginx \
   --timeout=300s
 print_status "Nginx ingress controller is ready"
 
-# Now deploy cluster issuers
-if [ -f "ssl/cluster-issuer.yaml" ]; then
-    echo "🔐 Creating Let's Encrypt cluster issuers..."
+# Now deploy cluster issuers (path fix)
+if [ -f "k3s/ssl/cluster-issuer.yaml" ]; then
+    echo "🔐 Applying Let's Encrypt cluster issuers..."
     kubectl apply -f k3s/ssl/cluster-issuer.yaml
-    print_status "Let's Encrypt cluster issuers deployed"
+    print_status "Let's Encrypt cluster issuers applied"
+else
+    print_warning "Cluster issuer manifest k3s/ssl/cluster-issuer.yaml not found; skipping (ensure issuers exist)"
 fi
 
-# Deploy the application
+# Restore certificates (Secrets + Cert CRs) BEFORE app deploy to avoid unnecessary re-issuance
+LATEST_CERT_BACKUP=$(ls -t "$BACKUP_DIR"/letsencrypt_backup_*.yaml 2>/dev/null | head -1 || true)
+if [ -n "$LATEST_CERT_BACKUP" ] && [ -s "$LATEST_CERT_BACKUP" ]; then
+    # Improved heuristic: apply if file contains any Certificate kind OR any tls secret references
+    if grep -q "kind: Certificate" "$LATEST_CERT_BACKUP" || grep -q "cert-manager.io/v1" "$LATEST_CERT_BACKUP"; then
+        echo "🔓 Restoring certificate CRs (and any secrets) from $LATEST_CERT_BACKUP ..."
+        if kubectl apply -f "$LATEST_CERT_BACKUP" 2>/dev/null; then
+            print_status "Certificate CRs restored (cert-manager will reconcile secrets)"
+        else
+            print_warning "Validation/apply failed once; retrying with --validate=false"
+            if kubectl apply --validate=false -f "$LATEST_CERT_BACKUP"; then
+                print_status "Certificate CRs restored (validation disabled)"
+            else
+                print_warning "Failed to apply $LATEST_CERT_BACKUP; continuing"
+            fi
+        fi
+    elif grep -q "tls.crt" "$LATEST_CERT_BACKUP" || grep -q "tls.key" "$LATEST_CERT_BACKUP"; then
+        # Covers newly added 'Additional TLS Secrets' section
+        echo "🔓 Restoring TLS secrets from $LATEST_CERT_BACKUP ..."
+        if kubectl apply -f "$LATEST_CERT_BACKUP" 2>/dev/null; then
+            print_status "TLS secrets restored"
+        else
+            print_warning "TLS secret apply failed; retrying with --validate=false"
+            kubectl apply --validate=false -f "$LATEST_CERT_BACKUP" && print_status "TLS secrets restored (validation disabled)" || print_warning "Failed to apply TLS secrets; continuing"
+        fi
+    else
+        print_warning "Certificate backup $LATEST_CERT_BACKUP has no Certificate CRs or TLS data; skipping restore"
+    fi
+else
+    print_warning "No prior certificate backup found to restore"
+fi
+
+# Deploy the application (after restoring cert data)
 echo "🚀 Deploying Phoenix application..."
 kubectl apply -k k3s/overlays/prod/
 print_status "Application deployed"
@@ -206,22 +271,7 @@ if [ -d "$BACKUP_DIR" ] && ls "$BACKUP_DIR"/db_backup_*.sql 1> /dev/null 2>&1; t
     fi
 fi
 
-# Restore certificates if backup exists and contains certificates
-if [ -f "$BACKUP_DIR/letsencrypt_backup.yaml" ]; then
-    # Check if the backup file contains actual certificates (more than just empty YAML structure)
-    if [ $(cat "$BACKUP_DIR/letsencrypt_backup.yaml" | wc -l) -gt 5 ]; then
-        echo "🔓 Restoring Let's Encrypt certificates..."
-        if kubectl apply -f "$BACKUP_DIR/letsencrypt_backup.yaml"; then
-            print_status "Certificates restored from $BACKUP_DIR/letsencrypt_backup.yaml"
-        else
-            print_warning "Failed to restore certificates, new ones will be generated"
-        fi
-    else
-        print_warning "No existing certificates to restore, new ones will be generated"
-    fi
-else
-    print_warning "No certificate backup found, new certificates will be generated"
-fi
+# (Old post-deploy restore removed; restoration now occurs before application deployment)
 
 # Check pod status
 echo "📊 Checking pod status..."

@@ -1,0 +1,11 @@
+Model Information:
+* title:	T Rex (turok)
+* source:	https://sketchfab.com/3d-models/t-rex-turok-4dc501f0401b4fa3b4222c91dfab3c48
+* author:	ChoochooLi (https://sketchfab.com/ChoochooLi)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "T Rex (turok)" (https://sketchfab.com/3d-models/t-rex-turok-4dc501f0401b4fa3b4222c91dfab3c48) by ChoochooLi (https://sketchfab.com/ChoochooLi) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

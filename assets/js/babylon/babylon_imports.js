@@ -5,6 +5,7 @@ import { Scene } from '@babylonjs/core/scene';
 
 // Math and vectors
 import { Vector3, Vector2 } from '@babylonjs/core/Maths/math.vector';
+import { Matrix, Quaternion } from '@babylonjs/core/Maths/math.vector';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Ray } from '@babylonjs/core/Culling/ray';
 
@@ -47,11 +48,16 @@ import '@babylonjs/core/Loading/loadingScreen';
 // Asset loading side effects
 import '@babylonjs/core/Materials/Textures/Loaders/envTextureLoader';
 
+// Terrain and world systems
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+
 export {
-    Engine, Scene, Vector3, Vector2, Color3, Color4, Ray,
+    Engine, Scene, Vector3, Vector2, Matrix, Quaternion, Color3, Color4, Ray,
     FreeCamera, ArcRotateCamera, UniversalCamera,
     HemisphericLight, DirectionalLight,
     MeshBuilder, StandardMaterial, PBRMaterial,
     Animation, AnimationGroup,
-    ActionManager, ExecuteCodeAction, PointerEventTypes
+    ActionManager, ExecuteCodeAction, PointerEventTypes,
+    VertexData, DynamicTexture
 };
