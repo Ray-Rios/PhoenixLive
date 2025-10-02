@@ -134,18 +134,7 @@ defmodule PhoenixAppWeb.Router do
     end
   end
 
-  scope "/eqemu", PhoenixAppWeb do
-    pipe_through :browser
 
-    live_session :eqemu_authenticated,
-      on_mount: {PhoenixAppWeb.UserAuth, :require_authenticated_user},
-      layout: {PhoenixAppWeb.Layouts, :app} do
-  
-      live "/admin", EqemuAdminLive, :index
-      live "/player", EqemuPlayerLive, :index
-      live "/server", EqemuServerLive, :index
-    end
-  end
 
   # --------------------
   # GraphQL API Authentication
@@ -201,17 +190,7 @@ defmodule PhoenixAppWeb.Router do
     post "/sessions", Api.ApiController, :create_session
   end
 
-  # --------------------
-  # EQEmu Server API
-  # --------------------
-  scope "/api/eqemu", PhoenixAppWeb do
-    pipe_through :api
 
-    post "/authenticate", Api.EqemuController, :authenticate
-    post "/verify_account", Api.EqemuController, :verify_account
-    get "/characters/:user_id", Api.EqemuController, :list_characters
-    post "/characters", Api.EqemuController, :create_character
-  end
 
   # --------------------
   # GraphQL API

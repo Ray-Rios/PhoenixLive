@@ -33,7 +33,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   end
 
   @impl true
-  def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
+  def handle_event("change_role", %{"role" => role, "user_id" => user_id}, socket) do
     user = Accounts.get_user!(user_id)
     
     case Accounts.update_user_role(user, %{role: role}) do
@@ -43,15 +43,6 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to update user role")}
-    end
-  end
-
-  # Helper function to determine user role
-  defp get_user_role(user) do
-    cond do
-      user.is_admin -> "admin"
-      user.role && user.role != "subscriber" -> user.role
-      true -> "member"
     end
   end
 
@@ -69,7 +60,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
     case result do
       {:ok, _updated_user} ->
         users = Accounts.list_users()
-        {:noreply, assign(socket, users: users)}
+        {:noreply, assign(socket, users: users) |> put_flash(:info, "User status updated successfully")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to update user status")}
@@ -83,10 +74,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
     case Accounts.delete_user(user) do
       {:ok, _deleted_user} ->
         users = Accounts.list_users()
-        {:noreply, 
-         socket
-         |> assign(users: users)
-         |> put_flash(:info, "User deleted successfully")}
+        {:noreply, assign(socket, users: users) |> put_flash(:info, "User deleted successfully")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to delete user")}
@@ -101,6 +89,15 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   @impl true
   def handle_event("cancel_delete", _params, socket) do
     {:noreply, assign(socket, confirm_delete_user_id: nil)}
+  end
+
+  # Helper function to determine user role
+  defp get_user_role(user) do
+    cond do
+      user.is_admin -> "admin"
+      user.role && user.role != "subscriber" -> user.role
+      true -> "member"
+    end
   end
 
   @impl true
@@ -203,7 +200,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
                         <%= if user.id != @current_user.id do %>
                           <div class="flex flex-col lg:flex-row gap-2">
                             <select 
-                              phx-change="change_role" 
+                              phx-change="change_role"
                               phx-value-user_id={user.id}
                               name="role"
                               class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"

@@ -92,6 +92,8 @@ git reset origin/master --mixed     # Force update to old history.
 # Note that some repositories use 'master' in place of 'main'. Change the following line if your remote uses 'master'.
 # This leaves your working tree intact, and only affects Git's bookkeeping.
 
+## File corruption fix ##
+rm file_name.ts && touch file_name.ts
 
 ## REDIS ##
 # Redis Operations Script

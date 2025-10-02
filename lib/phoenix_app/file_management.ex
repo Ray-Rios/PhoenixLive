@@ -18,13 +18,8 @@ defmodule PhoenixApp.FileManagement do
   end
 
   def create_user_file(user, attrs \\ %{}) do
-    IO.puts("Creating user file with attrs:")
-    IO.inspect(attrs, label: "Original attrs")
-    
     # Handle Base64 data from JavaScript
     attrs = prepare_file_attrs(attrs)
-    
-    IO.inspect(attrs, label: "Processed attrs")
     
     # Ensure uploads directory exists
     ensure_uploads_directory(user)
@@ -33,12 +28,7 @@ defmodule PhoenixApp.FileManagement do
     |> UserFile.changeset(attrs)
     |> Ecto.Changeset.put_assoc(:user, user)
     
-    IO.inspect(changeset, label: "Changeset before insert")
-    
-    result = Repo.insert(changeset)
-    IO.inspect(result, label: "Insert result")
-    
-    result
+    Repo.insert(changeset)
   end
 
   def update_user_file(%UserFile{} = user_file, attrs) do
@@ -89,8 +79,6 @@ defmodule PhoenixApp.FileManagement do
   end
 
   defp prepare_file_attrs(%{"data" => "data:" <> data_url} = attrs) do
-    IO.puts("Preparing file attrs with Base64 data")
-    
     # Parse Base64 data URL
     [metadata, base64_data] = String.split(data_url, ";base64,", parts: 2)
     content_type = String.replace(metadata, "data:", "")
@@ -102,9 +90,6 @@ defmodule PhoenixApp.FileManagement do
     filename = attrs["name"] || "upload"
     temp_path = System.tmp_dir!() |> Path.join("upload_#{System.unique_integer()}_#{filename}")
     File.write!(temp_path, file_data)
-    
-    IO.puts("Created temp file at: #{temp_path}")
-    IO.puts("File size: #{byte_size(file_data)} bytes")
     
     # Create Plug.Upload-like struct that Arc can handle
     file_upload = %Plug.Upload{
@@ -129,8 +114,6 @@ defmodule PhoenixApp.FileManagement do
   end
   
   defp prepare_file_attrs(attrs) when is_map(attrs) do
-    IO.puts("Fallback prepare_file_attrs called")
-    IO.inspect(attrs, label: "Fallback attrs")
     attrs
   end
   

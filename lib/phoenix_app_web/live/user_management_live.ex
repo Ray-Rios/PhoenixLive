@@ -90,15 +90,6 @@ defmodule PhoenixAppWeb.UserManagementLive do
     end
   end
 
-  # Helper function to determine user role
-  defp get_user_role(user) do
-    cond do
-      user.is_admin -> "admin"
-      user.role && user.role != "subscriber" -> user.role
-      true -> "member"
-    end
-  end
-
   @impl true
   def handle_event("toggle_status", %{"user_id" => user_id}, socket) do
     user = Accounts.get_user!(user_id)
@@ -119,6 +110,39 @@ defmodule PhoenixAppWeb.UserManagementLive do
       {:error, _changeset} ->
         socket = put_flash(socket, :error, "Failed to update user status")
         {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("confirm_delete", %{"user_id" => user_id}, socket) do
+    {:noreply, assign(socket, confirm_delete_user_id: user_id)}
+  end
+
+  @impl true
+  def handle_event("delete_user", %{"user_id" => user_id}, socket) do
+    user = Accounts.get_user!(user_id)
+    
+    case Accounts.delete_user(user) do
+      {:ok, _deleted_user} ->
+        users = Accounts.list_users()
+        {:noreply, assign(socket, users: users, confirm_delete_user_id: nil) |> put_flash(:info, "User deleted successfully")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete user")}
+    end
+  end
+
+  @impl true
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete_user_id: nil)}
+  end
+
+  # Helper function to determine user role
+  defp get_user_role(user) do
+    cond do
+      user.is_admin -> "admin"
+      user.role && user.role != "subscriber" -> user.role
+      true -> "member"
     end
   end
 

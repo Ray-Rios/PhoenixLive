@@ -28,7 +28,6 @@ defmodule PhoenixApp.Application do
 
   defp redis_children do
     enable_redis = Application.get_env(:phoenix_app, :enable_redis, false)
-    IO.puts("Redis enabled: #{enable_redis}")
     
     if enable_redis do
       [

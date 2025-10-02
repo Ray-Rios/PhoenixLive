@@ -32,7 +32,7 @@ defmodule PhoenixAppWeb.LobbyLive do
            mode: "open_world" # forced
          },
          lighting: %{ambient: 0.6, directional: 0.8, sun_intensity: 0.8},
-         environment: "craterlake",
+         environment: "world_builder",
          world_config: %{
            world_size: 8192,
            chunk_size: 1024,
@@ -192,7 +192,7 @@ defmodule PhoenixAppWeb.LobbyLive do
     # Push a system chat event only to this client (not broadcast)
     system_msg = %{
       username: "[system]",
-      message: "Welcome to CraterLake! Swim to shore and explore.",
+      message: "Welcome to the World Builder! Create your own infinite world.",
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
       system: true,
       type: "system"
@@ -233,10 +233,10 @@ defmodule PhoenixAppWeb.LobbyLive do
   def render(assigns) do
     ~H"""
     <.page_with_navbar current_user={@current_user} flash={@flash}>
-      <div id="craterlake-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #001122; z-index: 1;">
+      <div id="world-builder-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #001122; z-index: 1;">
         <!-- Main 3D Scene -->
         <div id="scene-wrapper" style="width: 100vw; height: 100vh; position: relative;">
-    <canvas id="craterlake-scene"
+    <canvas id="world-builder-scene"
       phx-hook="OpenWorldLobbyScene"
       data-scene-config={Jason.encode!(@scene_config)}
       data-user={Jason.encode!(@user)}
@@ -250,7 +250,7 @@ defmodule PhoenixAppWeb.LobbyLive do
           <!-- Status Panel -->
           <div style="position: absolute; top: 20px; left: 20px; color: white; font-family: monospace; pointer-events: auto;">
             <div style="background: rgba(0,0,0,0.8); padding: 12px; border-radius: 8px; border: 1px solid #444;">
-              <div style="font-size: 16px; color: #60A5FA; margin-bottom: 8px;">🐱 CraterLake Adventure</div>
+              <div style="font-size: 16px; color: #60A5FA; margin-bottom: 8px;">🏗️ World Builder</div>
               <div style="font-size: 12px;">Player: <%= @user.username %></div>
               <div style="font-size: 12px;">Position: <%= round_pos(@user.position.x) %>, <%= round_pos(@user.position.y) %>, <%= round_pos(@user.position.z) %></div>
               <div style="font-size: 12px;">Players Online: <%= length(@users_present) %></div>
@@ -309,7 +309,7 @@ defmodule PhoenixAppWeb.LobbyLive do
         </div>
 
         <!-- Removed legacy panel iframes -->
-      </div> <!-- /craterlake-container -->
+      </div> <!-- /world-builder-container -->
     </.page_with_navbar>
     """
   end

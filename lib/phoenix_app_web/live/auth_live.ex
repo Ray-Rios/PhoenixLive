@@ -146,6 +146,46 @@ defmodule PhoenixAppWeb.AuthLive do
     end
   end
 
+  # Email verification actions
+  def handle_event("verify_code", %{"verification" => verification_params}, socket) do
+    code = verification_params["code"]
+    # Use email from form if not already in socket assigns (for direct navigation to verify page)
+    email = socket.assigns.verification_email || verification_params["email"]
+    
+    if !email do
+      {:noreply,
+       socket
+       |> put_flash(:error, "Please provide your email address")
+       |> assign(verification_form: to_form(%{}, as: "verification"))}
+    else
+      case Accounts.verify_user_with_code(email, code) do
+        {:ok, _user} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Email verified successfully! You can now log in.")
+           |> redirect(to: ~p"/login")}
+        {:error, message} ->
+          {:noreply,
+           socket
+           |> put_flash(:error, message)
+           |> assign(verification_form: to_form(%{}, as: "verification"))}
+      end
+    end
+  end
+
+  def handle_event("resend_verification", %{"email" => email}, socket) do
+    case Accounts.resend_verification_email(email) do
+      {:ok, message} ->
+        {:noreply, put_flash(socket, :info, message)}
+      {:error, error} ->
+        {:noreply, put_flash(socket, :error, error)}
+    end
+  end
+
+  def handle_event("resend_verification", _params, socket) do
+    {:noreply, put_flash(socket, :error, "Please enter your email address")}
+  end
+
   # ----------------
   # Enhanced login with security features - Accept email or username
   # ----------------
@@ -319,82 +359,11 @@ defmodule PhoenixAppWeb.AuthLive do
          |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "An account with this email already exists. Please try logging in instead.")
          |> assign(form: form, errors: ["An account with this email already exists"])}
-
-      {:ok, existing_user, message} when not is_nil(existing_user.email_verification_token) ->
-        # This handles the case where a user tries to register with an existing unverified email
-        # The accounts module returns {:ok, user, message} for unverified users
-        verification_code = if get_env() == "dev" do
-          # Extract 6-digit code from the verification token for dev display
-          case existing_user.email_verification_token do
-            nil -> "123456" # fallback for dev
-            token -> 
-              # Take first 6 characters of base64 token and convert to digits
-              token
-              |> String.slice(0, 6)
-              |> String.to_charlist()
-              |> Enum.map(&rem(&1, 10))
-              |> Enum.map(&to_string/1)
-              |> Enum.join()
-              |> String.pad_leading(6, "0")
-          end
-        else
-          nil
-        end
-        
-        redirect_params = %{email: existing_user.email}
-        redirect_params = if verification_code, do: Map.put(redirect_params, :code, verification_code), else: redirect_params
-
-        {:noreply,
-         socket
-         |> assign(loading: false)
-         |> put_flash(:info, "#{message}")
-         |> redirect(to: ~p"/auth/verify?#{redirect_params}")}
     end
   end
 
   # ----------------
     # Helper functions
-
-
-  # Email verification actions
-  def handle_event("verify_code", %{"verification" => verification_params}, socket) do
-    code = verification_params["code"]
-    # Use email from form if not already in socket assigns (for direct navigation to verify page)
-    email = socket.assigns.verification_email || verification_params["email"]
-    
-    if !email do
-      {:noreply,
-       socket
-       |> put_flash(:error, "Please provide your email address")
-       |> assign(verification_form: to_form(%{}, as: "verification"))}
-    else
-      case Accounts.verify_user_with_code(email, code) do
-        {:ok, _user} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Email verified successfully! You can now log in.")
-           |> redirect(to: ~p"/login")}
-        {:error, message} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, message)
-           |> assign(verification_form: to_form(%{}, as: "verification"))}
-      end
-    end
-  end
-
-  def handle_event("resend_verification", %{"email" => email}, socket) do
-    case Accounts.resend_verification_email(email) do
-      {:ok, message} ->
-        {:noreply, put_flash(socket, :info, message)}
-      {:error, error} ->
-        {:noreply, put_flash(socket, :error, error)}
-    end
-  end
-
-  def handle_event("resend_verification", _params, socket) do
-    {:noreply, put_flash(socket, :error, "Please enter your email address")}
-  end
 
   # ----------------
   # CAPTCHA Events - Optimized to prevent widget destruction

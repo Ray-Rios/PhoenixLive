@@ -91,12 +91,7 @@ defmodule PhoenixApp.Accounts do
            |> User.registration_changeset(attrs_with_ip)
            |> Repo.insert() do
         {:ok, user} ->
-          # Create corresponding EQEmu account
-          case PhoenixApp.EqemuGame.create_eqemu_account(user) do
-            {:ok, _account} -> user
-            {:error, reason} -> 
-              Repo.rollback("Failed to create EQEmu account: #{inspect(reason)}")
-          end
+          user
         
         {:error, changeset} ->
           Repo.rollback(changeset)
@@ -113,12 +108,7 @@ defmodule PhoenixApp.Accounts do
            |> User.profile_changeset(attrs)
            |> Repo.update() do
         {:ok, updated_user} ->
-          # Sync email changes to EQEmu account
-          case PhoenixApp.EqemuGame.sync_user_to_eqemu_account(updated_user) do
-            {:ok, _account} -> updated_user
-            {:error, reason} ->
-              Repo.rollback("Failed to sync EQEmu account: #{inspect(reason)}")
-          end
+          updated_user
         
         {:error, changeset} ->
           Repo.rollback(changeset)
@@ -196,7 +186,7 @@ defmodule PhoenixApp.Accounts do
           if check_password(user, password) do
             # Additional security checks
             cond do
-              user.locked_until && DateTime.utc_now() < user.locked_until ->
+              user.locked_until && DateTime.compare(DateTime.utc_now(), user.locked_until) == :lt ->
                 {:error, :account_locked}
               
               is_nil(user.email_verified_at) ->
@@ -246,8 +236,6 @@ defmodule PhoenixApp.Accounts do
 
   # Keep the original authenticate_user for backward compatibility
   def authenticate_user(email, password) when is_binary(email) and is_binary(password) do
-    start_time = System.monotonic_time(:millisecond)
-    
     result = case get_user_by_email(email) do
       nil ->
         # Still run password check to prevent timing attacks
@@ -261,9 +249,6 @@ defmodule PhoenixApp.Accounts do
           {:error, :invalid_password}
         end
     end
-    
-    end_time = System.monotonic_time(:millisecond)
-    IO.puts("Authentication took #{end_time - start_time}ms")
     
     result
   end
@@ -459,23 +444,13 @@ defmodule PhoenixApp.Accounts do
   end
 
   # ---------------------
-  # Safe delete user with EQEmu cleanup
+  # Safe delete user
   # ---------------------
-  def delete_user_with_eqemu_cleanup(%User{} = user) do
+  def safe_delete_user(%User{} = user) do
     Repo.transaction(fn ->
-      # Get user's EQEmu data for logging
-      eqemu_account = PhoenixApp.EqemuGame.get_account_by_user(user)
-      characters = PhoenixApp.EqemuGame.list_user_characters(user)
-      
-      # Log what will be deleted
-      IO.puts("Deleting user #{user.email} with:")
-      IO.puts("- EQEmu account: #{eqemu_account && eqemu_account.name}")
-      IO.puts("- Characters: #{length(characters)} characters")
-      
-      # Delete user (cascades to EQEmu account and characters)
+      # Delete user
       case Repo.delete(user) do
         {:ok, deleted_user} ->
-          IO.puts("Successfully deleted user and all EQEmu data")
           deleted_user
         
         {:error, changeset} ->
@@ -500,21 +475,6 @@ defmodule PhoenixApp.Accounts do
   end
 
   # ---------------------
-  # EQEmu server authentication
-  # ---------------------
-  def authenticate_for_eqemu(email, password) do
-    case PhoenixApp.EqemuGame.authenticate_eqemu_login(email, password) do
-      {:ok, %{user: user, account: account}} ->
-        {:ok, %{user: user, account: account}}
-      
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  def verify_eqemu_account(account_name) do
-    PhoenixApp.EqemuGame.verify_eqemu_account(account_name)
-  end
 
   def generate_api_session_token(%User{} = user) do
     # Create a JWT-like token for API server authentication
@@ -652,7 +612,7 @@ defmodule PhoenixApp.Accounts do
   defp check_password_reset_rate_limit(identifier) do
     case PhoenixApp.Accounts.RateLimit.check_password_reset_limit(identifier) do
       :ok -> :ok
-      :rate_limited -> {:error, :rate_limited}
+      {:error, _reason} -> {:error, :rate_limited}
     end
   end
 end

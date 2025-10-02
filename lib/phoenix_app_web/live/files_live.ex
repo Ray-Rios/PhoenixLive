@@ -103,15 +103,8 @@ defmodule PhoenixAppWeb.FilesLive do
   def handle_event("file_drop", %{"files" => [file_data]}, socket) do
     user = socket.assigns.current_user
     
-    # Add debugging
-    IO.puts("File drop event received")
-    IO.inspect(file_data, label: "File data")
-    
     case FileManagement.create_user_file(user, file_data) do
-      {:ok, file} ->
-        IO.puts("File created successfully")
-        IO.inspect(file, label: "Created file")
-        
+      {:ok, _} ->
         files = FileManagement.list_user_files(user)
         stats = FileManagement.get_file_stats(user)
         
@@ -121,9 +114,6 @@ defmodule PhoenixAppWeb.FilesLive do
         ) |> put_flash(:info, "File uploaded successfully")}
       
       {:error, changeset} ->
-        IO.puts("File creation failed")
-        IO.inspect(changeset, label: "Changeset errors")
-        
         error_msg = case changeset.errors do
           [{field, {msg, _}} | _] -> "#{field}: #{msg}"
           _ -> "Failed to upload file"
@@ -163,18 +153,8 @@ defmodule PhoenixAppWeb.FilesLive do
     user = socket.assigns.current_user
     
     case FileManagement.create_folder(user, folder_name) do
-      {:ok, _folder} ->
-        files = FileManagement.list_user_files(user)
-        stats = FileManagement.get_file_stats(user)
-        
-        {:noreply, assign(socket,
-          files: files,
-          stats: stats,
-          show_create_folder_modal: false
-        ) |> put_flash(:info, "Folder '#{folder_name}' created successfully")}
-      
-      {:error, _changeset} ->
-        {:noreply, assign(socket, show_create_folder_modal: false) |> put_flash(:error, "Failed to create folder")}
+      {:error, message} ->
+        {:noreply, put_flash(socket, :error, message)}
     end
   end
 

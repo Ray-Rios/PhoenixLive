@@ -54,7 +54,6 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   end
 
   def handle_event("autosave_draft", %{"post" => post_params}, socket) do
-    post = socket.assigns.editing_post || %Post{}
     # Save as draft, but do not publish
     draft_params = Map.put(post_params, "is_published", false)
     case socket.assigns.editing_post do

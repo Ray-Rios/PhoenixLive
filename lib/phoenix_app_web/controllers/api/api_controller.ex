@@ -10,7 +10,7 @@ defmodule PhoenixAppWeb.Api.ApiController do
     response = %{
       success: true,
       data: %{
-        service: "eqemu_service",
+        service: "world_builder_service",
         version: "0.1.0",
         status: "running",
         timestamp: DateTime.utc_now() |> DateTime.to_iso8601()

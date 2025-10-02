@@ -1,4 +1,5 @@
-import { Engine, Scene, Vector3, Color3, Ray, ArcRotateCamera, HemisphericLight, DirectionalLight, MeshBuilder, StandardMaterial, ActionManager } from './babylon_imports';
+import { Engine, Scene, Vector3, Color3, Ray, ArcRotateCamera, HemisphericLight, DirectionalLight, MeshBuilder, StandardMaterial, ActionManager, initializeBabylonExports } from './babylon_imports';
+import { MaterialLibrary, WorldBuilderTools } from './world-builder-tools';
 
 export const OpenWorldLobbyScene = {
   mounted() {
@@ -26,6 +27,15 @@ export const OpenWorldLobbyScene = {
   destroyed() { console.log('OpenWorldLobbyScene destroyed'); this.cleanup(); },
   async initializeScene() {
     console.log('Initializing scene...');
+    
+    // Initialize BABYLON exports before using them
+    try {
+      initializeBabylonExports();
+    } catch (e) {
+      console.error('Failed to initialize BABYLON:', e);
+      return;
+    }
+    
     this.createChatUI();
     const canvas = this.el;
     // Ensure canvas takes full container size
@@ -47,6 +57,12 @@ export const OpenWorldLobbyScene = {
     this.scene = new Scene(this.engine); this.scene.actionManager = new ActionManager(this.scene);
     this.engine.resize(); // Ensure initial size
     this.setupEnvironment();
+    
+    // Initialize World Builder System
+    this.materialLibrary = new MaterialLibrary(this.scene);
+    this.worldBuilderTools = new WorldBuilderTools(this.scene, this.materialLibrary);
+    console.log('🏗️ World Builder tools initialized');
+    
     await this.createWorld();
     await this.createPlayer();
     this.setupMovement();
@@ -59,13 +75,80 @@ export const OpenWorldLobbyScene = {
     const sun = new DirectionalLight('sun', new Vector3(-1,-1,-0.5), this.scene); sun.intensity = 0.8; sun.diffuse = new Color3(1,0.9,0.8);
     this.scene.fogMode = Scene.FOGMODE_EXP2; this.scene.fogColor = new Color3(0.7,0.8,0.9); this.scene.fogDensity = 0.0002;
   },
-  async createWorld() { console.log('Creating world...'); try { await this.createHeightmapTerrain(); } catch(e) { console.warn('Heightmap failed; using flat terrain', e); this.createFlatTerrain(); } this.createWater(); },
-  async createHeightmapTerrain() {
-    const path = '/models/NewCratorProject_HeightMap_1024x1024.png';
-    return new Promise((resolve,reject)=>{ const img=new Image(); img.crossOrigin='anonymous'; img.onload=()=>{ try { const terrain=MeshBuilder.CreateGroundFromHeightMap('terrain', path,{width:1000,height:1000,subdivisions:128,minHeight:0,maxHeight:50},this.scene); const mat=new StandardMaterial('terrainMaterial',this.scene); mat.diffuseColor=new Color3(0.4,0.6,0.3); terrain.material=mat; this.terrain=terrain; console.log('✅ Heightmap terrain loaded'); resolve(terrain);} catch(e){reject(e);} }; img.onerror=()=>reject(new Error('Failed to load heightmap')); img.src=path; });
+  async createWorld() { 
+    console.log('Creating infinite world builder...'); 
+    try { 
+      await this.createInfiniteWorld(); 
+    } catch(e) { 
+      console.warn('Infinite world failed; using fallback flat terrain', e); 
+      this.createFallbackTerrain(); 
+    } 
+    this.createInfiniteWater(); 
   },
-  createFlatTerrain() { this.terrain = MeshBuilder.CreateGround('flatTerrain',{width:1000,height:1000,subdivisions:50},this.scene); const mat=new StandardMaterial('flatTerrainMaterial',this.scene); mat.diffuseColor=new Color3(0.3,0.5,0.3); this.terrain.material=mat; },
-  createWater() { this.water=MeshBuilder.CreateGround('water',{width:400,height:400,subdivisions:8},this.scene); this.water.position.y=2; const wm=new StandardMaterial('waterMaterial',this.scene); wm.diffuseColor=new Color3(0.1,0.4,0.8); wm.alpha=0.7; this.water.material=wm; this.scene.registerBeforeRender(()=>{ if(this.water){ const t=Date.now()*0.001; this.water.position.y=2+Math.sin(t*0.5)*0.2; }}); },
+  async createInfiniteWorld() {
+    // Create starting island - large flat circular area for building
+    const islandRadius = 100;
+    const islandSubdivisions = 64;
+    
+    // Create the starting island as a circular disc
+    this.startingIsland = MeshBuilder.CreateDisc('startingIsland', {
+      radius: islandRadius,
+      subdivisions: islandSubdivisions
+    }, this.scene);
+    
+    // Rotate to make it horizontal
+    this.startingIsland.rotation.x = Math.PI / 2;
+    this.startingIsland.position.y = 50; // Above water level
+    
+    // Material for the starting island
+    const islandMat = new StandardMaterial('islandMaterial', this.scene);
+    islandMat.diffuseColor = new Color3(0.6, 0.8, 0.4); // Grassy green
+    this.startingIsland.material = islandMat;
+    
+    // Add collision detection for the island
+    this.startingIsland.checkCollisions = true;
+    
+    console.log('✅ Starting island created');
+    this.terrain = this.startingIsland; // For compatibility
+  },
+  createFallbackTerrain() { 
+    // Fallback to flat terrain if infinite world fails
+    this.terrain = MeshBuilder.CreateGround('fallbackTerrain', {
+      width: 200, 
+      height: 200, 
+      subdivisions: 50
+    }, this.scene); 
+    this.terrain.position.y = 50;
+    const mat = new StandardMaterial('fallbackTerrainMaterial', this.scene); 
+    mat.diffuseColor = new Color3(0.3, 0.5, 0.3); 
+    this.terrain.material = mat; 
+  },
+  createInfiniteWater() { 
+    // Create massive water plane that extends to horizon
+    const waterSize = 10000; // Very large water plane
+    this.water = MeshBuilder.CreateGround('infiniteWater', {
+      width: waterSize, 
+      height: waterSize, 
+      subdivisions: 8
+    }, this.scene); 
+    this.water.position.y = 45; // Below island level
+    
+    const waterMat = new StandardMaterial('infiniteWaterMaterial', this.scene); 
+    waterMat.diffuseColor = new Color3(0.1, 0.3, 0.8); 
+    waterMat.alpha = 0.8; 
+    waterMat.backFaceCulling = false;
+    this.water.material = waterMat; 
+    
+    // Animated water effect
+    this.scene.registerBeforeRender(() => { 
+      if (this.water) { 
+        const t = Date.now() * 0.001; 
+        this.water.position.y = 45 + Math.sin(t * 0.3) * 0.5; // Gentle waves
+      } 
+    }); 
+    
+    console.log('✅ Infinite water created');
+  },
   async createPlayer() {
     try {
       await this.loadMikuModel();

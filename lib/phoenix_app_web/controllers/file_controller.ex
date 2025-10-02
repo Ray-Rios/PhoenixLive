@@ -1,26 +1,15 @@
 defmodule PhoenixAppWeb.FileController do
   use PhoenixAppWeb, :controller
 
-
   def upload(conn, %{"file" => file_params}) do
     user = conn.assigns.current_user
     
     if user do
       case PhoenixApp.Files.create_user_file(user, file_params) do
-        {:ok, file} ->
-          conn
-          |> put_status(:created)
-          |> json(%{
-            id: file.id,
-            filename: file.original_filename,
-            size: file.file_size,
-            url: PhoenixApp.UserFileUpload.url({file.file, file})
-          })
-        
         {:error, changeset} ->
           conn
           |> put_status(:unprocessable_entity)
-          |> json(%{errors: translate_errors(changeset)})
+          |> json(%{errors: format_changeset_errors(changeset)})
       end
     else
       conn
@@ -34,24 +23,12 @@ defmodule PhoenixAppWeb.FileController do
     
     if user do
       try do
-        file = PhoenixApp.Files.get_user_file!(user, file_id)
-        
-        case PhoenixApp.Files.delete_user_file(file) do
-          {:ok, _} ->
-            conn
-            |> put_status(:ok)
-            |> json(%{message: "File deleted successfully"})
-          
-          {:error, _changeset} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> json(%{error: "Failed to delete file"})
-        end
+        PhoenixApp.Files.get_user_file!(user, file_id)
       rescue
-        Ecto.NoResultsError ->
+        RuntimeError ->
           conn
-          |> put_status(:not_found)
-          |> json(%{error: "File not found"})
+          |> put_status(:not_implemented)
+          |> json(%{error: "File deletion not implemented yet"})
       end
     else
       conn
@@ -60,7 +37,7 @@ defmodule PhoenixAppWeb.FileController do
     end
   end
 
-  defp translate_errors(changeset) do
+  defp format_changeset_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, &translate_error/1)
   end
 

@@ -7,7 +7,7 @@ defmodule PhoenixAppWeb.Api.PixelStreamingController do
       viewerCount: get_viewer_count(),
       timestamp: DateTime.utc_now(),
       gameStatus: "running",
-      message: "Enhanced EQEmu server is running",
+      message: "Game server is running",
       serverStats: get_server_stats(),
       activePlayers: get_active_players_summary()
     })
@@ -24,7 +24,7 @@ defmodule PhoenixAppWeb.Api.PixelStreamingController do
   def game_data(conn, _params) do
     json(conn, %{
       world: %{
-        name: "EQEmu World",
+        name: "Infinite World",
         zones: [
           %{name: "Darkwood Forest", players: 23, difficulty: "medium"},
           %{name: "Crystal Caves", players: 15, difficulty: "hard"},
@@ -75,10 +75,6 @@ defmodule PhoenixAppWeb.Api.PixelStreamingController do
     case kick_player_from_game(player_id) do
       :ok ->
         json(conn, %{success: true, message: "Player kicked successfully"})
-      {:error, reason} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{success: false, error: reason})
     end
   end
 
