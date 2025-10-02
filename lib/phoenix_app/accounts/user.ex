@@ -9,6 +9,8 @@ defmodule PhoenixApp.Accounts.User do
     field :email, :string
     field :name, :string
     field :password, :string, virtual: true, redact: true
+    field :current_password, :string, virtual: true, redact: true
+    field :password_confirmation, :string, virtual: true, redact: true
     field :password_hash, :string, redact: true
     field :confirmed_at, :utc_datetime
     field :avatar_shape, :string, default: "circle"
@@ -18,7 +20,7 @@ defmodule PhoenixApp.Accounts.User do
     field :is_online, :boolean, default: false
     field :is_admin, :boolean, default: true
     field :status, :string, default: "active"
-    field :role, :string, default: "subscriber"
+    field :role, :string, default: "member"
     field :two_factor_secret, :string
     field :two_factor_enabled, :boolean, default: false
     field :two_factor_backup_codes, {:array, :string}, default: []
@@ -135,11 +137,60 @@ defmodule PhoenixApp.Accounts.User do
     |> put_password_hash()
   end
 
+  # Password change with current password verification
+  def password_change_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:current_password, :password, :password_confirmation])
+    |> validate_required([:current_password, :password, :password_confirmation])
+    |> validate_current_password()
+    |> validate_password()
+    |> validate_password_confirmation()
+    |> put_password_hash()
+  end
+
+  # Validate current password
+  defp validate_current_password(changeset) do
+    current_password = get_change(changeset, :current_password)
+    
+    if current_password && changeset.data.password_hash do
+      if valid_password?(changeset.data, current_password) do
+        changeset
+      else
+        add_error(changeset, :current_password, "is incorrect")
+      end
+    else
+      add_error(changeset, :current_password, "is required")
+    end
+  end
+
+  # Validate password confirmation
+  defp validate_password_confirmation(changeset) do
+    password = get_change(changeset, :password)
+    password_confirmation = get_change(changeset, :password_confirmation)
+    
+    if password && password_confirmation do
+      if password == password_confirmation do
+        changeset
+      else
+        add_error(changeset, :password_confirmation, "does not match password")
+      end
+    else
+      changeset
+    end
+  end
+
   # Admin changeset
   def admin_changeset(user, attrs) do
     user
     |> cast(attrs, [:is_admin])
     |> validate_required([:is_admin])
+  end
+
+  def role_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:is_admin, :role])
+    |> validate_required([:is_admin])
+    |> validate_inclusion(:role, ["admin", "gm", "editor", "moderator", "member", "guest", "banned"])
   end
 
   # Avatar changeset

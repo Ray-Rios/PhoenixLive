@@ -15,8 +15,16 @@ defmodule PhoenixApp.UserFileUpload do
   end
 
   def filename(version, {file, scope}) do
-    name = Path.basename(file.file_name, Path.extname(file.file_name))
-    "#{scope.id}_#{name}_#{version}#{Path.extname(file.file_name)}"
+    # Handle both Plug.Upload and our custom file struct
+    file_name = case file do
+      %{filename: name} -> name
+      %{file_name: name} -> name
+      _ -> "upload"
+    end
+    
+    name = Path.basename(file_name, Path.extname(file_name))
+    ext = Path.extname(file_name)
+    "#{scope.id}_#{name}_#{version}#{ext}"
   end
 
   def storage_dir(_version, {_file, scope}) do

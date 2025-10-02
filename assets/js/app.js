@@ -25,7 +25,6 @@ import { FormHandler } from "./form_handler";
 import { FormPreserver } from "./form_preserver";
 // Import Babylon.js hooks
 import { BabylonScene } from "./babylon/babylon_hooks"
-import { LobbyScene } from "./babylon/lobby_hooks";
 import { OpenWorldLobbyScene } from "./babylon/open_world_lobby_scene";
 import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
 
@@ -33,6 +32,8 @@ import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
 import { RichEditor } from "./rich_editor";
 // Import file drag-drop hooks
 import { FileDragDrop, FileUpload } from "./file_drag_drop";
+// Import blog autosave hook
+import { BlogAutosave } from "./blog_autosave_hook";
 // Import quest engine
 import "./quest_engine";
 
@@ -168,8 +169,8 @@ let Hooks = {
   RichEditor,
   FileDragDrop,
   FileUpload,
+  BlogAutosave,
   BabylonScene,
-  LobbyScene,
   OpenWorldLobbyScene,
   HomeGalaxyScene,
   FlashNotification,
@@ -182,6 +183,30 @@ let Hooks = {
 let liveSocket = new LiveSocket("/live", Socket, {
   params: { _csrf_token: csrfToken },
   hooks: Hooks
+});
+
+// ---- LiveSocket instrumentation ----
+if (!window.__liveSocketInstr) {
+  window.__liveSocketInstr = { connects: 0, disconnects: 0, errors: 0 };
+}
+
+const originalConnect = liveSocket.connect.bind(liveSocket);
+liveSocket.connect = function() {
+  console.log('[LiveSocket] connect() invoked');
+  return originalConnect();
+};
+
+liveSocket.socket.onOpen(() => {
+  window.__liveSocketInstr.connects += 1;
+  console.log(`[LiveSocket] OPEN (total: ${window.__liveSocketInstr.connects})`);
+});
+liveSocket.socket.onClose((ev) => {
+  window.__liveSocketInstr.disconnects += 1;
+  console.warn('[LiveSocket] CLOSE', ev && ev.code, 'total:', window.__liveSocketInstr.disconnects);
+});
+liveSocket.socket.onError((err) => {
+  window.__liveSocketInstr.errors += 1;
+  console.error('[LiveSocket] ERROR', err, 'total:', window.__liveSocketInstr.errors);
 });
 
 // ---------------------------

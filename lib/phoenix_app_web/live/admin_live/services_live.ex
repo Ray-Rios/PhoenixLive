@@ -37,7 +37,7 @@ defmodule PhoenixAppWeb.AdminLive.ServicesLive do
         type: :web
       },
       %{
-        name: "API Server (Rust)",
+        name: "API Server",
         description: "Universal API backend for web and games",
         url: "http://localhost:7000",
         port: 7000,

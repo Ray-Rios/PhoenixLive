@@ -1,16 +1,18 @@
 defmodule PhoenixAppWeb.LobbyLive do
   use PhoenixAppWeb, :live_view
-  alias PhoenixApp.{PresenceTracker, Chat}
+  alias PhoenixApp.PresenceTracker
   import PhoenixAppWeb.Components.PageWrapper
 
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) && socket.assigns.current_user do
-      # Join the lobby presence
+      # Join the lobby presence with static timestamp
+      joined_at = System.system_time(:second)
+      
       PresenceTracker.track(self(), "lobby", socket.assigns.current_user.id, %{
         username: socket.assigns.current_user.name,
         position: %{x: 0, y: 52, z: 0}, # Start in center of crater lake
-        joined_at: System.system_time(:second)
+        joined_at: joined_at
       })
       
       # Subscribe to presence updates and chat
@@ -84,16 +86,15 @@ defmodule PhoenixAppWeb.LobbyLive do
   @impl true
   def handle_event("update_position", %{"x" => x, "y" => y, "z" => z}, socket) do
     if socket.assigns.current_user do
-      # Update user position in presence
+      # Update user position in presence without changing joined_at
       PresenceTracker.update(self(), "lobby", socket.assigns.current_user.id, %{
         username: socket.assigns.current_user.name,
-        position: %{x: x, y: y, z: z},
-        joined_at: System.system_time(:second)
+        position: %{x: x, y: y, z: z}
+        # Removed joined_at to prevent constant updates
       })
       
-      # Update local user position
-      user = put_in(socket.assigns.user.position, %{x: x, y: y, z: z})
-      {:noreply, assign(socket, user: user)}
+      # Removed local user position update to prevent DOM churn
+      {:noreply, socket}
     else
       {:noreply, socket}
     end
@@ -128,20 +129,51 @@ defmodule PhoenixAppWeb.LobbyLive do
     end
   end
 
+  @impl true
+  def handle_event("chat_message", %{"message" => message, "username" => username} = params, socket) do
+    if socket.assigns.current_user && String.trim(message) != "" do
+      # Create chat message data
+      chat_data = %{
+        id: System.unique_integer([:positive]),
+        message: String.trim(message),
+        username: username,
+        user_id: socket.assigns.current_user.id,
+        timestamp: System.system_time(:second),
+        position: params["position"]
+      }
+
+      # Broadcast to all users in lobby
+      Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "lobby:chat", {:chat_message, chat_data})
+      
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("player_position", %{"position" => _position} = _params, socket) do
+    # Temporarily disabled to prevent update loops
+    # Position updates were causing continuous presence updates
+    {:noreply, socket}
+  end
+
   # -------------------
   # PubSub Event Handlers  
   # -------------------
 
   # Handle presence updates
   @impl true
-  def handle_info(%{event: "presence_diff"}, socket) do
-    users_present = list_present_users()
-    
-    # Push updated user list to JavaScript
-    {:noreply, 
-     socket
-     |> assign(:users_present, users_present)
-     |> push_event("update_users", %{users: users_present})}
+  def handle_info(%{event: "presence_diff", joins: _joins, leaves: _leaves}, socket) do
+    # COMPLETELY DISABLED - This was causing infinite page reloads
+    # TODO: Investigate and fix the root cause of constant presence updates
+    {:noreply, socket}
+  end
+
+  # Ignore presence_diff broadcasts to prevent crash/remount loop
+  @impl true
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
+    {:noreply, socket}
   end
 
   @impl true
@@ -175,6 +207,24 @@ defmodule PhoenixAppWeb.LobbyLive do
     {:noreply, assign(socket, scene_config: scene_config)}
   end
 
+  @impl true
+  def handle_info({:user_moved, data}, socket) do
+    # Push user movement to client
+    {:noreply, push_event(socket, "user_moved", data)}
+  end
+
+  @impl true
+  def handle_info({:user_joined, data}, socket) do
+    # Push user joined event to client
+    {:noreply, push_event(socket, "user_joined", data)}
+  end
+
+  @impl true
+  def handle_info({:user_left, data}, socket) do
+    # Push user left event to client
+    {:noreply, push_event(socket, "user_left", data)}
+  end
+
   # -------------------
   # Render
   # -------------------
@@ -183,15 +233,15 @@ defmodule PhoenixAppWeb.LobbyLive do
   def render(assigns) do
     ~H"""
     <.page_with_navbar current_user={@current_user} flash={@flash}>
-      <div id="craterlake-container" style="position: fixed; top: 30px; left: 0; width: 100vw; height: calc(100vh - 30px); background: #001122;">
+      <div id="craterlake-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #001122; z-index: 1;">
         <!-- Main 3D Scene -->
-        <div id="scene-wrapper" style="width: 100%; height: 100%;">
-          <canvas id="craterlake-scene"
-                  phx-hook="OpenWorldLobbyScene"
-                  data-scene-config={Jason.encode!(@scene_config)}
-                  data-user={Jason.encode!(@user)}
-                  data-users={Jason.encode!(@users_present)}
-                  style="display: block; cursor: crosshair; width: 100%; height: 100%;">
+        <div id="scene-wrapper" style="width: 100vw; height: 100vh; position: relative;">
+    <canvas id="craterlake-scene"
+      phx-hook="OpenWorldLobbyScene"
+      data-scene-config={Jason.encode!(@scene_config)}
+      data-user={Jason.encode!(@user)}
+      data-users="[]" <!-- users removed to prevent churn; re-enable when multi-player rendering implemented -->
+      style="display: block; cursor: crosshair; width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 2;">
           </canvas>
         </div>
 
@@ -258,7 +308,7 @@ defmodule PhoenixAppWeb.LobbyLive do
           </div>
         </div>
 
-  <!-- Removed legacy panel iframes -->
+        <!-- Removed legacy panel iframes -->
       </div> <!-- /craterlake-container -->
     </.page_with_navbar>
     """
@@ -266,7 +316,10 @@ defmodule PhoenixAppWeb.LobbyLive do
 
   defp list_present_users do
     PresenceTracker.list("lobby")
-    |> Enum.map(fn {_user_id, %{metas: [meta | _]}} -> meta end)
+    |> Enum.map(fn {_user_id, %{metas: [meta | _]}} -> 
+      # Remove phx_ref to prevent constant re-renders due to changing references
+      Map.drop(meta, [:phx_ref])
+    end)
   end
 
   # Safe rounding helper for coordinates which may be integers or floats or nil

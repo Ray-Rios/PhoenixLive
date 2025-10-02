@@ -144,7 +144,7 @@ defmodule PhoenixApp.Accounts.EmailVerification do
         |> User.verify_email_changeset()
         |> Repo.update()
         |> case do
-          {:ok, verified_user} ->
+          {:ok, _verified_user} ->
             {:ok, "Email auto-verified for development (domain: #{get_domain(user.email)})"}
           {:error, changeset} ->
             {:error, format_errors(changeset)}
@@ -219,9 +219,5 @@ defmodule PhoenixApp.Accounts.EmailVerification do
     end)
     |> Enum.map(fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
     |> Enum.join("; ")
-  end
-
-  defp get_env do
-    System.get_env("MIX_ENV") || "dev"
   end
 end

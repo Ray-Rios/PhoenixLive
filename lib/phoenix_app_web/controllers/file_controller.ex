@@ -1,12 +1,12 @@
 defmodule PhoenixAppWeb.FileController do
   use PhoenixAppWeb, :controller
-  alias PhoenixApp.Files
+
 
   def upload(conn, %{"file" => file_params}) do
     user = conn.assigns.current_user
     
     if user do
-      case Files.create_user_file(user, file_params) do
+      case PhoenixApp.Files.create_user_file(user, file_params) do
         {:ok, file} ->
           conn
           |> put_status(:created)
@@ -34,9 +34,9 @@ defmodule PhoenixAppWeb.FileController do
     
     if user do
       try do
-        file = Files.get_user_file!(user, file_id)
+        file = PhoenixApp.Files.get_user_file!(user, file_id)
         
-        case Files.delete_user_file(file) do
+        case PhoenixApp.Files.delete_user_file(file) do
           {:ok, _} ->
             conn
             |> put_status(:ok)

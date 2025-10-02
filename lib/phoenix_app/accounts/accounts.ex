@@ -232,42 +232,9 @@ defmodule PhoenixApp.Accounts do
     PhoenixApp.Accounts.RateLimit.check_login_limit(ip_address)
   end
 
-  defp authenticate_existing_user(user, password, ip_address) do
-    cond do
-      User.account_locked?(user) ->
-        record_failed_login(ip_address)
-        {:error, :account_locked}
-      
-      PhoenixApp.Accounts.EmailVerification.verification_required?(user) ->
-        if check_password(user, password) do
-          {:error, :email_not_verified}
-        else
-          record_failed_login(ip_address, user)
-          {:error, :invalid_credentials}
-        end
-      
-      check_password(user, password) ->
-        # Successful login - reset failed attempts
-        user
-        |> User.reset_failed_login_changeset(ip_address)
-        |> Repo.update()
-        
-        {:ok, user}
-      
-      true ->
-        # Failed password - increment attempts and possibly lock account
-        user
-        |> User.increment_failed_login_changeset()
-        |> Repo.update()
-        
-        record_failed_login(ip_address, user)
-        {:error, :invalid_credentials}
-    end
-  end
 
-  defp record_failed_login(nil), do: :ok
+
   defp record_failed_login(nil, _user), do: :ok
-  defp record_failed_login(ip_address), do: PhoenixApp.Accounts.RateLimit.record_login_attempt(ip_address)
   defp record_failed_login(ip_address, _user), do: PhoenixApp.Accounts.RateLimit.record_login_attempt(ip_address)
 
   defp reset_failed_login_attempts(user, ip_address) do
@@ -366,8 +333,40 @@ defmodule PhoenixApp.Accounts do
     |> Repo.update()
   end
 
+  def update_user_role(%User{} = user, role) when is_binary(role) do
+    # Map role to admin status and role field
+    {is_admin, role_value} = case role do
+      "admin" -> {true, "admin"}
+      "gm" -> {false, "gm"}
+      "editor" -> {false, "editor"}
+      "moderator" -> {false, "moderator"}
+      "member" -> {false, "member"}
+      "guest" -> {false, "guest"}
+      "banned" -> {false, "banned"}
+      _ -> {false, "member"} # default
+    end
+
+    user
+    |> User.role_changeset(%{is_admin: is_admin, role: role_value})
+    |> Repo.update()
+  end
+
   def count_users do
     Repo.aggregate(User, :count, :id)
+  end
+
+  def count_admin_users do
+    import Ecto.Query
+    from(u in User, where: u.is_admin == true)
+    |> Repo.aggregate(:count, :id)
+  end
+
+  def count_active_users do
+    import Ecto.Query
+    # Users who have logged in in the last 30 days
+    thirty_days_ago = DateTime.utc_now() |> DateTime.add(-30, :day)
+    from(u in User, where: u.last_login_at > ^thirty_days_ago or u.is_online == true)
+    |> Repo.aggregate(:count, :id)
   end
 
   def list_recent_users(limit \\ 5) do
@@ -401,8 +400,14 @@ defmodule PhoenixApp.Accounts do
     update_profile(user, attrs)
   end
 
+  def change_user_profile(%User{} = user, attrs \\ %{}) do
+    User.profile_changeset(user, attrs)
+  end
+
   def update_user_password(%User{} = user, attrs) do
-    update_password(user, attrs)
+    user
+    |> User.password_change_changeset(attrs)
+    |> Repo.update()
   end
 
   def update_avatar(%User{} = user, attrs) do
@@ -552,7 +557,7 @@ defmodule PhoenixApp.Accounts do
   # Password Reset Functions
   # ---------------------
   
-  def send_password_reset_email(identifier, ip_address \\ nil) when is_binary(identifier) do
+  def send_password_reset_email(identifier, _ip_address \\ nil) when is_binary(identifier) do
     identifier = String.trim(identifier)
     
     # Check rate limiting first (use email/username for rate limiting)
@@ -573,11 +578,11 @@ defmodule PhoenixApp.Accounts do
                 # Record the attempt for rate limiting (use the identifier, not IP)
                 PhoenixApp.Accounts.RateLimit.record_password_reset_attempt(identifier)
                 {:ok, "If an account with that email/username exists, you should receive an email with instructions shortly."}
-              {:error, reason} ->
+              {:error, _reason} ->
                 {:error, "Unable to send password reset email. Please try again later."}
             end
           else
-            {:error, changeset} ->
+            {:error, _changeset} ->
               {:error, "Unable to send password reset email. Please try again later."}
           end
       end

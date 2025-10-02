@@ -40,11 +40,16 @@
             COPY config ./config
 
         # -------------------------------    
-        # Set temporary env vars for build
+        # Set temporary build args and env vars for compilation
         # -------------------------------
-            ENV SECRET_KEY_BASE=build_time_secret_key_base_placeholder_64_chars_long_minimum
-            ENV LIVE_VIEW_SIGNING_SALT=build_time_salt_32_chars_long_min
-            ENV GUARDIAN_SECRET_KEY=build_time_guardian_secret_key_placeholder_64_chars_long_minimum
+            ARG SECRET_KEY_BASE=build_time_secret_key_base_placeholder_64_chars_long_minimum
+            ARG LIVE_VIEW_SIGNING_SALT=build_time_salt_32_chars_long_min
+            ARG GUARDIAN_SECRET_KEY=build_time_guardian_secret_key_placeholder_64_chars_long_minimum
+            
+            # Set environment variables from build args for compilation only
+            ENV SECRET_KEY_BASE=${SECRET_KEY_BASE}
+            ENV LIVE_VIEW_SIGNING_SALT=${LIVE_VIEW_SIGNING_SALT}
+            ENV GUARDIAN_SECRET_KEY=${GUARDIAN_SECRET_KEY}
             
             RUN mix deps.get && mix deps.compile
             
@@ -58,7 +63,13 @@
         # Copy assets and build them
         # -------------------------------
             COPY assets ./assets
-            RUN cd assets && npm cache clean --force && npm install
+            RUN cd assets && \
+                npm config set fetch-retry-mintimeout 20000 && \
+                npm config set fetch-retry-maxtimeout 120000 && \
+                npm config set fetch-retries 5 && \
+                npm config set registry https://registry.npmjs.org/ && \
+                npm cache clean --force && \
+                npm install --prefer-offline --no-audit --no-fund
             
             # Build assets based on environment
             RUN if [ "$MIX_ENV" = "prod" ]; then \

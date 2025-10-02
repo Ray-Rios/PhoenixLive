@@ -354,11 +354,7 @@ defmodule PhoenixAppWeb.AuthLive do
 
   # ----------------
     # Helper functions
-  defp handle_rate_limit_error(message) when is_binary(message) do
-    message
-  end
 
-  defp handle_rate_limit_error(_), do: "Too many attempts. Please try again later."
 
   # Email verification actions
   def handle_event("verify_code", %{"verification" => verification_params}, socket) do

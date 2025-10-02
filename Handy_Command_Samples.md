@@ -29,6 +29,7 @@ docker system prune -a -f
 docker volume prune -a -f
 docker build --no-cache -t phoenixapp:latest .
 docker rmi phoenixapp:latest
+docker build -t phoenixapp:prod --progress=plain --build-arg MIX_ENV=prod
 docker system prune -a -f && docker volume prune -f && docker builder prune -f
 docker system prune --volume
 ## 🔧 Kube stuff 🔧 ##
@@ -54,6 +55,7 @@ kubectl get endpoints phoenix-web -n phoenixapp-dev
 kubectl apply -k k3s/overlays/dev
 kubectl apply -k k3s/overlays/dev/
 docker build --no-cache -t phoenix-app . && kubectl rollout restart deployment/phoenix-web -n phoenixapp
+kubectl rollout restart deployment/phoenix-web -n phoenixapp
 
 kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp && sleep 5 && kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
 ## 🔧 Phoenix stuff 🔧 ##
@@ -136,7 +138,7 @@ curl -X POST http://localhost/api/auth/login -H "Content-Type: application/json"
 
 
 AI context:
-This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis (although not enabled currently). I have a GraphQL layer with an API layer trying to play nice together. For Babylon.js we're using tree-shaken imports and need to make sure we're importing the correctly
+This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis. I have a GraphQL layer with an API layer trying to play nice together so I can extend this program outside this applicaiton. For Babylon.js we're using tree-shaken imports and need to make sure we're importing the correctly
 
 AI context: please do no execute migrations in the pods themselves. update the files and re-deploy the kubernetes manifest. We've been down this road before and it causes severe docker issues.
 

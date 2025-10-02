@@ -44,6 +44,11 @@ defmodule PhoenixAppWeb.Components.Navigation do
               <.link navigate={~p"/blog"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 🚬 Blog
               </.link>
+              <%= if @current_user && @current_user.is_admin do %>
+                <.link navigate={~p"/admin"} class="text-orange-400 hover:text-orange-300 transition-colors duration-300 text-sm font-semibold">
+                  ⚙️ Admin
+                </.link>
+              <% end %>
             </div>
           </div>
           
@@ -79,8 +84,15 @@ defmodule PhoenixAppWeb.Components.Navigation do
                     📁 Files
                   </.link>
                   <%= if @current_user.is_admin do %>
-                    <.link navigate={~p"/admin/user-management"} class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                    <hr class="border-gray-600 my-1">
+                    <.link navigate={~p"/admin"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
+                      🏠 Admin Dashboard
+                    </.link>
+                    <.link navigate={~p"/admin/user-management"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
                       👥 User Management
+                    </.link>
+                    <.link navigate={~p"/admin/blog-management"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
+                      📝 Blog Management
                     </.link>
                   <% end %>
                   <hr class="border-gray-600 my-1">

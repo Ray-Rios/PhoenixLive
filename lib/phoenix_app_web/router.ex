@@ -127,8 +127,10 @@ defmodule PhoenixAppWeb.Router do
       on_mount: {PhoenixAppWeb.UserAuth, :require_admin_user},
       layout: {PhoenixAppWeb.Layouts, :app} do
 
-      live "/", AdminLive.BlogManagement, :index
+      live "/", AdminLive.Dashboard, :index
+      live "/blog-management", AdminLive.BlogManagement, :index
       live "/user-management", UserManagementLive, :index
+      live "/sql", AdminLive.SQL, :index
     end
   end
 

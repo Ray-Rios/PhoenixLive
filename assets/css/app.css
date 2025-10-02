@@ -173,9 +173,11 @@
 
 /* Starry Background - Full Screen Responsive */
 .starry-background {
-  position: relative;
-  min-height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
+  height: 100%;
   background: #000;
   overflow: hidden;
 }
@@ -341,9 +343,20 @@
 
 /* Page Layout Styles */
 .page-content {
-  padding-top: 30px;
-  transition: padding-top 0.3s ease-in-out;
+  width: 100vw;
+  height: 100vh;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  transition: none;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .page-content.navbar-hidden {

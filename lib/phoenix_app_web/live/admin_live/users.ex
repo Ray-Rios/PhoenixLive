@@ -51,7 +51,7 @@ defmodule PhoenixAppWeb.AdminLive.Users do
             <h2 class="text-xl font-bold text-white mb-6">Admin Panel</h2>
             <nav class="space-y-2">
               <.link navigate="/admin" class="admin-nav-link">📊 Dashboard</.link>
-              <.link navigate="/admin/users" class="admin-nav-link active">👥 Users</.link>
+              <.link navigate="/admin/user-management" class="admin-nav-link active">👥 Users</.link>
               <.link navigate="/admin/products" class="admin-nav-link">🛍️ Products</.link>
               <.link navigate="/admin/orders" class="admin-nav-link">📦 Orders</.link>
               <.link navigate="/admin/posts" class="admin-nav-link">📝 Blog Posts</.link>

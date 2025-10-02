@@ -14,6 +14,10 @@ defmodule PhoenixApp.Content do
     |> Repo.preload(:user)
   end
 
+  def count_posts do
+    Repo.aggregate(Post, :count, :id)
+  end
+
   def list_published_posts do
     from(p in Post, where: p.is_published == true, order_by: [desc: p.inserted_at])
     |> Repo.all()
@@ -89,7 +93,7 @@ defmodule PhoenixApp.Content do
     |> Repo.preload(:user)
   end
 
-  def list_posts_by_type(post_type) do
+  def list_posts_by_type(_post_type) do
     # Post type functionality not implemented in current schema
     # Return all posts for now
     from(p in Post, order_by: [desc: p.inserted_at])
@@ -179,9 +183,6 @@ defmodule PhoenixApp.Content do
   end
 
   # Admin functions
-  def count_posts do
-    Repo.aggregate(Post, :count)
-  end
 
   def count_posts_by_status(status) when status in [:published, :draft] do
     is_published = case status do

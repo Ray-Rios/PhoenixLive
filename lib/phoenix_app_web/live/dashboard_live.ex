@@ -98,7 +98,7 @@ defmodule PhoenixAppWeb.DashboardLive do
                 </div>
                 <h3 class="text-xl font-bold text-white mb-2">Game Admin</h3>
                 <p class="text-gray-300 mb-4">Monitor game servers and players</p>
-                <.link navigate={~p"/admin/game"} class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-300">
+                <.link navigate={~p"/eqemu/admin"} class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-300">
                   Game Admin
                 </.link>
               </div>
@@ -113,8 +113,8 @@ defmodule PhoenixAppWeb.DashboardLive do
                 </div>
                 <h3 class="text-xl font-bold text-white mb-2">Game CMS</h3>
                 <p class="text-gray-300 mb-4">Manage game content and data</p>
-                <.link navigate={~p"/admin/game-cms"} class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors duration-300">
-                  Game CMS
+                <.link navigate={~p"/admin/blog-management"} class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors duration-300">
+                  Content CMS
                 </.link>
               </div>
             </div>

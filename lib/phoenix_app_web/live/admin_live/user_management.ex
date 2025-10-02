@@ -23,28 +23,35 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
       true ->
         # Load users for admin
         users = Accounts.list_users()
-        {:ok, assign(socket, users: users, page_title: "User Management", confirm_delete_user_id: nil)}
+        {:ok, assign(socket, users: users, page_title: "User Management", confirm_delete_user_id: nil, default_role: "member")}
     end
   end
 
   @impl true
-  def handle_event("toggle_admin", %{"user_id" => user_id}, socket) do
+  def handle_event("change_default_role", %{"default_role" => role}, socket) do
+    {:noreply, assign(socket, default_role: role)}
+  end
+
+  @impl true
+  def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
     user = Accounts.get_user!(user_id)
-
-    result =
-      if user.is_admin do
-        Accounts.remove_admin(user)
-      else
-        Accounts.make_admin(user)
-      end
-
-    case result do
+    
+    case Accounts.update_user_role(user, %{role: role}) do
       {:ok, _updated_user} ->
         users = Accounts.list_users()
-        {:noreply, assign(socket, users: users)}
+        {:noreply, assign(socket, users: users) |> put_flash(:info, "User role updated successfully")}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update user permissions")}
+        {:noreply, put_flash(socket, :error, "Failed to update user role")}
+    end
+  end
+
+  # Helper function to determine user role
+  defp get_user_role(user) do
+    cond do
+      user.is_admin -> "admin"
+      user.role && user.role != "subscriber" -> user.role
+      true -> "member"
     end
   end
 
@@ -108,12 +115,38 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
 
       <.navbar current_user={@current_user} />
 
-      <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <div class="max-w-6xl mx-auto">
+      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
+        <div class="max-w-7xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">User Management</h1>
-          <div class="bg-gray-800 rounded-lg overflow-hidden">
+          
+          <!-- Default Role Setting -->
+          <div class="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 class="text-lg font-semibold text-white mb-4">Default Role Settings</h2>
+            <div class="flex items-center space-x-4">
+              <label class="text-sm font-medium text-gray-300">Default role for new users:</label>
+              <select 
+                phx-change="change_default_role"
+                name="default_role"
+                class="bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500"
+              >
+                <option value="guest" selected={@default_role == "guest"}>Guest</option>
+                <option value="member" selected={@default_role == "member"}>Member</option>
+                <option value="moderator" selected={@default_role == "moderator"}>Moderator</option>
+                <option value="editor" selected={@default_role == "editor"}>Editor</option>
+                <option value="gm" selected={@default_role == "gm"}>GM</option>
+                <option value="admin" selected={@default_role == "admin"}>Admin</option>
+              </select>
+              <span class="text-xs text-gray-400">Currently set to: <strong><%= String.capitalize(@default_role) %></strong></span>
+            </div>
+          </div>
+          
+          <div class="bg-gray-800 rounded-lg shadow-lg">
+            <div class="p-6 border-b border-gray-700">
+              <h2 class="text-lg font-semibold text-white">Users (<%= length(@users) %>)</h2>
+            </div>
             <div class="overflow-x-auto">
-              <table class="w-full">
+              <div class="min-w-full inline-block align-middle">
+                <table class="min-w-full">
                 <thead class="bg-gray-700">
                   <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">User</th>
@@ -146,21 +179,43 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
                         </span>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
-                        <span class={"px-2 inline-flex text-xs leading-5 font-semibold rounded-full #{if user.is_admin, do: "bg-purple-100 text-purple-800", else: "bg-gray-100 text-gray-800"}"}>
-                          <%= if user.is_admin, do: "Admin", else: "Member" %>
-                        </span>
+                        <%= case get_user_role(user) do %>
+                          <% "admin" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Admin</span>
+                          <% "gm" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">GM</span>
+                          <% "editor" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Editor</span>
+                          <% "moderator" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Moderator</span>
+                          <% "member" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Member</span>
+                          <% "guest" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Guest</span>
+                          <% "banned" -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-black text-white">BANNED</span>
+                          <% _ -> %>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Member</span>
+                        <% end %>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300"><%= Calendar.strftime(user.inserted_at, "%b %d, %Y") %></td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm">
                         <%= if user.id != @current_user.id do %>
-                          <div class="flex space-x-2">
-                            <button 
-                              phx-click="toggle_admin" 
+                          <div class="flex flex-col lg:flex-row gap-2">
+                            <select 
+                              phx-change="change_role" 
                               phx-value-user_id={user.id}
-                              class={"px-3 py-1 text-xs font-medium rounded-md transition-colors #{if user.is_admin, do: "bg-red-600 hover:bg-red-700 text-white", else: "bg-blue-600 hover:bg-blue-700 text-white"}"}
+                              name="role"
+                              class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
                             >
-                              <%= if user.is_admin, do: "Remove Admin", else: "Make Admin" %>
-                            </button>
+                              <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
+                              <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
+                              <option value="member" selected={get_user_role(user) == "member"}>Member</option>
+                              <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
+                              <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
+                              <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
+                              <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
+                            </select>
                             
                             <button 
                               phx-click="toggle_status" 
@@ -203,7 +258,8 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
                     </tr>
                   <% end %>
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         </div>

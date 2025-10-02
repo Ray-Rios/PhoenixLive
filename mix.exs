@@ -70,6 +70,7 @@ defmodule PhoenixApp.MixProject do
       {:cors_plug, "~> 3.0"},
       {:tz, "~> 0.24"},
       {:httpoison, "~> 2.0"},
+      {:csv, "~> 3.0"},
 
     ]
   end

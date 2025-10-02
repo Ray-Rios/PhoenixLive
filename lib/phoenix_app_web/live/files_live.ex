@@ -1,13 +1,13 @@
 defmodule PhoenixAppWeb.FilesLive do
   use PhoenixAppWeb, :live_view
-  alias PhoenixApp.Files
+  alias PhoenixApp.FileManagement
 
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     
     if user do
-      files = Files.list_user_files(user)
-      stats = Files.get_file_stats(user)
+      files = FileManagement.list_user_files(user)
+      stats = FileManagement.get_file_stats(user)
       
       {:ok, assign(socket,
         files: files,
@@ -40,9 +40,9 @@ defmodule PhoenixAppWeb.FilesLive do
     user = socket.assigns.current_user
     
     files = if query == "" do
-      Files.list_user_files(user)
+      FileManagement.list_user_files(user)
     else
-      Files.search_files(user, query)
+      FileManagement.search_files(user, query)
     end
     
     {:noreply, assign(socket, files: files, search_query: query)}
@@ -78,12 +78,12 @@ defmodule PhoenixAppWeb.FilesLive do
     selected_ids = MapSet.to_list(socket.assigns.selected_files)
     
     Enum.each(selected_ids, fn file_id ->
-      file = Files.get_user_file!(user, file_id)
-      Files.delete_user_file(file)
+      file = FileManagement.get_user_file!(user, file_id)
+      FileManagement.delete_user_file(file)
     end)
     
-    files = Files.list_user_files(user)
-    stats = Files.get_file_stats(user)
+    files = FileManagement.list_user_files(user)
+    stats = FileManagement.get_file_stats(user)
     
     {:noreply, assign(socket,
       files: files,
@@ -100,43 +100,46 @@ defmodule PhoenixAppWeb.FilesLive do
     {:noreply, socket}
   end
 
-  def handle_event("file_drop", %{"files" => files}, socket) when is_list(files) do
+  def handle_event("file_drop", %{"files" => [file_data]}, socket) do
     user = socket.assigns.current_user
     
-    # Process multiple files
-    results = Enum.map(files, fn file_data ->
-      Files.create_user_file(user, file_data)
-    end)
+    # Add debugging
+    IO.puts("File drop event received")
+    IO.inspect(file_data, label: "File data")
     
-    success_count = Enum.count(results, fn {status, _} -> status == :ok end)
-    error_count = Enum.count(results, fn {status, _} -> status == :error end)
-    
-    files = Files.list_user_files(user)
-    stats = Files.get_file_stats(user)
-    
-    message = cond do
-      error_count == 0 -> "#{success_count} file(s) uploaded successfully"
-      success_count == 0 -> "Failed to upload #{error_count} file(s)"
-      true -> "#{success_count} file(s) uploaded, #{error_count} failed"
+    case FileManagement.create_user_file(user, file_data) do
+      {:ok, file} ->
+        IO.puts("File created successfully")
+        IO.inspect(file, label: "Created file")
+        
+        files = FileManagement.list_user_files(user)
+        stats = FileManagement.get_file_stats(user)
+        
+        {:noreply, assign(socket,
+          files: files,
+          stats: stats
+        ) |> put_flash(:info, "File uploaded successfully")}
+      
+      {:error, changeset} ->
+        IO.puts("File creation failed")
+        IO.inspect(changeset, label: "Changeset errors")
+        
+        error_msg = case changeset.errors do
+          [{field, {msg, _}} | _] -> "#{field}: #{msg}"
+          _ -> "Failed to upload file"
+        end
+        
+        {:noreply, put_flash(socket, :error, error_msg)}
     end
-    
-    flash_type = if error_count == 0, do: :info, else: :error
-    
-    {:noreply, assign(socket,
-      files: files,
-      stats: stats,
-      uploading_files: [],
-      upload_progress: %{}
-    ) |> put_flash(flash_type, message)}
   end
 
   def handle_event("file_selected", file_data, socket) do
     user = socket.assigns.current_user
     
-    case Files.create_user_file(user, file_data) do
+    case FileManagement.create_user_file(user, file_data) do
       {:ok, _file} ->
-        files = Files.list_user_files(user)
-        stats = Files.get_file_stats(user)
+        files = FileManagement.list_user_files(user)
+        stats = FileManagement.get_file_stats(user)
         
         {:noreply, assign(socket,
           files: files,
@@ -159,10 +162,10 @@ defmodule PhoenixAppWeb.FilesLive do
   def handle_event("create_folder", %{"name" => folder_name}, socket) do
     user = socket.assigns.current_user
     
-    case Files.create_folder(user, folder_name) do
+    case FileManagement.create_folder(user, folder_name) do
       {:ok, _folder} ->
-        files = Files.list_user_files(user)
-        stats = Files.get_file_stats(user)
+        files = FileManagement.list_user_files(user)
+        stats = FileManagement.get_file_stats(user)
         
         {:noreply, assign(socket,
           files: files,
@@ -185,11 +188,11 @@ defmodule PhoenixAppWeb.FilesLive do
 
   def handle_event("rename_file", %{"file_id" => file_id, "new_name" => new_name}, socket) do
     user = socket.assigns.current_user
-    file = Files.get_user_file!(user, file_id)
+    file = FileManagement.get_user_file!(user, file_id)
     
-    case Files.update_user_file(file, %{original_filename: new_name}) do
+    case FileManagement.update_user_file(file, %{original_filename: new_name}) do
       {:ok, _file} ->
-        files = Files.list_user_files(user)
+        files = FileManagement.list_user_files(user)
         
         {:noreply, assign(socket, files: files, show_rename_modal: false, rename_file_id: nil) |> put_flash(:info, "File renamed successfully")}
       
@@ -200,12 +203,12 @@ defmodule PhoenixAppWeb.FilesLive do
 
   def handle_event("delete_file", %{"file_id" => file_id}, socket) do
     user = socket.assigns.current_user
-    file = Files.get_user_file!(user, file_id)
+    file = FileManagement.get_user_file!(user, file_id)
     
-    case Files.delete_user_file(file) do
+    case FileManagement.delete_user_file(file) do
       {:ok, _file} ->
-        files = Files.list_user_files(user)
-        stats = Files.get_file_stats(user)
+        files = FileManagement.list_user_files(user)
+        stats = FileManagement.get_file_stats(user)
         
         {:noreply, assign(socket,
           files: files,
@@ -219,7 +222,7 @@ defmodule PhoenixAppWeb.FilesLive do
 
   def handle_event("download_file", %{"file_id" => file_id}, socket) do
     user = socket.assigns.current_user
-    file = Files.get_user_file!(user, file_id)
+    file = FileManagement.get_user_file!(user, file_id)
     
     {:noreply, push_event(socket, "download-file", %{
       url: PhoenixApp.UserFileUpload.url({file.file, file}),
@@ -229,7 +232,7 @@ defmodule PhoenixAppWeb.FilesLive do
 
   def handle_event("preview_file", %{"file_id" => file_id}, socket) do
     user = socket.assigns.current_user
-    file = Files.get_user_file!(user, file_id)
+    file = FileManagement.get_user_file!(user, file_id)
     
     {:noreply, assign(socket, preview_file: file)}
   end
@@ -240,6 +243,7 @@ defmodule PhoenixAppWeb.FilesLive do
 
   def render(assigns) do
     ~H"""
+    <.navbar current_user={@current_user} />
     <div class="starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900"
          phx-hook="FileDragDrop" id="file-manager">
       <div class="stars-container">

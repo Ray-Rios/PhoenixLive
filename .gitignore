@@ -55,4 +55,4 @@ docker-compose.override.yml
 
 # Additional security - API keys and tokens
 *.env.*
-!.env.example
+!.env.exampleuploads/

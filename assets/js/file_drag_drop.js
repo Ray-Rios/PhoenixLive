@@ -1,6 +1,7 @@
 // File Drag & Drop Hook for Phoenix LiveView
 export const FileDragDrop = {
   mounted() {
+    const self = this; // Capture 'this' context for use in callbacks
     const dropZone = this.el.querySelector('#drop-zone');
     const fileInput = this.el.querySelector('#file-upload');
     
@@ -97,8 +98,13 @@ export const FileDragDrop = {
             lastModified: file.lastModified
           };
           
-          // Send to LiveView
-          this.pushEvent("file_drop", { files: [fileData] });
+          // Send to LiveView using captured 'self' reference
+          self.pushEvent("file_drop", { files: [fileData] });
+        };
+        
+        reader.onerror = (e) => {
+          console.error('Error reading file:', file.name, e);
+          alert(`Error reading file "${file.name}". Please try again.`);
         };
         
         reader.readAsDataURL(file);
@@ -118,12 +124,12 @@ export const FileDragDrop = {
       
       document.body.appendChild(progressDiv);
       
-      // Remove after 3 seconds
+      // Remove after 5 seconds
       setTimeout(() => {
         if (progressDiv.parentNode) {
           progressDiv.parentNode.removeChild(progressDiv);
         }
-      }, 3000);
+      }, 5000);
     }
   }
 };
@@ -131,6 +137,8 @@ export const FileDragDrop = {
 // File Upload Hook for traditional file input
 export const FileUpload = {
   mounted() {
+    const self = this; // Capture 'this' context for use in callbacks
+    
     this.el.addEventListener('change', (e) => {
       const files = Array.from(e.target.files);
       
@@ -146,7 +154,13 @@ export const FileUpload = {
             lastModified: file.lastModified
           };
           
-          this.pushEvent("file_selected", fileData);
+          // Use captured 'self' reference instead of 'this'
+          self.pushEvent("file_selected", fileData);
+        };
+        
+        reader.onerror = (event) => {
+          console.error('Error reading file:', file.name, event);
+          alert(`Error reading file "${file.name}". Please try again.`);
         };
         
         reader.readAsDataURL(file);

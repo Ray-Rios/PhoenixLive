@@ -1,6 +1,6 @@
 defmodule PhoenixAppWeb.AdminLive.Dashboard do
   use PhoenixAppWeb, :live_view
-  alias PhoenixApp.{Accounts, Commerce, Content, Files}
+  alias PhoenixApp.{Accounts, Commerce, Content}
 
   def mount(_params, _session, socket) do
     if socket.assigns.current_user && socket.assigns.current_user.is_admin do
@@ -22,7 +22,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
         total_orders: Commerce.count_orders() || 0,
         total_products: Commerce.count_products() || 0,
         total_posts: Content.count_posts() || 0,
-        total_files: Files.count_files() || 0,
+        total_files: PhoenixApp.FileManagement.count_files() || 0,
         recent_users: Accounts.list_recent_users(5) || [],
         recent_orders: Commerce.list_recent_orders(5) || [],
         revenue_today: Commerce.get_revenue_today() || 0,
@@ -52,6 +52,13 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
         <div class="stars3"></div>
       </div>
       
+      <.navbar current_user={@current_user} />
+      
+      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10">
+        <div class="stars2"></div>
+        <div class="stars3"></div>
+      </div>
+      
       <div class="flex relative z-10">
         <!-- Admin Sidebar -->
         <div class="w-64 bg-gray-900 min-h-screen">
@@ -61,7 +68,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
               <.link navigate="/admin" class="admin-nav-link active">
                 📊 Dashboard
               </.link>
-              <.link navigate="/admin/users" class="admin-nav-link">
+              <.link navigate="/admin/user-management" class="admin-nav-link">
                 👥 Users
               </.link>
               <.link navigate="/admin/products" class="admin-nav-link">
@@ -202,16 +209,16 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
           <div class="mt-8">
             <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <.link navigate="/admin/products/new" 
+              <.link navigate="/admin/user-management" 
                      class="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-center transition-colors">
-                <div class="text-2xl mb-2">➕</div>
-                <div>Add Product</div>
+                <div class="text-2xl mb-2">👥</div>
+                <div>Manage Users</div>
               </.link>
               
-              <.link navigate="/admin/posts/new"
+              <.link navigate="/admin/blog-management"
                      class="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-center transition-colors">
                 <div class="text-2xl mb-2">📝</div>
-                <div>Create Post</div>
+                <div>Manage Blog</div>
               </.link>
               
               <.link navigate="/admin/sql"

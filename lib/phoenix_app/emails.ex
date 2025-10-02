@@ -1,6 +1,5 @@
 defmodule PhoenixApp.Emails do
   import Swoosh.Email
-  alias PhoenixApp.Mailer
 
   @from_email "no-reply@rio-tek.com"
   @from_name "PhxLive"
