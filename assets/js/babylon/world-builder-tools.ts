@@ -132,6 +132,7 @@ export class WorldBuilderTools {
         this.brushSize = 5;
         this.brushStrength = 1;
         this.selectedObjects = [];
+        // Build mode flag will be read from global Hook instance if available
         
         this.setupEventHandlers();
     }
@@ -147,6 +148,17 @@ export class WorldBuilderTools {
     }
 
     handleTerrainEdit(eventData: any) {
+        // Respect build mode flag: only allow if OpenWorldLobbySceneHook.buildMode true
+        try {
+            const hook = (window as any).OpenWorldLobbySceneHook;
+            if (hook && hook.buildMode === false) {
+                return; // editing disabled
+            }
+            // Block edits if pointer currently over UI panels (sliders, buttons, etc.)
+            if (hook && hook.pointerOverUI) {
+                return;
+            }
+        } catch (_) { /* ignore */ }
         const pickInfo = this.scene.pick(this.scene.pointerX, this.scene.pointerY);
         
         if (pickInfo.hit && pickInfo.pickedMesh) {
@@ -170,6 +182,10 @@ export class WorldBuilderTools {
     }
 
     raiseTerrain(position: any) {
+        try {
+            const hook = (window as any).OpenWorldLobbySceneHook;
+            if (hook && !hook.buildMode) return;
+        } catch(_) {}
         // Create a small hill at the position
         const hill = MeshBuilder.CreateSphere('hill', {diameter: this.brushSize * 2}, this.scene);
         hill.position = position.clone();
@@ -184,6 +200,10 @@ export class WorldBuilderTools {
     }
 
     lowerTerrain(position: any) {
+        try {
+            const hook = (window as any).OpenWorldLobbySceneHook;
+            if (hook && !hook.buildMode) return;
+        } catch(_) {}
         // Create a small depression (inverse hill)
         const depression = MeshBuilder.CreateSphere('depression', {diameter: this.brushSize * 2}, this.scene);
         depression.position = position.clone();
@@ -198,6 +218,10 @@ export class WorldBuilderTools {
     }
 
     paintTerrain(mesh: any, position: any) {
+        try {
+            const hook = (window as any).OpenWorldLobbySceneHook;
+            if (hook && !hook.buildMode) return;
+        } catch(_) {}
         // Change the material of the picked mesh
         const material = this.materialLibrary.getMaterial(this.currentMaterial);
         if (material && mesh) {
@@ -207,6 +231,10 @@ export class WorldBuilderTools {
     }
 
     placeObject(position: any) {
+        try {
+            const hook = (window as any).OpenWorldLobbySceneHook;
+            if (hook && !hook.buildMode) return;
+        } catch(_) {}
         // Place a basic object at the position
         const obj = MeshBuilder.CreateBox('placedObject', {size: 2}, this.scene);
         obj.position = position.clone();

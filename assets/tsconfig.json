@@ -14,13 +14,26 @@
     "checkJs": false,
     "resolveJsonModule": true,
     "lib": ["DOM", "DOM.Iterable", "ES2020"],
-    "types": ["node"]
+    "types": ["node"],
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@/*": ["./js/*"],
+      "@types/*": ["./js/types/*"]
+    }
   },
   "include": [
     "js/**/*"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "**/*.js"
   ]
 }

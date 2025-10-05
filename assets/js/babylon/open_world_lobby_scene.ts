@@ -151,13 +151,91 @@ export const OpenWorldLobbyScene = {
   },
   async createPlayer() {
     try {
-      await this.loadMikuModel();
+      await this.loadRandomCharacter();
     } catch (e) {
-      console.warn('Miku load failed; fallback capsule', e);
+      console.warn('Random character load failed; fallback capsule', e);
       this.createFallbackPlayer();
     }
   },
-  async loadMikuModel() { const { SceneLoader } = await import('@babylonjs/core/Loading/sceneLoader'); await import('@babylonjs/loaders/glTF'); const result=await SceneLoader.ImportMeshAsync('', '/models/', 'miku.glb', this.scene); if(!result.meshes.length) throw new Error('Empty model'); this.player=result.meshes[0]; this.player.scaling=new Vector3(0.5,0.5,0.5); this.player.position=new Vector3(0,5,0); if(result.animationGroups.length){ this.playerAnimations=result.animationGroups; console.log('Animations:', result.animationGroups.map(a=>a.name)); } this.setupCamera(); console.log('✅ Miku model loaded'); },
+  async loadRandomCharacter() { 
+    // Import character management classes
+    const { CharacterModelManager } = await import('./character_model_manager_new');
+    const { createCharacterBehavior } = await import('./character_behavior_system');
+    
+    // Initialize character model manager
+    this.characterModelManager = new CharacterModelManager(this.scene);
+    
+    // Get a random character configuration
+    const characterConfig = this.characterModelManager.getRandomCharacterConfig();
+    console.log(`🎲 Selected random character: ${characterConfig.name} (${characterConfig.type})`);
+    
+    // Load the character model
+    const characterModel = await this.characterModelManager.loadCharacterModel(characterConfig.type);
+    
+    // Set up the player mesh
+    this.player = characterModel.mesh;
+    this.player.position = new Vector3(0, 55, 0); // Start on the island
+    
+    // Store character information
+    this.characterModel = characterModel;
+    this.characterConfig = characterConfig;
+    
+    // Create behavior system for this character
+    this.characterBehavior = createCharacterBehavior(
+      characterConfig.type, 
+      characterConfig, 
+      this.player, 
+      this.scene
+    );
+    
+    // Store animations
+    this.playerAnimations = characterModel.animationGroups;
+    if (this.playerAnimations.length) {
+      console.log('Character animations:', this.playerAnimations.map(a => a.name));
+    }
+    
+    // Set up camera
+    this.setupCamera();
+    
+    // Add character-specific welcome message
+    this.addCharacterWelcomeMessage();
+    
+    console.log(`✅ Random character loaded: ${characterConfig.name}`, {
+      type: characterConfig.type,
+      behaviors: characterConfig.behaviors,
+      animations: this.playerAnimations.length
+    });
+  },
+  addCharacterWelcomeMessage() {
+    if (this.characterConfig && this.addChatMessage) {
+      const charName = this.characterConfig.name;
+      const charType = this.characterConfig.type;
+      let controls = 'Use WASD to move';
+      
+      if (this.characterConfig.behaviors.canFly) {
+        controls += ', F or Space to fly';
+      } else if (this.characterConfig.behaviors.jumpHeight > 0) {
+        controls += ', Space to jump';
+      }
+      
+      if (this.characterConfig.behaviors.canSwim) {
+        controls += ', swim in water';
+      }
+      
+      controls += ', right-click to turn.';
+      
+      this.addChatMessage('SYSTEM', `🎯 You are a ${charName}! ${controls}`, '#ffff00');
+      
+      // Add character-specific tips
+      if (charType === 'eagle') {
+        this.addChatMessage('SYSTEM', '🦅 Eagle Tips: You can soar high above the world! Use your flying advantage.', '#87CEEB');
+      } else if (charType === 'fox') {
+        this.addChatMessage('SYSTEM', '🦊 Fox Tips: You are fast and agile! Sprint to outrun others.', '#FF4500');
+      } else if (charType === 'hammerhead_shark') {
+        this.addChatMessage('SYSTEM', '🦈 Shark Tips: Master of the ocean depths! Stay in the water for best mobility.', '#4682B4');
+      }
+    }
+  },
   createFallbackPlayer() { this.player=MeshBuilder.CreateCapsule('player',{radius:1,height:3},this.scene); this.player.position=new Vector3(0,5,0); const pm=new StandardMaterial('playerMaterial',this.scene); pm.diffuseColor=new Color3(0.2,0.8,0.2); this.player.material=pm; this.setupCamera(); },
   setupCamera() {
     if(!this.player) return;
@@ -209,7 +287,81 @@ export const OpenWorldLobbyScene = {
   rotateCharacterToCameraDirection(){ if(!this.camera||!this.player) return; const y=this.player.position.y; const dir=this.camera.getTarget().subtract(this.camera.position).normalize(); dir.y=0; dir.normalize(); this.player.rotation.y=Math.atan2(dir.x,dir.z); this.player.position.y=y; },
   updateMovement(){
     if(!this.player||!this.camera) return;
-    const dt=this.engine.getDeltaTime()/1000;
+    
+    const dt = this.engine.getDeltaTime() / 1000;
+    
+    // If we have a character behavior system, use it
+    if (this.characterBehavior) {
+      this.updateCharacterMovement(dt);
+    } else {
+      // Fallback to original movement system
+      this.updateLegacyMovement(dt);
+    }
+  },
+  updateCharacterMovement(deltaTime) {
+    // Create movement input object from current input state
+    const movementInput = {
+      forward: this.keys['w'] || this.mouseMovement.leftMouseDown,
+      backward: this.keys['s'],
+      left: this.keys['a'],
+      right: this.keys['d'],
+      jump: this.keys[' '],
+      sprint: this.keys['shift'] || false, // Could add shift key detection
+      fly: this.keys['f'] || false, // Could add F key for flying
+    };
+    
+    // Update character behavior
+    this.characterBehavior.updateMovement(movementInput, deltaTime);
+    
+    // Update camera to follow player
+    if (this.camera && this.player) {
+      this.camera.setTarget(this.player.position);
+      
+      // Handle right-click camera rotation
+      if (this.mouseMovement.rightMouseDown) {
+        const dir = this.camera.getTarget().subtract(this.camera.position).normalize();
+        dir.y = 0; 
+        dir.normalize();
+        this.player.rotation.y = Math.atan2(dir.x, dir.z);
+      }
+    }
+    
+    // Update animation based on character state
+    this.updateCharacterAnimation();
+  },
+  updateCharacterAnimation() {
+    if (!this.characterBehavior || !this.playerAnimations) return;
+    
+    const animationState = this.characterBehavior.getCurrentAnimationState();
+    
+    // Stop all current animations
+    this.playerAnimations.forEach(ag => {
+      if (ag.isPlaying) {
+        ag.stop();
+      }
+    });
+    
+    // Find and play the appropriate animation
+    const targetAnimation = this.playerAnimations.find(ag => 
+      ag.name.toLowerCase().includes(animationState.toLowerCase())
+    );
+    
+    if (targetAnimation) {
+      targetAnimation.start(true); // Loop the animation
+    } else {
+      // Fallback to idle or first available animation
+      const idleAnimation = this.playerAnimations.find(ag => 
+        ag.name.toLowerCase().includes('idle')
+      );
+      if (idleAnimation) {
+        idleAnimation.start(true);
+      } else if (this.playerAnimations.length > 0) {
+        this.playerAnimations[0].start(true);
+      }
+    }
+  },
+  updateLegacyMovement(dt) {
+    // Original movement code as fallback
     const move=new Vector3(0,0,0);
     const f=this.camera.getTarget().subtract(this.camera.position).normalize(); f.y=0;
     const r=Vector3.Cross(Vector3.Up(),f).normalize();
@@ -276,5 +428,24 @@ export const OpenWorldLobbyScene = {
   updateServerUsers(){},
   setupEventListeners(){ this.handleEvent('chat_message',d=>{ if(d.username!==this.getCurrentUsername()) this.addChatMessage(d.username,d.message); }); this.handleEvent('user_joined',d=>this.addChatMessage('SYSTEM',`${d.username} joined the world`,'#00ffff')); this.handleEvent('user_left',d=>this.addChatMessage('SYSTEM',`${d.username} left the world`,'#ff8800')); },
   getCurrentUsername(){ return this.userData?.name || this.userData?.username || 'Player'; },
-  cleanup(){ if(this.mouseMovement){ this.mouseMovement.isMovingForward=false; this.mouseMovement.leftMouseDown=false; this.mouseMovement.rightMouseDown=false; this.mouseMovement.inRightClickMode=false; } if(this.chatContainer?.parentElement){ this.chatContainer.parentElement.removeChild(this.chatContainer);} if(this.keyDownHandler) document.removeEventListener('keydown',this.keyDownHandler,{capture:true}); if(this.keyUpHandler) document.removeEventListener('keyup',this.keyUpHandler,{capture:true}); if(this.engine) this.engine.dispose(); }
+  cleanup(){ 
+    if(this.mouseMovement){ 
+      this.mouseMovement.isMovingForward=false; 
+      this.mouseMovement.leftMouseDown=false; 
+      this.mouseMovement.rightMouseDown=false; 
+      this.mouseMovement.inRightClickMode=false; 
+    } 
+    if(this.chatContainer?.parentElement){ 
+      this.chatContainer.parentElement.removeChild(this.chatContainer);
+    } 
+    if(this.keyDownHandler) document.removeEventListener('keydown',this.keyDownHandler,{capture:true}); 
+    if(this.keyUpHandler) document.removeEventListener('keyup',this.keyUpHandler,{capture:true}); 
+    
+    // Cleanup character systems
+    if(this.characterModelManager) {
+      this.characterModelManager.dispose();
+    }
+    
+    if(this.engine) this.engine.dispose(); 
+  }
 };

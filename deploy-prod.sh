@@ -307,12 +307,31 @@ if kubectl get pods -n phoenixapp -l app=phoenix-web --field-selector=status.pha
     kill $PF_PID 2>/dev/null || true
 fi
 
-echo ""
-echo "🎉 Deployment completed!"
-echo ""
-echo "======================================"
-echo "Useful commands:"
-echo "  kubectl get pods -n phoenixapp"
-echo "  kubectl logs -f deployment/phoenix-web -n phoenixapp"
-echo "  kubectl get certificates -n phoenixapp"
-echo "  kubectl describe ingress phoenix-ingress -n phoenixapp"
+
+cat << 'ASCIIART'
+                      . . . .
+                      ,`,`,`,`,
+. . . .               `\`\`\`;
+`\`\`\`,            ~|;!;!;\!
+ ~\;\;\;\|          (--,!!!~`!       .
+(--,\\\===~\         (--,|||~`!     ./
+ (--,\\\===~\         `,-,~,=,:. _,//
+  (--,\\\==~`\        ~-=~-.---|\;/J,
+   (--,\\\((```==.    ~'`~/       a |      Let's
+     (-,.\\'('(`\.  ~'=~|     \_.  \       Ride.
+        (,--(,(,(,'\. ~'=|       \_;>
+          (,-( ,(,(,;\ ~=/        \
+          (,-/ (.(.(,;\,/          )
+           (,--/,;,;,;,\         ./------.
+             (==,-;-'`;'         /_,----`. \
+     ,.--_,__.-'                    `--.  ` \
+    (='~-_,--/        ,       ,!,___--. \  \_)
+   (-/~(     |         \   ,_-         | ) /_|
+   (~/((\    )\._,      |-'         _,/ /
+    \))))  /   ./~.    |           \_\;
+ ,__/////  /   /    )  /
+  '===~'   |  |    (, <.
+           / /       \. "
+         _/ /          \_"
+        /_!/            >_"
+ASCIIART

@@ -186,6 +186,19 @@ defmodule PhoenixAppWeb.AuthLive do
     {:noreply, put_flash(socket, :error, "Please enter your email address")}
   end
 
+  # CAPTCHA Events
+  def handle_event("captcha_verified", %{"token" => token}, socket),
+    do: {:noreply, assign(socket, captcha_token: token)}
+
+  def handle_event("captcha_error", _params, socket),
+    do: {:noreply, socket |> assign(captcha_token: nil) |> put_flash(:error, "CAPTCHA failed. Please try again.")}
+
+  def handle_event("captcha_expired", _params, socket),
+    do: {:noreply, socket |> assign(captcha_token: nil) |> put_flash(:warning, "CAPTCHA expired. Please complete it again.")}
+
+  def handle_event("captcha_timeout", _params, socket),
+    do: {:noreply, socket |> assign(captcha_token: nil) |> put_flash(:error, "CAPTCHA timed out. Please try again.")}
+
   # ----------------
   # Enhanced login with security features - Accept email or username
   # ----------------
@@ -363,40 +376,7 @@ defmodule PhoenixAppWeb.AuthLive do
   end
 
   # ----------------
-    # Helper functions
-
-  # ----------------
-  # CAPTCHA Events - Optimized to prevent widget destruction
-  # ----------------
-  def handle_event("captcha_verified", %{"token" => token}, socket) do
-    # Only update captcha_token, avoid unnecessary re-renders
-    # The minimal assign change reduces DOM updates
-    {:noreply, assign(socket, captcha_token: token)}
-  end
-
-  def handle_event("captcha_error", _params, socket) do
-    # Only update captcha_token, avoid form re-render
-    {:noreply, 
-     socket
-     |> assign(captcha_token: nil)
-     |> put_flash(:error, "CAPTCHA failed. Please try again.")}
-  end
-
-  def handle_event("captcha_expired", _params, socket) do
-    # Only update captcha_token, avoid form re-render
-    {:noreply, 
-     socket
-     |> assign(captcha_token: nil)
-     |> put_flash(:warning, "CAPTCHA expired. Please complete it again.")}
-  end
-
-  def handle_event("captcha_timeout", _params, socket) do
-    # Only update captcha_token, avoid form re-render
-    {:noreply, 
-     socket
-     |> assign(captcha_token: nil)
-     |> put_flash(:error, "CAPTCHA timed out. Please try again.")}
-  end
+  # Helper functions
 
   # ----------------
   defp maybe_fetch_user(nil), do: nil

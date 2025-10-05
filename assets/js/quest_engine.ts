@@ -1,30 +1,40 @@
 // Simple Galaxy Quest Engine
+import { Player, Alien, Bullet, KeyMap, QuestEngineHook } from './types/quest-engine';
+
 class QuestEngine {
-  constructor(canvas, hook) {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private hook: QuestEngineHook;
+  private players: Record<string, Player> = {};
+  private currentPlayerId: string | null = null;
+  private keys: KeyMap = {};
+  private aliens: Alien[] = [];
+  private bullets: Bullet[] = [];
+  private isTyping: boolean = false;
+  private lastShot: number = 0;
+  private lastMoveUpdate: number = 0;
+  private readonly moveUpdateDelay: number = 100; // Update position every 100ms instead of every frame
+
+  constructor(canvas: HTMLCanvasElement, hook: QuestEngineHook) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Unable to get 2D context from canvas');
+    }
+    this.ctx = context;
     this.hook = hook;
-    this.players = {};
-    this.currentPlayerId = null;
-    this.keys = {};
-    this.aliens = [];
-    this.bullets = [];
-    this.isTyping = false;
-    this.lastShot = 0;
-    this.lastMoveUpdate = 0; // Add throttling for movement updates
-    this.moveUpdateDelay = 100; // Update position every 100ms instead of every frame
     
     this.init();
   }
   
-  init() {
+  private init(): void {
     this.setupCanvas();
     this.setupEventListeners();
     this.spawnAliens();
     this.gameLoop();
   }
   
-  setupCanvas() {
+  private setupCanvas(): void {
     // Fixed canvas size to prevent zoom issues
     this.canvas.width = 1920;
     this.canvas.height = 1080;
@@ -33,16 +43,16 @@ class QuestEngine {
     this.canvas.style.objectFit = 'contain';
   }
   
-  setupEventListeners() {
+  private setupEventListeners(): void {
     // Chat input detection
-    const chatInput = document.querySelector('input[name="message"]');
+    const chatInput = document.querySelector('input[name="message"]') as HTMLInputElement;
     if (chatInput) {
       chatInput.addEventListener('focus', () => this.isTyping = true);
       chatInput.addEventListener('blur', () => this.isTyping = false);
     }
     
     // Keyboard
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
       if (this.isTyping) return;
       this.keys[e.code] = true;
       
@@ -56,13 +66,13 @@ class QuestEngine {
       }
     });
     
-    document.addEventListener('keyup', (e) => {
+    document.addEventListener('keyup', (e: KeyboardEvent) => {
       if (this.isTyping) return;
       this.keys[e.code] = false;
     });
     
     // Mouse click to move
-    this.canvas.addEventListener('click', (e) => {
+    this.canvas.addEventListener('click', (e: MouseEvent) => {
       const rect = this.canvas.getBoundingClientRect();
       const scaleX = this.canvas.width / rect.width;
       const scaleY = this.canvas.height / rect.height;
@@ -80,7 +90,7 @@ class QuestEngine {
     });
   }
   
-  spawnAliens() {
+  private spawnAliens(): void {
     this.aliens = [];
     for (let i = 0; i < 5; i++) {
       this.aliens.push({
@@ -97,18 +107,19 @@ class QuestEngine {
     }
   }
   
-  shoot() {
+  private shoot(): void {
     const now = Date.now();
     if (now - this.lastShot < 300) return; // Rate limit
     
+    if (!this.currentPlayerId) return;
     const player = this.players[this.currentPlayerId];
     if (!player) return;
     
     // Find nearest alien
-    let nearest = null;
+    let nearest: Alien | null = null;
     let nearestDist = Infinity;
     
-    this.aliens.forEach(alien => {
+    this.aliens.forEach((alien: Alien) => {
       const dist = Math.sqrt((alien.x - player.x) ** 2 + (alien.y - player.y) ** 2);
       if (dist < nearestDist) {
         nearestDist = dist;
@@ -116,7 +127,7 @@ class QuestEngine {
       }
     });
     
-    if (nearest && nearestDist < 500) {
+    if (nearest !== null && nearestDist < 500) {
       this.bullets.push({
         x: player.x,
         y: player.y,
@@ -129,9 +140,10 @@ class QuestEngine {
     }
   }
   
-  handleMovement() {
+  private handleMovement(): void {
     if (this.isTyping) return;
     
+    if (!this.currentPlayerId) return;
     const player = this.players[this.currentPlayerId];
     if (!player) return;
     
@@ -171,11 +183,11 @@ class QuestEngine {
     }
   }
   
-  updateGame() {
+  private updateGame(): void {
     const now = Date.now();
     
     // Update aliens
-    this.aliens.forEach(alien => {
+    this.aliens.forEach((alien: Alien) => {
       alien.x += alien.vx;
       alien.y += alien.vy;
       
@@ -191,14 +203,14 @@ class QuestEngine {
     });
     
     // Update bullets
-    this.bullets = this.bullets.filter(bullet => {
+    this.bullets = this.bullets.filter((bullet: Bullet) => {
       const dx = bullet.targetX - bullet.x;
       const dy = bullet.targetY - bullet.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       
       if (dist < bullet.speed) {
         // Hit target - damage aliens
-        this.aliens.forEach(alien => {
+        this.aliens.forEach((alien: Alien) => {
           const alienDist = Math.sqrt((alien.x - bullet.targetX) ** 2 + (alien.y - bullet.targetY) ** 2);
           if (alienDist < alien.size) {
             alien.hp -= 1;
@@ -216,7 +228,7 @@ class QuestEngine {
     });
     
     // Remove dead aliens and spawn new ones
-    this.aliens = this.aliens.filter(alien => alien.hp > 0);
+    this.aliens = this.aliens.filter((alien: Alien) => alien.hp > 0);
     while (this.aliens.length < 5) {
       this.aliens.push({
         id: Math.random(),
@@ -232,7 +244,7 @@ class QuestEngine {
     }
   }
   
-  render() {
+  private render(): void {
     // Clear
     this.ctx.fillStyle = '#000011';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -246,7 +258,7 @@ class QuestEngine {
     }
     
     // Draw aliens
-    this.aliens.forEach(alien => {
+    this.aliens.forEach((alien: Alien) => {
       const now = Date.now();
       const damaged = now - alien.lastDamaged < 200;
       
@@ -271,14 +283,14 @@ class QuestEngine {
     
     // Draw bullets
     this.ctx.fillStyle = '#ffff00';
-    this.bullets.forEach(bullet => {
+    this.bullets.forEach((bullet: Bullet) => {
       this.ctx.beginPath();
       this.ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
       this.ctx.fill();
     });
     
     // Draw players
-    Object.values(this.players).forEach(player => {
+    Object.values(this.players).forEach((player: Player) => {
       const isMe = player.id === this.currentPlayerId;
       const radius = isMe ? 12 : 10;
       
@@ -313,15 +325,15 @@ class QuestEngine {
     });
   }
   
-  updatePlayers(players) {
+  public updatePlayers(players: Record<string, Player>): void {
     this.players = players;
   }
   
-  setCurrentPlayer(playerId) {
+  public setCurrentPlayer(playerId: string): void {
     this.currentPlayerId = playerId;
   }
   
-  gameLoop() {
+  private gameLoop(): void {
     this.handleMovement();
     this.updateGame();
     this.render();
@@ -329,4 +341,13 @@ class QuestEngine {
   }
 }
 
+// Make QuestEngine available globally for legacy compatibility
+declare global {
+  interface Window {
+    QuestEngine: typeof QuestEngine;
+  }
+}
+
 window.QuestEngine = QuestEngine;
+
+export default QuestEngine;

@@ -1,22 +1,35 @@
 // File Drag & Drop Hook for Phoenix LiveView
-export const FileDragDrop = {
+
+import { LiveViewHook } from './types/liveview';
+import { FileData } from './types/file-upload';
+
+interface FileDragDropHook extends LiveViewHook {}
+
+interface FileUploadHook extends LiveViewHook {}
+
+export const FileDragDrop: FileDragDropHook = {
   mounted() {
     const self = this; // Capture 'this' context for use in callbacks
-    const dropZone = this.el.querySelector('#drop-zone');
-    const fileInput = this.el.querySelector('#file-upload');
+    const dropZone = this.el.querySelector('#drop-zone') as HTMLElement;
+    const fileInput = this.el.querySelector('#file-upload') as HTMLInputElement;
     
+    if (!dropZone || !fileInput) {
+      console.error('FileDragDrop: Required elements not found');
+      return;
+    }
+
     // Prevent default drag behaviors
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    (['dragenter', 'dragover', 'dragleave', 'drop'] as const).forEach(eventName => {
       dropZone.addEventListener(eventName, preventDefaults, false);
       document.body.addEventListener(eventName, preventDefaults, false);
     });
 
     // Highlight drop zone when item is dragged over it
-    ['dragenter', 'dragover'].forEach(eventName => {
+    (['dragenter', 'dragover'] as const).forEach(eventName => {
       dropZone.addEventListener(eventName, highlight, false);
     });
 
-    ['dragleave', 'drop'].forEach(eventName => {
+    (['dragleave', 'drop'] as const).forEach(eventName => {
       dropZone.addEventListener(eventName, unhighlight, false);
     });
 
@@ -26,35 +39,40 @@ export const FileDragDrop = {
     // Handle file input change
     fileInput.addEventListener('change', handleFileSelect, false);
 
-    function preventDefaults(e) {
+    function preventDefaults(e: Event): void {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    function highlight(e) {
+    function highlight(e: Event): void {
       dropZone.classList.add('border-blue-500', 'bg-blue-900/20');
     }
 
-    function unhighlight(e) {
+    function unhighlight(e: Event): void {
       dropZone.classList.remove('border-blue-500', 'bg-blue-900/20');
     }
 
-    function handleDrop(e) {
+    function handleDrop(e: DragEvent): void {
       const dt = e.dataTransfer;
-      const files = dt.files;
-      handleFiles(files);
+      const files = dt?.files;
+      if (files) {
+        handleFiles(files);
+      }
     }
 
-    function handleFileSelect(e) {
-      const files = e.target.files;
-      handleFiles(files);
+    function handleFileSelect(e: Event): void {
+      const target = e.target as HTMLInputElement;
+      const files = target.files;
+      if (files) {
+        handleFiles(files);
+      }
     }
 
-    function handleFiles(files) {
+    function handleFiles(files: FileList): void {
       const fileArray = Array.from(files);
       
       // Validate files
-      const validFiles = fileArray.filter(file => {
+      const validFiles = fileArray.filter((file: File) => {
         // Check file size (50MB limit)
         if (file.size > 50 * 1024 * 1024) {
           alert(`File "${file.name}" is too large. Maximum size is 50MB.`);
@@ -86,15 +104,15 @@ export const FileDragDrop = {
       showUploadProgress(validFiles);
 
       // Process files
-      validFiles.forEach((file, index) => {
+      validFiles.forEach((file: File, index: number) => {
         const reader = new FileReader();
         
-        reader.onload = (e) => {
-          const fileData = {
+        reader.onload = (e: ProgressEvent<FileReader>): void => {
+          const fileData: FileData = {
             name: file.name,
             type: file.type,
             size: file.size,
-            data: e.target.result,
+            data: e.target?.result || null,
             lastModified: file.lastModified
           };
           
@@ -102,7 +120,7 @@ export const FileDragDrop = {
           self.pushEvent("file_drop", { files: [fileData] });
         };
         
-        reader.onerror = (e) => {
+        reader.onerror = (e: ProgressEvent<FileReader>): void => {
           console.error('Error reading file:', file.name, e);
           alert(`Error reading file "${file.name}". Please try again.`);
         };
@@ -111,7 +129,7 @@ export const FileDragDrop = {
       });
     }
 
-    function showUploadProgress(files) {
+    function showUploadProgress(files: File[]): void {
       // Create progress indicator
       const progressDiv = document.createElement('div');
       progressDiv.className = 'fixed top-4 right-4 bg-gray-800 text-white p-4 rounded-lg shadow-lg z-50';
@@ -132,25 +150,26 @@ export const FileDragDrop = {
       }, 5000);
     }
   }
-};
+} as FileDragDropHook;
 
 // File Upload Hook for traditional file input
-export const FileUpload = {
+export const FileUpload: FileUploadHook = {
   mounted() {
     const self = this; // Capture 'this' context for use in callbacks
     
-    this.el.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files);
+    this.el.addEventListener('change', (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const files = Array.from(target.files || []);
       
-      files.forEach(file => {
+      files.forEach((file: File) => {
         const reader = new FileReader();
         
-        reader.onload = (event) => {
-          const fileData = {
+        reader.onload = (event: ProgressEvent<FileReader>): void => {
+          const fileData: FileData = {
             name: file.name,
             type: file.type,
             size: file.size,
-            data: event.target.result,
+            data: event.target?.result || null,
             lastModified: file.lastModified
           };
           
@@ -158,7 +177,7 @@ export const FileUpload = {
           self.pushEvent("file_selected", fileData);
         };
         
-        reader.onerror = (event) => {
+        reader.onerror = (event: ProgressEvent<FileReader>): void => {
           console.error('Error reading file:', file.name, event);
           alert(`Error reading file "${file.name}". Please try again.`);
         };
@@ -167,7 +186,7 @@ export const FileUpload = {
       });
       
       // Clear the input
-      e.target.value = '';
+      target.value = '';
     });
   }
-};
+} as FileUploadHook;

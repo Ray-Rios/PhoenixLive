@@ -36,8 +36,8 @@ defmodule PhoenixAppWeb.HomeLive do
       
       <div class="w-full bg-transparent relative overflow-hidden">
         <!-- Main Content -->
-        <div class="relative z-10 mx-auto transition-all duration-300 ease-in-out flex items-center justify-center min-h-[80vh]">
-          <div class="text-center text-white">
+        <div class="home-centered-wrapper relative z-10 transition-all duration-300 ease-in-out flex items-center justify-center min-h-[80vh]">
+          <div class="text-center text-white px-4">
             <!-- Welcome Section with Terminal Typewriter Effect -->
               <div class="relative z-20">
                 <!-- Terminal-style Welcome Text -->

@@ -20,3 +20,35 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 For support and questions:
 - Create an issue in the GitHub repository
 - Check the Handy_Command_Samples.md for inspiration
+
+## Handling Build Warnings
+
+Recent build produced warnings:
+
+NPM deprecations: inflight (transitive), glob@7.x, rimraf@3.x, eslint@8.57.x.
+Elixir warnings: duplicate/unreachable `handle_event/3` clauses in `user_management_live.ex` and scattered clauses in `auth_live.ex`.
+
+Remediations applied:
+1. Removed duplicate `confirm_delete`, `delete_user`, `cancel_delete` clauses in `user_management_live.ex`.
+2. Grouped CAPTCHA `handle_event` clauses in `auth_live.ex`.
+
+Proposed dependency update path (safe increments):
+1. TailwindCSS -> ^3.4.x
+2. ESLint -> latest 8.x (keep @typescript-eslint at 6.x) then optionally ESLint 9 with @typescript-eslint 7.x after validation.
+3. TypeScript -> keep 5.x until all eslint plugins confirmed compatible.
+
+Rationale: Upgrading ESLint first removes most deprecated transient packages. Jumping directly to major versions without aligning plugin versions can break CI.
+
+Verification commands:
+```
+mix compile
+cd assets && npm run type-check && npm run build
+```
+
+To trace deprecated packages:
+```
+cd assets
+npm ls glob rimraf inflight eslint
+```
+
+Track future policy: treat new compiler warnings as CI failures; address or document intentional exceptions.

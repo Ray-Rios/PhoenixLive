@@ -1,6 +1,8 @@
 // MMO-focused TypeScript interfaces for your Phoenix app
 // These types will help you with API integration and player management
 
+import type { CharacterType } from './character_model_manager';
+
 // User data structure from your Phoenix schema
 export interface User {
   id: number;
@@ -24,12 +26,24 @@ export interface User {
   intelligence?: number;
   constitution?: number;
   
+  // Character & Avatar System
+  character_type?: CharacterType;
+  character_model_name?: string;
+  character_animations?: string[];
+  
   // Location & World State
   current_zone_id?: number;
   position_x?: number;
   position_y?: number;
   position_z?: number;
   rotation_y?: number;
+  
+  // Character Movement State
+  is_flying?: boolean;
+  is_swimming?: boolean;
+  is_running?: boolean;
+  current_speed?: number;
+  movement_state?: string;
   
   // Player Status
   is_online?: boolean;
@@ -90,6 +104,14 @@ export interface PlayerPosition {
   timestamp: string;
   is_moving: boolean;
   current_animation?: string;
+  
+  // Character-specific movement data
+  character_type?: CharacterType;
+  is_flying?: boolean;
+  is_swimming?: boolean;
+  is_running?: boolean;
+  current_speed?: number;
+  movement_state?: string;
 }
 
 // Chat system

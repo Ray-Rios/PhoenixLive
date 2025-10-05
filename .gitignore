@@ -11,7 +11,7 @@ backups/
 
 # Generated secrets
 priv/cert/
-priv/static/assets/
+priv/static/models/
 
 # Logs
 *.log

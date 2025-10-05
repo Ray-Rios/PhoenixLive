@@ -61,22 +61,6 @@ defmodule PhoenixAppWeb.UserManagementLive do
   end
 
   @impl true
-  def handle_event("change_role", %{"role" => role, "_target" => ["role"]} = params, socket) do
-    # Get user_id from phx-value-user_id
-    user_id = params["user_id"]
-    user = Accounts.get_user!(user_id)
-    
-    case Accounts.update_user_role(user, role) do
-      {:ok, _updated_user} ->
-        users = Accounts.list_users()
-        {:noreply, assign(socket, users: users) |> put_flash(:info, "User role updated successfully")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update user role")}
-    end
-  end
-
-  @impl true
   def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
     user = Accounts.get_user!(user_id)
     
@@ -144,38 +128,6 @@ defmodule PhoenixAppWeb.UserManagementLive do
       user.role && user.role != "subscriber" -> user.role
       true -> "member"
     end
-  end
-
-  @impl true
-  def handle_event("confirm_delete", %{"user_id" => user_id}, socket) do
-    {:noreply, assign(socket, confirm_delete_user_id: user_id)}
-  end
-
-  @impl true
-  def handle_event("delete_user", %{"user_id" => user_id}, socket) do
-    user = Accounts.get_user!(user_id)
-    
-    case Accounts.delete_user(user) do
-      {:ok, _deleted_user} ->
-        users = Accounts.list_users()
-        
-        socket = 
-          socket
-          |> put_flash(:info, "User deleted")
-          |> assign(:users, users)
-          |> assign(:confirm_delete_user_id, nil)
-          
-        {:noreply, socket}
-        
-      {:error, _changeset} ->
-        socket = put_flash(socket, :error, "Failed to delete user")
-        {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_event("cancel_delete", _params, socket) do
-    {:noreply, assign(socket, confirm_delete_user_id: nil)}
   end
 
   @impl true
@@ -277,20 +229,20 @@ defmodule PhoenixAppWeb.UserManagementLive do
                       <td class="px-6 py-4 whitespace-nowrap text-sm">
                         <%= if user.id != @current_user.id do %>
                           <div class="flex flex-col lg:flex-row gap-2">
-                            <form phx-change="change_role" phx-value-user_id={user.id}>
-                              <select 
-                                name="role"
-                                class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
-                              >
-                                <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
-                                <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
-                                <option value="member" selected={get_user_role(user) == "member"}>Member</option>
-                                <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
-                                <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
-                                <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
-                                <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
-                              </select>
-                            </form>
+                            <select 
+                              phx-change="change_role"
+                              phx-value-user_id={user.id}
+                              name="role"
+                              class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
+                            >
+                              <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
+                              <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
+                              <option value="member" selected={get_user_role(user) == "member"}>Member</option>
+                              <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
+                              <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
+                              <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
+                              <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
+                            </select>
                             
                             <button 
                               phx-click="toggle_status" 

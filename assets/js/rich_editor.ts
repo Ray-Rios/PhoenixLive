@@ -1,5 +1,9 @@
 // Rich Editor Hook for WordPress-style content editing with full-screen support
-export const RichEditor = {
+
+import { LiveViewHook } from './types/liveview';
+import { RichEditorHook, TextSelection } from './types/rich-editor';
+
+export const RichEditor: RichEditorHook = {
   mounted() {
     this.initializeEditor();
     this.isFullscreen = false;
@@ -9,13 +13,15 @@ export const RichEditor = {
     // Re-initialize if needed
   },
 
-  initializeEditor() {
-    const textarea = this.el;
+  initializeEditor(): void {
+    const textarea = this.el as HTMLTextAreaElement;
     
     // Create editor container
     const editorContainer = this.createEditorContainer();
-    textarea.parentNode.insertBefore(editorContainer, textarea);
-    editorContainer.appendChild(textarea);
+    if (textarea.parentNode) {
+      textarea.parentNode.insertBefore(editorContainer, textarea);
+      editorContainer.appendChild(textarea);
+    }
     
     // Create toolbar
     const toolbar = this.createToolbar();
@@ -24,17 +30,22 @@ export const RichEditor = {
     // Add editor styling
     textarea.classList.add('rich-editor-textarea');
     
+    // Store references
+    this.currentContainer = editorContainer;
+    this.currentTextarea = textarea;
+    this.currentToolbar = toolbar;
+    
     // Add event listeners
     this.addEventListeners(textarea, toolbar, editorContainer);
   },
 
-  createEditorContainer() {
+  createEditorContainer(): HTMLElement {
     const container = document.createElement('div');
     container.className = 'rich-editor-container';
     return container;
   },
 
-  createToolbar() {
+  createToolbar(): HTMLElement {
     const toolbar = document.createElement('div');
     toolbar.className = 'rich-editor-toolbar';
     toolbar.innerHTML = `
@@ -139,26 +150,27 @@ export const RichEditor = {
     return toolbar;
   },
 
-  addEventListeners(textarea, toolbar, container) {
+  addEventListeners(textarea: HTMLTextAreaElement, toolbar: HTMLElement, container: HTMLElement): void {
     // Toolbar button clicks
-    toolbar.addEventListener('click', (e) => {
-      if (e.target.closest('button')) {
+    toolbar.addEventListener('click', (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const button = target.closest('button') as HTMLButtonElement;
+      if (button) {
         e.preventDefault();
-        const button = e.target.closest('button');
         const command = button.dataset.command;
         
         if (command === 'fullscreen') {
           this.toggleFullscreen(container);
         } else if (command === 'preview') {
           this.togglePreview(textarea, container);
-        } else {
+        } else if (command) {
           this.executeCommand(command, textarea);
         }
       }
     });
 
     // Keyboard shortcuts
-    textarea.addEventListener('keydown', (e) => {
+    textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'b':
@@ -201,7 +213,7 @@ export const RichEditor = {
     this.autoResize(textarea);
   },
 
-  toggleFullscreen(container) {
+  toggleFullscreen(container: HTMLElement): void {
     this.isFullscreen = !this.isFullscreen;
     
     if (this.isFullscreen) {
@@ -214,24 +226,27 @@ export const RichEditor = {
     
     // Update fullscreen button icon
     const fullscreenBtn = container.querySelector('.fullscreen-btn svg');
-    if (this.isFullscreen) {
-      fullscreenBtn.innerHTML = `
-        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
-      `;
-    } else {
-      fullscreenBtn.innerHTML = `
-        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-      `;
+    if (fullscreenBtn) {
+      if (this.isFullscreen) {
+        fullscreenBtn.innerHTML = `
+          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+        `;
+      } else {
+        fullscreenBtn.innerHTML = `
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+        `;
+      }
     }
   },
 
-  togglePreview(textarea, container) {
+  togglePreview(textarea: HTMLTextAreaElement, container: HTMLElement): void {
     const existingPreview = container.querySelector('.editor-preview');
     
     if (existingPreview) {
       existingPreview.remove();
       textarea.style.display = 'block';
-      container.querySelector('.preview-btn').classList.remove('active');
+      const previewBtn = container.querySelector('.preview-btn');
+      previewBtn?.classList.remove('active');
     } else {
       const preview = document.createElement('div');
       preview.className = 'editor-preview';
@@ -239,11 +254,12 @@ export const RichEditor = {
       
       textarea.style.display = 'none';
       container.appendChild(preview);
-      container.querySelector('.preview-btn').classList.add('active');
+      const previewBtn = container.querySelector('.preview-btn');
+      previewBtn?.classList.add('active');
     }
   },
 
-  renderMarkdown(content) {
+  renderMarkdown(content: string): string {
     return content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -260,7 +276,7 @@ export const RichEditor = {
       .replace(/\n/g, '<br>');
   },
 
-  executeCommand(command, textarea) {
+  executeCommand(command: string, textarea: HTMLTextAreaElement): void {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selectedText = textarea.value.substring(start, end);
@@ -367,11 +383,37 @@ export const RichEditor = {
     this.autoResize(textarea);
   },
 
-  autoResize(textarea) {
+  autoResize(textarea: HTMLTextAreaElement): void {
     textarea.style.height = 'auto';
     textarea.style.height = Math.max(200, textarea.scrollHeight) + 'px';
+  },
+
+  getSelection(textarea: HTMLTextAreaElement): TextSelection {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    return {
+      start,
+      end,
+      text: textarea.value.substring(start, end)
+    };
+  },
+
+  replaceSelection(textarea: HTMLTextAreaElement, newText: string): void {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const beforeText = textarea.value.substring(0, start);
+    const afterText = textarea.value.substring(end);
+    
+    textarea.value = beforeText + newText + afterText;
+    textarea.setSelectionRange(start + newText.length, start + newText.length);
+  },
+
+  wrapSelection(textarea: HTMLTextAreaElement, before: string, after: string): void {
+    const selection = this.getSelection(textarea);
+    const newText = before + selection.text + after;
+    this.replaceSelection(textarea, newText);
   }
-};
+} as RichEditorHook;
 
 // Add CSS styles
 const style = document.createElement('style');

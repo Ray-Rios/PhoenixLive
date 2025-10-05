@@ -1,8 +1,35 @@
 import { 
+    initializeBabylonExports,
     Engine, Scene, Vector3, Color3, Color4,
     ArcRotateCamera,
     MeshBuilder, StandardMaterial
 } from './babylon_imports';
+
+import { HomeGalaxySceneHook, AnimatedStar, StarAnimationData } from '../types/babylon-hooks';
+
+// Global patch to prevent deprecated WebGL extension requests
+if (typeof HTMLCanvasElement !== 'undefined') {
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    (HTMLCanvasElement.prototype.getContext as any) = function(this: HTMLCanvasElement, contextType: string, contextAttributes?: any) {
+        const context = originalGetContext.call(this, contextType, contextAttributes);
+        
+        if (context && (contextType === 'webgl' || contextType === 'webgl2')) {
+            const webglContext = context as WebGLRenderingContext | WebGL2RenderingContext;
+            if (webglContext.getExtension) {
+                const originalGetExtension = webglContext.getExtension.bind(webglContext);
+                webglContext.getExtension = function(name: string) {
+                    // Block deprecated debug renderer info extension to prevent Firefox warnings
+                    if (name === 'WEBGL_debug_renderer_info') {
+                        return null;
+                    }
+                    return originalGetExtension(name);
+                };
+            }
+        }
+        
+        return context;
+    };
+}
 
 // Don't import these for now to test if they're causing issues
 // import '@babylonjs/core/Cameras/Inputs/arcRotateCameraPointersInput';
@@ -15,16 +42,23 @@ import {
 /**
  * Home Galaxy Scene Hook - Starfield Background for Welcome Page
  */
-export const HomeGalaxyScene = {
+export const HomeGalaxyScene: HomeGalaxySceneHook = {
     mounted() {
         console.log('HomeGalaxyScene hook mounted');
-        this.el._babylonHook = this;
+        (this.el as any)._babylonHook = this;
 
-        const canvas = this.el.querySelector('canvas');
+        const canvas = this.el.querySelector('canvas') as HTMLCanvasElement;
         if (!canvas) {
             console.error('Canvas not found for HomeGalaxyScene');
             return;
         }
+
+        // Initialize data properties
+        this.engine = null;
+        this.scene = null;
+        this.camera = null;
+        this.animationRunning = false;
+        this.stars = [];
 
         // Setup helpers before init
         this._lastDPR = window.devicePixelRatio || 1;
@@ -34,7 +68,7 @@ export const HomeGalaxyScene = {
 
         // Debounced resize (RAF based)
         this.debouncedResize = (() => {
-            let rafId = null;
+            let rafId: number | null = null;
             return () => {
                 if (rafId) cancelAnimationFrame(rafId);
                 rafId = requestAnimationFrame(() => {
@@ -67,7 +101,7 @@ export const HomeGalaxyScene = {
             .then(() => {
                 console.log('Home Galaxy Scene initialized successfully');
             })
-            .catch(error => {
+            .catch((error: Error) => {
                 console.error('Failed to initialize Home Galaxy Scene:', error);
             });
     },
@@ -87,14 +121,39 @@ export const HomeGalaxyScene = {
     /**
      * Initialize the galaxy scene
      */
-    async initializeGalaxyScene(canvas) {
+    async initializeGalaxyScene(canvas: HTMLCanvasElement): Promise<boolean> {
         try {
-            // Create engine
+            // Initialize Babylon.js exports first
+            await initializeBabylonExports();
+            
+            // Pre-patch WebGL context to prevent deprecated extension requests
+            const context = canvas.getContext('webgl2') || canvas.getContext('webgl');
+            if (context && context.getExtension) {
+                const originalGetExtension = context.getExtension.bind(context);
+                context.getExtension = function(name: string) {
+                    // Block deprecated debug renderer info extension to prevent Firefox warnings
+                    if (name === 'WEBGL_debug_renderer_info') {
+                        console.debug('Blocked deprecated WEBGL_debug_renderer_info extension request');
+                        return null;
+                    }
+                    return originalGetExtension(name);
+                };
+            }
+            
+            // Create engine with Firefox-compatible options
             this.engine = new Engine(canvas, true, {
                 preserveDrawingBuffer: true,
                 stencil: true,
                 antialias: true,
-                alpha: true
+                alpha: true,
+                // Disable deprecated WebGL debug renderer info for Firefox compatibility
+                disableWebGL2Support: false,
+                audioEngine: false, // Disable audio engine if not needed
+                deterministicLockstep: false,
+                lockstepMaxSteps: 4,
+                // Avoid deprecated WebGL extensions
+                failIfMajorPerformanceCaveat: false,
+                xrCompatible: false
             });
 
             // Create scene
@@ -118,7 +177,9 @@ export const HomeGalaxyScene = {
     /**
      * Create camera with auto-rotation
      */
-    async createCamera() {
+    async createCamera(): Promise<void> {
+        if (!this.scene) return;
+
         // Create arc rotate camera for subtle movement
         this.camera = new ArcRotateCamera(
             "homeCamera", 
@@ -136,7 +197,7 @@ export const HomeGalaxyScene = {
         
         // Very slow auto-rotation
         this.scene.registerBeforeRender(() => {
-            if (this.animationRunning) {
+            if (this.animationRunning && this.camera) {
                 this.camera.alpha += 0.001; // Slow rotation
             }
         });
@@ -145,7 +206,9 @@ export const HomeGalaxyScene = {
     /**
      * Create skybox with procedural galaxy texture
      */
-    async createSkybox() {
+    async createSkybox(): Promise<void> {
+        if (!this.scene) return;
+
         // Simplified skybox for debugging
         const skybox = MeshBuilder.CreateSphere("skyBox", {diameter: 100}, this.scene);
         const skyboxMaterial = new StandardMaterial("skyBox", this.scene);
@@ -162,7 +225,7 @@ export const HomeGalaxyScene = {
     /**
      * Generate procedural galaxy texture
      */
-    generateGalaxyTexture(texture) {
+    generateGalaxyTexture(texture: any): void {
         // Simplified version without DynamicTexture for now
         console.log('Galaxy texture generation skipped for debugging');
     },
@@ -170,13 +233,15 @@ export const HomeGalaxyScene = {
     /**
      * Create animated star field
      */
-    async createStarField() {
+    async createStarField(): Promise<void> {
+        if (!this.scene) return;
+
         // Create floating star particles for foreground
         const starCount = 200;
         this.stars = [];
         
         for (let i = 0; i < starCount; i++) {
-            const star = MeshBuilder.CreateSphere(`star_${i}`, {diameter: 0.02 + Math.random() * 0.03}, this.scene);
+            const star = MeshBuilder.CreateSphere(`star_${i}`, {diameter: 0.02 + Math.random() * 0.03}, this.scene) as AnimatedStar;
             
             // Position stars randomly in a sphere around the camera
             const distance = 5 + Math.random() * 40;
@@ -216,7 +281,7 @@ export const HomeGalaxyScene = {
         // Animate stars
         this.scene.registerBeforeRender(() => {
             if (this.animationRunning) {
-                this.stars.forEach((star) => {
+                this.stars.forEach((star: AnimatedStar) => {
                     const data = star.animationData;
                     const time = performance.now() * data.speed + data.offset;
                     
@@ -234,7 +299,9 @@ export const HomeGalaxyScene = {
     /**
      * Start render loop
      */
-    startRenderLoop() {
+    startRenderLoop(): void {
+        if (!this.engine || !this.scene) return;
+
         this.animationRunning = true;
         const canvas = this.engine.getRenderingCanvas();
         const integrityEvery = 10; // Only run expensive checks every N frames
@@ -244,7 +311,9 @@ export const HomeGalaxyScene = {
                 // Periodic integrity check to fight post-LiveView blur
                 if (++this._framesSinceLastIntegrityCheck >= integrityEvery) {
                     this._framesSinceLastIntegrityCheck = 0;
-                    this.ensureResolutionIntegrity(canvas);
+                    if (canvas) {
+                        this.ensureResolutionIntegrity(canvas);
+                    }
                 }
                 this.scene.render();
             }
@@ -255,7 +324,7 @@ export const HomeGalaxyScene = {
      * Ensure canvas / engine render size matches CSS size * DPR
      * (Fixes occasional blur after LiveView patch or tab restore)
      */
-    ensureResolutionIntegrity(canvas) {
+    ensureResolutionIntegrity(canvas: HTMLCanvasElement): void {
         if (!this.engine || !canvas) return;
 
         const dpr = window.devicePixelRatio || 1;
@@ -299,7 +368,7 @@ export const HomeGalaxyScene = {
     /**
      * Handle window resize
      */
-    handleResize() {
+    handleResize(): void {
         this.windowResizeHandler = () => this.debouncedResize();
         window.addEventListener("resize", this.windowResizeHandler);
     },
@@ -307,47 +376,50 @@ export const HomeGalaxyScene = {
     /**
      * Pause animation
      */
-    pause() {
+    pause(): void {
         this.animationRunning = false;
     },
 
     /**
      * Resume animation
      */
-    resume() {
+    resume(): void {
         this.animationRunning = true;
     },
 
     /**
      * Clean up resources
      */
-    cleanup() {
+    cleanup(): void {
         this.animationRunning = false;
+        
         // Remove listeners
         if (this.windowResizeHandler) {
             window.removeEventListener('resize', this.windowResizeHandler);
-            this.windowResizeHandler = null;
+            this.windowResizeHandler = null as any;
         }
         if (this.visibilityHandler) {
             document.removeEventListener('visibilitychange', this.visibilityHandler);
-            this.visibilityHandler = null;
+            this.visibilityHandler = null as any;
         }
         if (this.pageLoadingStopHandler) {
             window.removeEventListener('phx:page-loading-stop', this.pageLoadingStopHandler);
-            this.pageLoadingStopHandler = null;
+            this.pageLoadingStopHandler = null as any;
         }
         
         if (this.stars) {
-            this.stars.forEach(star => star.dispose());
+            this.stars.forEach((star: AnimatedStar) => star.dispose());
             this.stars = [];
         }
         
         if (this.scene) {
             this.scene.dispose();
+            this.scene = null;
         }
         
         if (this.engine) {
             this.engine.dispose();
+            this.engine = null;
         }
     }
-};
+} as HomeGalaxySceneHook;

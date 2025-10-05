@@ -1,16 +1,37 @@
 // hCaptcha integration for Phoenix LiveView - Enhanced persistence with visual state
-let hCaptchaApiLoaded = false;
-let hCaptchaLoadPromise = null;
 
-export const HCaptcha = {
+import { LiveViewHook, LiveViewElement } from './types/liveview';
+import { HCaptchaAPI, FormHandlerHook } from './types/hcaptcha';
+
+let hCaptchaApiLoaded = false;
+let hCaptchaLoadPromise: Promise<void> | null = null;
+
+interface HCaptchaData {
+  sitekey: string;
+  preserveWidget: boolean;
+  isCompleted: boolean;
+  completedToken: string | null;
+  widgetId?: string;
+}
+
+interface HCaptchaHook extends LiveViewHook, HCaptchaData {
+  loadHCaptcha(): void;
+  renderCaptcha(): void;
+  createCompletedIndicator(): void;
+  removeCompletedIndicator(): void;
+  notifyFormHandler(eventName: string, data: any): void;
+  preserveFormBeforeUpdate(): void;
+}
+
+export const HCaptcha: HCaptchaHook = {
   mounted() {
-    this.sitekey = this.el.dataset.sitekey;
+    this.sitekey = this.el.dataset.sitekey || '';
     this.preserveWidget = true; // Flag to prevent unnecessary re-renders
     this.isCompleted = false; // Track completion state
     this.completedToken = null; // Store the token for re-verification
     
     // Store reference to this hook on the element for global callback access
-    this.el.phxHook = this;
+    (this.el as LiveViewElement).phxHook = this;
     
     this.loadHCaptcha();
   },
@@ -22,7 +43,7 @@ export const HCaptcha = {
     
     // Only re-render if widget is missing or sitekey changed
     if (!hasWidget || sitekeyChanged) {
-      this.sitekey = this.el.dataset.sitekey;
+      this.sitekey = this.el.dataset.sitekey || '';
       this.loadHCaptcha();
     } else if (this.isCompleted) {
       // If widget exists but we had a completion, ensure visual state is shown
@@ -30,7 +51,7 @@ export const HCaptcha = {
     }
   },
 
-  loadHCaptcha() {
+  loadHCaptcha(): void {
     // If API is already confirmed loaded and render method is available, render immediately
     if (hCaptchaApiLoaded && window.hcaptcha && typeof window.hcaptcha.render === 'function') {
       this.renderCaptcha();
@@ -48,19 +69,20 @@ export const HCaptcha = {
     }
 
     // Create load promise
-    hCaptchaLoadPromise = new Promise((resolve) => {
+    hCaptchaLoadPromise = new Promise<void>((resolve) => {
       // Set up global callback for when hCaptcha API is ready (only once)
       if (!window.hCaptchaLoaded) {
-        window.hCaptchaLoaded = () => {
+        window.hCaptchaLoaded = (): void => {
           // Add a small delay to ensure the API is fully initialized
           setTimeout(() => {
             hCaptchaApiLoaded = true;
             // Find all mounted hCaptcha hooks and render them
-            document.querySelectorAll('[data-sitekey]').forEach(el => {
-              if (el.phxHook && el.phxHook.renderCaptcha && !el.phxHook.widgetId) {
+            document.querySelectorAll('[data-sitekey]').forEach((el: Element) => {
+              const element = el as LiveViewElement;
+              if (element.phxHook && element.phxHook.renderCaptcha && !element.phxHook.widgetId) {
                 // Double-check that API is ready before rendering
                 if (window.hcaptcha && typeof window.hcaptcha.render === 'function') {
-                  el.phxHook.renderCaptcha();
+                  element.phxHook.renderCaptcha();
                 }
               }
             });
@@ -87,7 +109,7 @@ export const HCaptcha = {
     });
   },
 
-  renderCaptcha() {
+  renderCaptcha(): void {
     // Comprehensive check that API is loaded and fully ready
     if (!hCaptchaApiLoaded || !window.hcaptcha || !this.sitekey) {
       console.warn('hCaptcha API not ready or missing sitekey, skipping render');
@@ -101,7 +123,7 @@ export const HCaptcha = {
     }
 
     // Clear any existing widget first
-    if (this.widgetId) {
+    if (this.widgetId && window.hcaptcha) {
       try {
         window.hcaptcha.remove(this.widgetId);
       } catch (error) {
@@ -113,7 +135,7 @@ export const HCaptcha = {
     try {
       this.widgetId = window.hcaptcha.render(this.el, {
         sitekey: this.sitekey,
-        callback: (token) => {
+        callback: (token: string) => {
           // Mark as completed and store token
           this.isCompleted = true;
           this.completedToken = token;
@@ -175,7 +197,7 @@ export const HCaptcha = {
     }
   },
   
-  createCompletedIndicator() {
+  createCompletedIndicator(): void {
     // Remove any existing indicator first
     const existingOverlay = this.el.querySelector('.hcaptcha-completed-overlay');
     if (existingOverlay) {
@@ -226,28 +248,28 @@ export const HCaptcha = {
     }
   },
   
-  removeCompletedIndicator() {
+  removeCompletedIndicator(): void {
     const overlay = this.el.querySelector('.hcaptcha-completed-overlay');
     if (overlay) {
       overlay.remove();
     }
   },
   
-  notifyFormHandler(eventName, data) {
-    const form = this.el.closest('form');
+  notifyFormHandler(eventName: string, data: any): void {
+    const form = this.el.closest('form') as LiveViewElement;
     if (form && form.phxHook && form.phxHook.handleEvent) {
-      form.phxHook.handleEvent(eventName, data);
+      (form.phxHook as FormHandlerHook).handleEvent(eventName, data);
     }
   },
   
-  preserveFormBeforeUpdate() {
-    const form = this.el.closest('form');
+  preserveFormBeforeUpdate(): void {
+    const form = this.el.closest('form') as LiveViewElement;
     if (form && form.phxHook && form.phxHook.preserveFormData) {
-      form.phxHook.preserveFormData();
+      (form.phxHook as FormHandlerHook).preserveFormData?.();
     }
   },
 
-  destroyed() {
+  destroyed(): void {
     if (window.hcaptcha && this.widgetId) {
       try {
         window.hcaptcha.remove(this.widgetId);
@@ -256,7 +278,7 @@ export const HCaptcha = {
       }
     }
   }
-};
+} as HCaptchaHook;
 
 // Auto-register the hook if not already registered
 if (typeof window !== 'undefined' && window.liveSocket) {

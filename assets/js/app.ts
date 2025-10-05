@@ -8,44 +8,46 @@ import topbar from "./topbar";
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 
+// Import TypeScript hooks
+import { TerminalTypewriter } from "./terminal_typewriter";
+import { HCaptcha } from "./hcaptcha";
+import { FormHandler } from "./form_handler";
+import { FormPreserver } from "./form_preserver";
+import { FileDragDrop, FileUpload } from "./file_drag_drop";
+
+// Import remaining JavaScript hooks (to be converted later)
+import { BabylonScene } from "./babylon/babylon_hooks";
+import { OpenWorldLobbySceneHook } from "./babylon/open_world_lobby_scene_class";
+import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
+import { RichEditor } from "./rich_editor";
+import { BlogAutosave } from "./blog_autosave_hook";
+import "./quest_engine";
+
+// Import TypeScript interfaces
+import { 
+  QuestGameHook, 
+  MessageReactionsHook, 
+  FlashNotificationHook,
+  LiveSocketInstrumentation,
+  StripeEvent,
+  DownloadFileEvent,
+  NotificationEvent
+} from "./types/app";
+
 // CSRF token
-let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
+const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
 
 // ---------------------------
 // Hooks
 // ---------------------------
 
-// Import terminal typewriter effect
-import { TerminalTypewriter } from "./terminal_typewriter";
-// Import CAPTCHA hook
-import { HCaptcha } from "./hcaptcha";
-// Import form handler to prevent CAPTCHA destruction
-import { FormHandler } from "./form_handler";
-// Import form preserver to maintain form data during LiveView updates
-import { FormPreserver } from "./form_preserver";
-// Import Babylon.js hooks
-import { BabylonScene } from "./babylon/babylon_hooks"
-import { OpenWorldLobbyScene } from "./babylon/open_world_lobby_scene";
-import { HomeGalaxyScene } from "./babylon/home_galaxy_scene";
-
-// Import rich editor components
-import { RichEditor } from "./rich_editor";
-// Import file drag-drop hooks
-import { FileDragDrop, FileUpload } from "./file_drag_drop";
-// Import blog autosave hook
-import { BlogAutosave } from "./blog_autosave_hook";
-// Import quest engine
-import "./quest_engine";
-
-
-
 // Quest Game Hook
-const QuestGame = {
+const QuestGame: QuestGameHook = {
   mounted() {
     this.players = JSON.parse(this.el.dataset.players || '{}');
-    this.currentPlayerId = this.el.dataset.currentPlayer;
+    this.currentPlayerId = this.el.dataset.currentPlayer || '';
 
-    this.questEngine = new window.QuestEngine(this.el, this);
+    this.questEngine = new window.QuestEngine(this.el as HTMLCanvasElement, this);
     this.questEngine.updatePlayers(this.players);
     this.questEngine.setCurrentPlayer(this.currentPlayerId);
 
@@ -64,10 +66,10 @@ const QuestGame = {
       // Clean up if needed
     }
   }
-};
+} as QuestGameHook;
 
 // Message Reactions Hook for chat functionality
-const MessageReactions = {
+const MessageReactions: MessageReactionsHook = {
   mounted() {
     this.setupMessageReactions();
   },
@@ -76,26 +78,27 @@ const MessageReactions = {
     this.setupMessageReactions();
   },
 
-  setupMessageReactions() {
+  setupMessageReactions(): void {
     // Add hover effects for message reactions
-    this.el.querySelectorAll('.message').forEach(message => {
-      if (!message.dataset.reactionsSetup) {
-        message.addEventListener('mouseenter', () => {
-          this.showReactionButtons(message);
+    this.el.querySelectorAll('.message').forEach((message: Element) => {
+      const messageEl = message as HTMLElement;
+      if (!messageEl.dataset.reactionsSetup) {
+        messageEl.addEventListener('mouseenter', () => {
+          this.showReactionButtons(messageEl);
         });
         
-        message.addEventListener('mouseleave', () => {
-          this.hideReactionButtons(message);
+        messageEl.addEventListener('mouseleave', () => {
+          this.hideReactionButtons(messageEl);
         });
         
-        message.dataset.reactionsSetup = 'true';
+        messageEl.dataset.reactionsSetup = 'true';
       }
     });
   },
 
-  showReactionButtons(messageEl) {
+  showReactionButtons(messageEl: HTMLElement): void {
     // Add reaction buttons if they don't exist
-    let reactionBar = messageEl.querySelector('.reaction-bar');
+    let reactionBar = messageEl.querySelector('.reaction-bar') as HTMLElement;
     if (!reactionBar) {
       reactionBar = document.createElement('div');
       reactionBar.className = 'reaction-bar absolute right-0 top-0 bg-gray-800 rounded p-1 opacity-0 transition-opacity';
@@ -109,10 +112,13 @@ const MessageReactions = {
       messageEl.appendChild(reactionBar);
       
       // Add click handlers
-      reactionBar.querySelectorAll('.reaction-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const emoji = e.target.dataset.emoji;
-          this.addReaction(messageEl, emoji);
+      reactionBar.querySelectorAll('.reaction-btn').forEach((btn: Element) => {
+        btn.addEventListener('click', (e: Event) => {
+          const target = e.target as HTMLElement;
+          const emoji = target.dataset.emoji;
+          if (emoji) {
+            this.addReaction(messageEl, emoji);
+          }
         });
       });
     }
@@ -120,25 +126,25 @@ const MessageReactions = {
     reactionBar.style.opacity = '1';
   },
 
-  hideReactionButtons(messageEl) {
-    const reactionBar = messageEl.querySelector('.reaction-bar');
+  hideReactionButtons(messageEl: HTMLElement): void {
+    const reactionBar = messageEl.querySelector('.reaction-bar') as HTMLElement;
     if (reactionBar) {
       reactionBar.style.opacity = '0';
     }
   },
 
-  addReaction(messageEl, emoji) {
+  addReaction(messageEl: HTMLElement, emoji: string): void {
     // This would normally send to the server
     console.log('Adding reaction:', emoji, 'to message');
     // You can extend this to send phx events for persistence
   }
-};
+} as MessageReactionsHook;
 
 // Flash Notification Hook for smooth animations
-const FlashNotification = {
+const FlashNotification: FlashNotificationHook = {
   mounted() {
     // Auto-hide after 4 seconds
-    this.hideTimer = setTimeout(() => {
+    this.hideTimer = window.setTimeout(() => {
       this.hide();
     }, 4000);
   },
@@ -149,7 +155,7 @@ const FlashNotification = {
     }
   },
 
-  hide() {
+  hide(): void {
     this.el.style.transform = 'translateX(100%)';
     this.el.style.opacity = '0';
     
@@ -160,10 +166,10 @@ const FlashNotification = {
       }
     }, 300);
   }
-};
+} as FlashNotificationHook;
 
 // Clean hooks object with quest game, CMS components, file management, and Babylon.js
-let Hooks = {
+const Hooks = {
   QuestGame,
   MessageReactions,
   RichEditor,
@@ -171,7 +177,7 @@ let Hooks = {
   FileUpload,
   BlogAutosave,
   BabylonScene,
-  OpenWorldLobbyScene,
+  OpenWorldLobbyScene: OpenWorldLobbySceneHook,
   HomeGalaxyScene,
   FlashNotification,
   HCaptcha,
@@ -180,7 +186,7 @@ let Hooks = {
   TerminalTypewriter
 };
 
-let liveSocket = new LiveSocket("/live", Socket, {
+const liveSocket = new LiveSocket("/live", Socket, {
   params: { _csrf_token: csrfToken },
   hooks: Hooks
 });
@@ -197,46 +203,64 @@ liveSocket.connect = function() {
 };
 
 liveSocket.socket.onOpen(() => {
-  window.__liveSocketInstr.connects += 1;
-  console.log(`[LiveSocket] OPEN (total: ${window.__liveSocketInstr.connects})`);
+  if (window.__liveSocketInstr) {
+    window.__liveSocketInstr.connects += 1;
+    console.log(`[LiveSocket] OPEN (total: ${window.__liveSocketInstr.connects})`);
+  }
 });
-liveSocket.socket.onClose((ev) => {
-  window.__liveSocketInstr.disconnects += 1;
-  console.warn('[LiveSocket] CLOSE', ev && ev.code, 'total:', window.__liveSocketInstr.disconnects);
+
+liveSocket.socket.onClose((ev: CloseEvent) => {
+  if (window.__liveSocketInstr) {
+    window.__liveSocketInstr.disconnects += 1;
+    // Only log concerning close codes (not normal navigation)
+    if (ev && ev.code !== 1001 && ev.code !== 1000) {
+      console.warn('[LiveSocket] CLOSE', ev.code, 'total:', window.__liveSocketInstr.disconnects);
+    } else if (window.__liveSocketInstr.disconnects > 3) {
+      // Log if there are many disconnections (potential issue)
+      console.warn('[LiveSocket] Multiple disconnections detected', ev && ev.code, 'total:', window.__liveSocketInstr.disconnects);
+    }
+  }
 });
-liveSocket.socket.onError((err) => {
-  window.__liveSocketInstr.errors += 1;
-  console.error('[LiveSocket] ERROR', err, 'total:', window.__liveSocketInstr.errors);
+
+liveSocket.socket.onError((err: Event) => {
+  if (window.__liveSocketInstr) {
+    window.__liveSocketInstr.errors += 1;
+    console.error('[LiveSocket] ERROR', err, 'total:', window.__liveSocketInstr.errors);
+  }
 });
 
 // ---------------------------
 // Connect LiveSocket
 // ---------------------------
 liveSocket.connect();
-window.liveSocket = liveSocket;
+(window as any).liveSocket = liveSocket;
 
 // ---------------------------
 // Topbar
 // ---------------------------
 topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" });
-window.addEventListener("phx:page-loading-start", _info => topbar.show(300));
-window.addEventListener("phx:page-loading-stop", _info => topbar.hide());
+window.addEventListener("phx:page-loading-start", (_info: Event) => topbar.show(300));
+window.addEventListener("phx:page-loading-stop", (_info: Event) => topbar.hide());
 
 // ---------------------------
 // Stripe integration
 // ---------------------------
-window.addEventListener("phx:stripe-checkout", (e) => {
-  const stripe = Stripe(e.detail.public_key);
-  stripe.redirectToCheckout({ sessionId: e.detail.session_id });
+window.addEventListener("phx:stripe-checkout", (e: Event) => {
+  const event = e as CustomEvent<StripeEvent['detail']>;
+  if (window.Stripe) {
+    const stripe = window.Stripe(event.detail.public_key);
+    stripe.redirectToCheckout({ sessionId: event.detail.session_id });
+  }
 });
 
 // ---------------------------
 // File download handler
 // ---------------------------
-window.addEventListener("phx:download-file", (e) => {
+window.addEventListener("phx:download-file", (e: Event) => {
+  const event = e as CustomEvent<DownloadFileEvent['detail']>;
   const link = document.createElement("a");
-  link.href = e.detail.url;
-  link.download = e.detail.filename;
+  link.href = event.detail.url;
+  link.download = event.detail.filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -245,10 +269,11 @@ window.addEventListener("phx:download-file", (e) => {
 // ---------------------------
 // Notifications
 // ---------------------------
-window.addEventListener("phx:notification", (e) => {
+window.addEventListener("phx:notification", (e: Event) => {
+  const event = e as CustomEvent<NotificationEvent['detail']>;
   if (Notification.permission === "granted") {
-    new Notification(e.detail.title, {
-      body: e.detail.body,
+    new Notification(event.detail.title, {
+      body: event.detail.body,
       icon: "/favicon.ico"
     });
   }
@@ -261,7 +286,7 @@ if ("Notification" in window && Notification.permission === "default") {
 // ---------------------------
 // Babylon.js Test Events
 // ---------------------------
-window.addEventListener("phx:run_babylon_test", (e) => {
+window.addEventListener("phx:run_babylon_test", (e: Event) => {
   if (window.BabylonTest) {
     console.log("Running Babylon.js test...");
     const results = window.BabylonTest.runCapabilityTest();
@@ -271,7 +296,7 @@ window.addEventListener("phx:run_babylon_test", (e) => {
   }
 });
 
-window.addEventListener("phx:create_test_scene", (e) => {
+window.addEventListener("phx:create_test_scene", (e: Event) => {
   if (window.BabylonTest) {
     console.log("Creating Babylon.js test scene...");
     const container = document.getElementById('babylon-test-scene');
@@ -288,9 +313,9 @@ window.addEventListener("phx:create_test_scene", (e) => {
   }
 });
 
-window.addEventListener("phx:debug_scene", (e) => {
+window.addEventListener("phx:debug_scene", (e: Event) => {
   // Find the babylon scene hook and log debug info
-  const babylonScene = document.getElementById('babylon-test-scene');
+  const babylonScene = document.getElementById('babylon-test-scene') as any;
   if (babylonScene && babylonScene._babylonHook) {
     const hook = babylonScene._babylonHook;
     console.log('=== BABYLON SCENE DEBUG ===');
@@ -299,7 +324,7 @@ window.addEventListener("phx:debug_scene", (e) => {
     console.log('Canvas exists:', !!hook.canvas);
     if (hook.scene) {
       console.log('Meshes count:', hook.scene.meshes.length);
-      console.log('Meshes:', hook.scene.meshes.map(m => m.name));
+      console.log('Meshes:', hook.scene.meshes.map((m: any) => m.name));
       console.log('Camera position:', hook.camera.position);
       console.log('Camera target:', hook.camera.target);
     }
@@ -309,9 +334,15 @@ window.addEventListener("phx:debug_scene", (e) => {
   }
 });
 
-window.addEventListener("phx:toggle_fullscreen", (e) => {
-  const fullscreenOverlay = document.getElementById('babylon-fullscreen-overlay');
-  const babylonScene = document.getElementById('babylon-test-scene');
+window.addEventListener("phx:toggle_fullscreen", (e: Event) => {
+  const fullscreenOverlay = document.getElementById('babylon-fullscreen-overlay') as HTMLElement;
+  const babylonScene = document.getElementById('babylon-test-scene') as HTMLElement & {
+    _originalParent?: Node;
+    _originalStyles?: Record<string, string>;
+  };
+  
+  if (!fullscreenOverlay || !babylonScene) return;
+  
   const originalParent = babylonScene.parentNode;
 
   if (fullscreenOverlay.style.display === 'none' || !fullscreenOverlay.style.display) {
@@ -329,7 +360,7 @@ window.addEventListener("phx:toggle_fullscreen", (e) => {
     babylonScene.style.borderRadius = '0';
 
     // Store original parent for restoration
-    babylonScene._originalParent = originalParent;
+    babylonScene._originalParent = originalParent || undefined;
     babylonScene._originalStyles = {
       position: babylonScene.style.position,
       top: babylonScene.style.top,
@@ -341,7 +372,7 @@ window.addEventListener("phx:toggle_fullscreen", (e) => {
     };
 
     // Add ESC key listener
-    const escHandler = (event) => {
+    const escHandler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         exitFullscreen();
         document.removeEventListener('keydown', escHandler);
@@ -353,7 +384,7 @@ window.addEventListener("phx:toggle_fullscreen", (e) => {
     exitFullscreen();
   }
 
-  function exitFullscreen() {
+  function exitFullscreen(): void {
     // Exit fullscreen
     fullscreenOverlay.style.display = 'none';
     document.body.style.overflow = '';
@@ -361,8 +392,8 @@ window.addEventListener("phx:toggle_fullscreen", (e) => {
     // Restore babylon scene to original position
     if (babylonScene._originalStyles) {
       Object.assign(babylonScene.style, babylonScene._originalStyles);
-      babylonScene._originalStyles = null;
-      babylonScene._originalParent = null;
+      babylonScene._originalStyles = undefined;
+      babylonScene._originalParent = undefined;
     }
   }
 });
@@ -372,16 +403,21 @@ window.addEventListener("phx:toggle_fullscreen", (e) => {
 // ---------------------------
 document.addEventListener("DOMContentLoaded", function () {
   // Smooth scrolling
-  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener("click", function (e) {
+  document.querySelectorAll('a[href^="#"]').forEach((anchor: Element) => {
+    anchor.addEventListener("click", (e: Event) => {
       e.preventDefault();
-      document.querySelector(this.getAttribute("href")).scrollIntoView({ behavior: "smooth" });
+      const href = (anchor as HTMLAnchorElement).getAttribute("href");
+      if (href) {
+        const target = document.querySelector(href);
+        target?.scrollIntoView({ behavior: "smooth" });
+      }
     });
   });
 
   // Button hover effect
-  document.querySelectorAll("button, .btn").forEach(button => {
-    button.addEventListener("mouseenter", () => button.style.transform = "translateY(-2px)");
-    button.addEventListener("mouseleave", () => button.style.transform = "translateY(0)");
+  document.querySelectorAll("button, .btn").forEach((button: Element) => {
+    const buttonEl = button as HTMLElement;
+    buttonEl.addEventListener("mouseenter", () => buttonEl.style.transform = "translateY(-2px)");
+    buttonEl.addEventListener("mouseleave", () => buttonEl.style.transform = "translateY(0)");
   });
 });

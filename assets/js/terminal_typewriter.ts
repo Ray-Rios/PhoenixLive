@@ -1,7 +1,28 @@
 // Terminal Typewriter Effect Hook
 // Handles typing animation for terminal-style text
 
-const TerminalTypewriter = {
+import { LiveViewHook } from './types/liveview';
+
+interface TerminalTypewriterData {
+  typewriterSpeed: number;
+  blinkSpeed: number;
+  fallbackStartDelay: number;
+  _typingStarted: boolean;
+  _blinkInterval: number | null;
+  container: HTMLElement | null;
+  cursorContainer: HTMLElement | null;
+  targetText: string;
+  _loadListeners: [string, EventListener][] | null;
+  _fallbackTimer: number | null;
+}
+
+interface TerminalTypewriterHook extends LiveViewHook, TerminalTypewriterData {
+  startCursorBlink(): void;
+  startTyping(): void;
+  detachLoadListeners(): void;
+}
+
+const TerminalTypewriter: TerminalTypewriterHook = {
   mounted() {
     this.typewriterSpeed = 80; // ms per character
     this.blinkSpeed = 530; // cursor blink speed
@@ -26,7 +47,7 @@ const TerminalTypewriter = {
     this.startCursorBlink();
 
     // Prefer full window load; LiveView partial patches can arrive before images/fonts
-    const startIfReady = () => {
+    const startIfReady = (): void => {
       if (this._typingStarted) return; // idempotent
       this._typingStarted = true;
       this.startTyping();
@@ -41,12 +62,12 @@ const TerminalTypewriter = {
       setTimeout(startIfReady, 10);
     } else {
       // 2. Listen for full window load
-      const onWindowLoad = () => startIfReady();
+      const onWindowLoad = (): void => startIfReady();
       window.addEventListener('load', onWindowLoad, { once: true });
       this._loadListeners.push(['load', onWindowLoad]);
 
       // 3. Also listen for LiveView page-loading-stop which signals DOM settled
-      const onLVStop = () => startIfReady();
+      const onLVStop = (): void => startIfReady();
       window.addEventListener('phx:page-loading-stop', onLVStop, { once: true });
       this._loadListeners.push(['phx:page-loading-stop', onLVStop]);
 
@@ -55,21 +76,23 @@ const TerminalTypewriter = {
     }
   },
   
-  startCursorBlink() {
+  startCursorBlink(): void {
     if (this.cursorContainer) {
       this.cursorContainer.style.opacity = '1';
-      this._blinkInterval = setInterval(() => {
-        this.cursorContainer.style.opacity =
-          this.cursorContainer.style.opacity === '0' ? '1' : '0';
+      this._blinkInterval = window.setInterval(() => {
+        if (this.cursorContainer) {
+          this.cursorContainer.style.opacity =
+            this.cursorContainer.style.opacity === '0' ? '1' : '0';
+        }
       }, this.blinkSpeed);
     }
   },
   
-  startTyping() {
+  startTyping(): void {
     let currentIndex = 0;
     
-    const typeNextCharacter = () => {
-      if (currentIndex < this.targetText.length) {
+    const typeNextCharacter = (): void => {
+      if (currentIndex < this.targetText.length && this.container) {
         this.container.textContent += this.targetText[currentIndex];
         currentIndex++;
         setTimeout(typeNextCharacter, this.typewriterSpeed);
@@ -79,7 +102,7 @@ const TerminalTypewriter = {
     typeNextCharacter();
   },
 
-  detachLoadListeners() {
+  detachLoadListeners(): void {
     if (this._fallbackTimer) {
       clearTimeout(this._fallbackTimer);
       this._fallbackTimer = null;
@@ -92,13 +115,13 @@ const TerminalTypewriter = {
     }
   },
   
-  destroyed() {
+  destroyed(): void {
     this.detachLoadListeners();
     if (this._blinkInterval) {
       clearInterval(this._blinkInterval);
       this._blinkInterval = null;
     }
   }
-};
+} as TerminalTypewriterHook;
 
 export { TerminalTypewriter };

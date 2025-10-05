@@ -36,7 +36,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   def handle_event("change_role", %{"role" => role, "user_id" => user_id}, socket) do
     user = Accounts.get_user!(user_id)
     
-    case Accounts.update_user_role(user, %{role: role}) do
+    case Accounts.update_user_role(user, role) do
       {:ok, _updated_user} ->
         users = Accounts.list_users()
         {:noreply, assign(socket, users: users) |> put_flash(:info, "User role updated successfully")}

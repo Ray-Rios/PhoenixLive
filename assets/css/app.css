@@ -151,10 +151,36 @@
 
 /* Chat bubble styles */
 .chat-bubble {
+.play-ui-panel.play-ui-hidden {
+  transform: translateY(20px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.build-ui-panel.build-ui-active {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
   position: relative;
   background: rgba(206, 117, 117, 0.9);
+.build-tool-btn {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  padding: 6px 10px;
+  font-family: monospace;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease, transform .15s ease;
+}
+.build-tool-btn:hover { background:#1e293b; }
+.build-tool-btn:active { transform: scale(.94); }
+.build-tool-btn.active { background:#2563eb; border-color:#1d4ed8; color:#fff; }
   border-radius: 12px;
   padding: 8px 12px;
+#build-ui-panel input[type=range] { accent-color: #2563eb; }
   margin-bottom: 8px;
   max-width: 200px;
   word-wrap: break-word;
@@ -343,12 +369,20 @@
 
 /* Page Layout Styles */
 .page-content {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
   min-height: 100vh;
   margin: 0;
   padding: 0;
   transition: none;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Explicit full-screen variant for 3D immersive pages */
+.page-content.full-viewport {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
 html, body {
@@ -361,6 +395,26 @@ html, body {
 
 .page-content.navbar-hidden {
   padding-top: 0;
+}
+
+/* Home page centering wrapper */
+.home-centered-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding-top: 4rem; /* space below nav */
+  padding-bottom: 2rem;
+  pointer-events: none; /* allow background interactions not to be blocked */
+}
+
+.home-centered-wrapper > * {
+  pointer-events: auto; /* re-enable interactions for inner content */
 }
 
 /* Chat Styles */

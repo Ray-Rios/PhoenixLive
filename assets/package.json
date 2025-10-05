@@ -13,22 +13,33 @@
     "@babylonjs/havok": "^1.0.0"
   },
   "scripts": {
-    "build": "npm run build:css && npm run build:js",
+    "build": "npm run update-browserslist && npm run build:css && npm run build:js",
     "build:css": "tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --minify",
-    "build:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --format=iife --target=es2020 --minify --sourcemap --tree-shaking=true --loader:.ts=ts",
+    "build:js": "esbuild js/app.ts --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --format=iife --target=es2020 --minify --sourcemap --tree-shaking=true --loader:.ts=ts",
     "deploy": "npm run build && npm run copy:fonts",
     "copy:fonts": "mkdir -p ../priv/static/fonts && cp -r fonts/* ../priv/static/fonts/",
+    "update-browserslist": "npx update-browserslist-db@latest",
     "watch": "npm run watch:css & npm run watch:js",
     "watch:css": "tailwindcss -c tailwind.config.js -i css/app.css -o ../priv/static/assets/app.css --watch",
-    "watch:js": "esbuild js/app.js --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --watch --format=iife --target=es2020 --loader:.ts=ts"
+    "watch:js": "esbuild js/app.ts --bundle --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --watch --format=iife --target=es2020 --loader:.ts=ts",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "lint": "eslint js/**/*.ts",
+    "lint:fix": "eslint js/**/*.ts --fix",
+    "dev": "npm run type-check & npm run watch"
   },
   "devDependencies": {
-    "tailwindcss": "^3.3.0",
-    "autoprefixer": "^10.4.14",
-    "postcss": "^8.4.23",
-    "@tailwindcss/forms": "^0.5.3",
-    "esbuild": "^0.19.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "@tailwindcss/forms": "^0.5.9",
+    "esbuild": "^0.24.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "eslint": "^9.12.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "@eslint/js": "^9.12.0",
+    "@eslint/config-array": "^0.18.0"
   }
 }
