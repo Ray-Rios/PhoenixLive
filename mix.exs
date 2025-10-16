@@ -10,7 +10,11 @@ defmodule PhoenixApp.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      releases: releases()
+      releases: releases(),
+      # Optimize compilation
+      consolidate_protocols: Mix.env() != :dev,
+      build_embedded: Mix.env() == :prod,
+      compilers: Mix.compilers()
     ]
   end
 

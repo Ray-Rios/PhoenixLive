@@ -2,6 +2,7 @@ defmodule PhoenixAppWeb.AuthLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
   alias PhoenixApp.Auth.Guardian
+  require Logger
 
 
   # ----------------
@@ -10,10 +11,15 @@ defmodule PhoenixAppWeb.AuthLive do
   def mount(_params, session, socket) do
     current_user = maybe_fetch_user(session["user_id"])
     
-    # Store IP address during mount since connect_info is only available here
+    # Store IP address and user agent during mount since connect_info is only available here
     ip_address = case get_connect_info(socket, :peer_data) do
       %{address: {a, b, c, d}} -> "#{a}.#{b}.#{c}.#{d}"
       _ -> "unknown"
+    end
+    
+    user_agent = case get_connect_info(socket, :user_agent) do
+      nil -> "Unknown"
+      ua -> ua
     end
 
     # If user is already logged in, redirect to dashboard
@@ -32,8 +38,7 @@ defmodule PhoenixAppWeb.AuthLive do
          action: :login,
          loading: false,
          ip_address: ip_address,
-         captcha_token: nil,
-         show_captcha: captcha_required?()
+         user_agent: user_agent
        )}
     end
   end
@@ -129,12 +134,6 @@ defmodule PhoenixAppWeb.AuthLive do
          |> put_flash(:error, "Password is required")
          |> assign(errors: ["Password is required"], loading: false)}
       
-      socket.assigns.show_captcha and is_nil(socket.assigns.captcha_token) ->
-        {:noreply, 
-         socket
-         |> put_flash(:error, "Please complete the CAPTCHA verification")
-         |> assign(errors: ["CAPTCHA verification required"], loading: false)}
-      
       true ->
         # Set loading state
         socket = assign(socket, loading: true)
@@ -173,6 +172,14 @@ defmodule PhoenixAppWeb.AuthLive do
     end
   end
 
+  # Handle device fingerprint from JavaScript hook
+  def handle_event("device_fingerprint", %{"fingerprint" => fingerprint, "platform" => platform, "userAgent" => user_agent}, socket) do
+    Logger.info("Received device fingerprint: #{fingerprint}, Platform: #{platform}, UserAgent: #{user_agent}")
+    
+    socket = assign(socket, device_fingerprint: fingerprint)
+    {:noreply, socket}
+  end
+
   def handle_event("resend_verification", %{"email" => email}, socket) do
     case Accounts.resend_verification_email(email) do
       {:ok, message} ->
@@ -186,30 +193,123 @@ defmodule PhoenixAppWeb.AuthLive do
     {:noreply, put_flash(socket, :error, "Please enter your email address")}
   end
 
-  # CAPTCHA Events
-  def handle_event("captcha_verified", %{"token" => token}, socket),
-    do: {:noreply, assign(socket, captcha_token: token)}
-
-  def handle_event("captcha_error", _params, socket),
-    do: {:noreply, socket |> assign(captcha_token: nil) |> put_flash(:error, "CAPTCHA failed. Please try again.")}
-
-  def handle_event("captcha_expired", _params, socket),
-    do: {:noreply, socket |> assign(captcha_token: nil) |> put_flash(:warning, "CAPTCHA expired. Please complete it again.")}
-
-  def handle_event("captcha_timeout", _params, socket),
-    do: {:noreply, socket |> assign(captcha_token: nil) |> put_flash(:error, "CAPTCHA timed out. Please try again.")}
-
   # ----------------
   # Enhanced login with security features - Accept email or username
   # ----------------
-  defp do_login(socket, %{"email" => identifier, "password" => password} = _params) do
+  defp do_login(socket, %{"email" => identifier, "password" => password, "device_fingerprint" => fingerprint} = _params) do
     ip_address = socket.assigns.ip_address
     
-    # Add timeout to prevent hanging
-    task = Task.async(fn -> Accounts.authenticate_user_secure(identifier, password, ip_address: ip_address) end)
+    # Log for debugging
+    require Logger
+    Logger.info("Login attempt - IP: #{ip_address}, Email: #{identifier}, Fingerprint: #{inspect(fingerprint)}")
     
-    case Task.yield(task, 10_000) || Task.shutdown(task) do
+    # Wrap security check in try-rescue to catch database errors
+    try do
+      # Check security system first (rate limiting + blocklist)
+      case PhoenixApp.Security.check_login_security(ip_address, fingerprint, ip_address) do
+        {:ok, :allowed} ->
+          Logger.info("Security check passed, proceeding with authentication")
+          # Proceed with authentication
+          perform_login(socket, identifier, password, ip_address, fingerprint)
+        
+        {:error, reason} ->
+          Logger.warning("Security check failed: #{inspect(reason)}")
+          handle_security_error(socket, reason)
+      end
+    rescue
+      e ->
+        Logger.error("Security system error: #{inspect(e)}")
+        Logger.error(Exception.format(:error, e, __STACKTRACE__))
+        
+        # If security system fails, show error to user but don't crash
+        socket
+        |> put_flash(:error, "Security system unavailable. Please contact the administrator.")
+        |> assign(errors: ["Security system error. Please try again later or contact support."])
+        |> then(&{:noreply, &1})
+    end
+  end
+  
+  # Handle old calls without device_fingerprint (backward compatibility)
+  defp do_login(socket, %{"email" => _identifier, "password" => _password} = params) do
+    # Get device_fingerprint or default to nil if empty
+    fingerprint = case Map.get(params, "device_fingerprint", nil) do
+      "" -> nil
+      nil -> nil
+      fp -> fp
+    end
+    
+    do_login(socket, Map.put(params, "device_fingerprint", fingerprint))
+  end
+  
+  defp handle_security_error(socket, :blocked) do
+    form_data = Map.put(socket.assigns.form_data, "password", "")
+    form = to_form(form_data, as: "user")
+    
+    {:noreply,
+     socket
+     |> assign(loading: false, form_data: form_data)
+     |> put_flash(:error, "Access denied. Please contact support.")
+     |> assign(form: form, errors: ["Access blocked"])}
+  end
+  
+  defp handle_security_error(socket, {:rate_limited, seconds}) do
+    form_data = Map.put(socket.assigns.form_data, "password", "")
+    form = to_form(form_data, as: "user")
+    
+    minutes = div(seconds, 60)
+    message = if minutes > 0 do
+      "Too many failed attempts. Please wait #{minutes} minute(s) before trying again."
+    else
+      "Too many failed attempts. Please wait #{seconds} second(s) before trying again."
+    end
+    
+    {:noreply,
+     socket
+     |> assign(loading: false, form_data: form_data)
+     |> put_flash(:error, message)
+     |> assign(form: form, errors: [message])}
+  end
+  
+  defp handle_security_error(socket, reason) do
+    form_data = Map.put(socket.assigns.form_data, "password", "")
+    form = to_form(form_data, as: "user")
+    
+    {:noreply,
+     socket
+     |> assign(loading: false, form_data: form_data)
+     |> put_flash(:error, "Security check failed. Please try again.")
+     |> assign(form: form, errors: ["Security error: #{inspect(reason)}"])}
+  end
+  
+  defp perform_login(socket, identifier, password, ip_address, fingerprint) do
+    require Logger
+    
+    try do
+      # Add timeout to prevent hanging
+      task = Task.async(fn -> Accounts.authenticate_user_secure(identifier, password, ip_address: ip_address) end)
+      
+      case Task.yield(task, 10_000) || Task.shutdown(task) do
       {:ok, {:ok, user}} ->
+        # Record successful login in security system
+        PhoenixApp.Security.record_login_result(ip_address, true, %{
+          identifier_type: "ip",
+          ip_address: ip_address,
+          user_id: user.id,
+          user_agent: socket.assigns.user_agent
+        })
+        
+        # Get or create device fingerprint if provided
+        if fingerprint do
+          case PhoenixApp.Security.get_or_create_fingerprint(fingerprint, %{
+            user_agent: socket.assigns.user_agent,
+            platform: "web"
+          }) do
+            {:ok, _device_fingerprint} ->
+              PhoenixApp.Security.associate_fingerprint_with_user(fingerprint, user.id)
+            _ -> :ok
+          end
+        end
+        
         # Generate JWT token for unified API access
         {:ok, jwt_token, _claims} = Guardian.encode_and_sign(user)
         
@@ -222,6 +322,13 @@ defmodule PhoenixAppWeb.AuthLive do
          |> redirect(external: "/auth/login_success?user_id=#{user.id}&token=#{jwt_token}")}
 
       {:ok, {:error, :invalid_credentials}} ->
+        # Record failed login in security system
+        PhoenixApp.Security.record_login_result(ip_address, false, %{
+          identifier_type: "ip",
+          ip_address: ip_address,
+          user_agent: socket.assigns.user_agent
+        })
+        
         # Preserve entered identifier, clear password but keep form_data
         form_data = Map.put(socket.assigns.form_data, "password", "")
         form = to_form(form_data, as: "user")
@@ -231,6 +338,26 @@ defmodule PhoenixAppWeb.AuthLive do
          |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Invalid email/username or password")
          |> assign(form: form, errors: ["Invalid email/username or password"])}
+      
+      {:ok, {:error, :account_banned}} ->
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
+
+        {:noreply,
+         socket
+         |> assign(loading: false, form_data: form_data)
+         |> put_flash(:error, "This account has been banned. Please contact support for assistance.")
+         |> assign(form: form, errors: ["Account banned"])}
+      
+      {:ok, {:error, :account_disabled}} ->
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
+
+        {:noreply,
+         socket
+         |> assign(loading: false, form_data: form_data)
+         |> put_flash(:error, "This account has been disabled. Please contact an administrator.")
+         |> assign(form: form, errors: ["Account disabled"])}
       
       {:ok, {:error, :account_locked}} ->
         form_data = Map.put(socket.assigns.form_data, "password", "")
@@ -304,6 +431,20 @@ defmodule PhoenixAppWeb.AuthLive do
          |> assign(loading: false, form_data: form_data)
          |> put_flash(:error, "Login timeout - please try again")
          |> assign(form: form, errors: ["Login timeout"])}
+      end
+    rescue
+      e ->
+        Logger.error("Login exception: #{inspect(e)}")
+        Logger.error("Stacktrace: #{inspect(__STACKTRACE__)}")
+        
+        form_data = Map.put(socket.assigns.form_data, "password", "")
+        form = to_form(form_data, as: "user")
+        
+        {:noreply,
+         socket
+         |> assign(loading: false, form_data: form_data)
+         |> put_flash(:error, "An error occurred during login. Please try again.")
+         |> assign(form: form, errors: ["System error"])}
     end
   end
 
@@ -381,16 +522,6 @@ defmodule PhoenixAppWeb.AuthLive do
   # ----------------
   defp maybe_fetch_user(nil), do: nil
   defp maybe_fetch_user(user_id), do: Accounts.get_user(user_id)
-
-  defp captcha_required? do
-    System.get_env("HCAPTCHA_SITE_KEY") != nil and 
-    System.get_env("HCAPTCHA_SITE_KEY") != ""
-  end
-
-  defp get_hcaptcha_site_key do
-    System.get_env("HCAPTCHA_SITE_KEY") || 
-    Application.get_env(:phoenix_app, :hcaptcha_site_key)
-  end
 
   # ----------------
   # Render
@@ -523,12 +654,14 @@ defmodule PhoenixAppWeb.AuthLive do
               </div>
             <% end %>
             
-            <form 
-              id="auth-form"
-              phx-submit="submit"
-              phx-hook="FormPreserver"
-              class="space-y-4"
-            >
+            <div id="auth-security-wrapper" phx-hook="DeviceFingerprint">
+              <form 
+                id="auth-form"
+                phx-submit="submit"
+                phx-hook="FormPreserver"
+                class="space-y-4"
+              >
+                <input type="hidden" name="user[device_fingerprint]" value="" />
               <div>
                 <label class="block text-white text-sm font-medium mb-2">
                   <%= if @action == :login, do: "Email or Username", else: "Email" %>
@@ -575,22 +708,10 @@ defmodule PhoenixAppWeb.AuthLive do
                 </div>
               <% end %>
               
-              <!-- CAPTCHA Widget -->
-              <%= if @show_captcha do %>
-                <div class="captcha-container">
-                  <div 
-                    id="hcaptcha-widget" 
-                    phx-hook="HCaptcha" 
-                    data-sitekey={get_hcaptcha_site_key()}
-                    class="flex justify-center"
-                  ></div>
-                </div>
-              <% end %>
-              
               <button 
                 type="submit"
-                disabled={@loading or (@show_captcha and is_nil(@captcha_token))}
-                class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading or (@show_captcha and is_nil(@captcha_token)), do: "opacity-50 cursor-not-allowed", else: ""}"}
+                disabled={@loading}
+                class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading, do: "opacity-50 cursor-not-allowed", else: ""}"}
               >
                 <%= if @loading do %>
                   <div class="flex items-center justify-center">
@@ -604,7 +725,8 @@ defmodule PhoenixAppWeb.AuthLive do
                   <%= if @action == :login, do: "Sign In", else: "Create Account" %>
                 <% end %>
               </button>
-            </form>
+              </form>
+            </div>
             
             <div class="mt-6 text-center">
               <%= if @action == :login do %>

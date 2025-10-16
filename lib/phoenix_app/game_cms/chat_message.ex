@@ -2,12 +2,15 @@ defmodule PhoenixApp.GameCMS.ChatMessage do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @primary_key {:id, :binary_id, autogenerate: true}
+  @foreign_key_type :binary_id
+
   schema "game_chat_messages" do
     field :message, :string
     field :channel, :string, default: "global"
     field :message_type, :string, default: "chat"
 
-    belongs_to :user, PhoenixApp.Accounts.User
+  belongs_to :user, PhoenixApp.Accounts.User, type: :binary_id
     belongs_to :character, PhoenixApp.GameCMS.Character, on_replace: :nilify
 
     timestamps()

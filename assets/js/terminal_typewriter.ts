@@ -24,6 +24,14 @@ interface TerminalTypewriterHook extends LiveViewHook, TerminalTypewriterData {
 
 const TerminalTypewriter: TerminalTypewriterHook = {
   mounted() {
+    // Defensive check for element existence
+    if (!this.el) {
+      console.error('❌ TerminalTypewriter hook mounted but element is null');
+      return;
+    }
+    
+    console.log('⌨️ TerminalTypewriter mounted', this.el.id);
+    
     this.typewriterSpeed = 80; // ms per character
     this.blinkSpeed = 530; // cursor blink speed
     this.fallbackStartDelay = 1500; // safety fallback if events fail

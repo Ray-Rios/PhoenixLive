@@ -2,14 +2,13 @@ defmodule PhoenixApp.Settings.Option do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @primary_key {:id, :binary_id, autogenerate: true}
-  @foreign_key_type :binary_id
+  # Use default integer primary key to match the DB
   schema "cms_options" do
     field :option_name, :string
     field :option_value, :string
-    field :autoload, :boolean, default: true
+    field :autoload, :string, default: "yes"
 
-    timestamps(type: :utc_datetime)
+    timestamps()
   end
 
   def changeset(option, attrs) do

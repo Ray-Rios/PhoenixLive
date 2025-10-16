@@ -35,11 +35,6 @@ defmodule PhoenixAppWeb.Router do
     plug Guardian.Plug.LoadResource
   end
 
-
-  pipeline :game_auth do
-    plug PhoenixAppWeb.Plugs.GameAuthPlug
-  end
-
   # --------------------
   # Public LiveViews
   # --------------------
@@ -76,7 +71,7 @@ defmodule PhoenixAppWeb.Router do
     live "/quest", QuestLive, :index
     live "/unreal", UnrealLive, :index
     live "/desktop", DesktopLive, :index
-    live "/babylon-test", BabylonTestLive, :index
+    live "/threejs-test", ThreeJSTestLive, :index
     live "/lobby", LobbyLive, :index
     live "/inventory", InventoryLive, :index
 
@@ -131,6 +126,8 @@ defmodule PhoenixAppWeb.Router do
       live "/blog-management", AdminLive.BlogManagement, :index
       live "/user-management", UserManagementLive, :index
       live "/sql", AdminLive.SQL, :index
+      live "/security", Admin.SecurityLive, :index
+      live "/api-toolbox", AdminLive.ApiToolbox, :index
     end
   end
 
@@ -160,6 +157,8 @@ defmodule PhoenixAppWeb.Router do
     get "/users", Api.ApiAuthController, :list_users
   end
 
+  
+
   # --------------------
   # Protected Game API endpoints (require JWT authentication)
   # --------------------
@@ -171,6 +170,19 @@ defmodule PhoenixAppWeb.Router do
     post "/characters", Api.GameController, :create_character
     get "/inventory/:character_id", Api.GameController, :get_inventory
     post "/login-game", Api.GameController, :login_to_game
+  end
+
+  # --------------------
+  # Admin API (authenticated + admin-only via controller plug)
+  # --------------------
+  scope "/api/admin", PhoenixAppWeb do
+    pipe_through :api_authenticated
+
+    get "/users", Api.AdminController, :list_users
+    delete "/users/:id", Api.AdminController, :delete_user
+    post "/users/:id/enable", Api.AdminController, :enable_user
+    post "/users/:id/disable", Api.AdminController, :disable_user
+    post "/users/:id/role", Api.AdminController, :update_role
   end
 
   # --------------------

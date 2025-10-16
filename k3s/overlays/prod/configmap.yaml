@@ -8,7 +8,7 @@ data:
   DB_HOST: "db"
   DB_PORT: "5432"
   DB_NAME: "phoenixapp_prod"
-  DATABASE_URL: "postgresql://postgres@db:5432/phoenixapp_prod"
+  DATABASE_URL: "postgresql://postgres:postgres@db:5432/phoenixapp_prod"
   REDIS_URL: "redis://redis:6379/0"
   SMTP_HOST: "smtp.sendgrid.net"
   SMTP_PORT: "587"

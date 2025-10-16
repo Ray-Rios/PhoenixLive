@@ -208,64 +208,6 @@
   overflow: hidden;
 }
 
-.stars-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.stars {
-  width: 1px;
-  height: 1px;
-  background: transparent;
-  box-shadow: 
-    1541px 1046px #FFF, 1917px 1581px #FFF, 1303px 1830px #FFF, 1696px 1219px #FFF,
-    1744px 1820px #FFF, 1984px 1058px #FFF, 1417px 1823px #FFF, 1524px 1271px #FFF,
-    1923px 1411px #FFF, 1280px 1529px #FFF, 1806px 1286px #FFF, 1574px 1893px #FFF,
-    1484px 1185px #FFF, 1754px 1428px #FFF, 1945px 1871px #FFF, 1405px 1748px #FFF,
-    1619px 1119px #FFF, 1818px 1607px #FFF, 1264px 1694px #FFF, 1723px 1345px #FFF,
-    891px 829px #FFF, 1203px 1456px #FFF, 1876px 673px #FFF, 1102px 1743px #FFF,
-    1344px 1067px #FFF, 1590px 1312px #FFF, 1823px 1789px #FFF, 1456px 934px #FFF;
-  animation: animStar 50s linear infinite;
-}
-
-.stars2 {
-  width: 2px;
-  height: 2px;
-  background: transparent;
-  box-shadow: 
-    679px 1506px #FFF, 1717px 1847px #FFF, 1445px 1284px #FFF, 1769px 1548px #FFF,
-    1654px 1725px #FFF, 1288px 1802px #FFF, 1584px 1141px #FFF, 1915px 1463px #FFF,
-    1503px 1678px #FFF, 1740px 1389px #FFF, 1302px 1592px #FFF, 1856px 1217px #FFF,
-    1428px 1734px #FFF, 1671px 1056px #FFF, 1793px 1815px #FFF, 1519px 1372px #FFF,
-    934px 1123px #FFF, 1267px 1789px #FFF, 1834px 567px #FFF, 1089px 1456px #FFF;
-  animation: animStar 100s linear infinite;
-}
-
-.stars3 {
-  width: 3px;
-  height: 3px;
-  background: transparent;
-  box-shadow: 
-    1446px 1618px #FFF, 1832px 1293px #FFF, 1567px 1759px #FFF, 1703px 1104px #FFF,
-    1289px 1486px #FFF, 1798px 1651px #FFF, 1524px 1237px #FFF, 1915px 1574px #FFF,
-    1348px 1802px #FFF, 1679px 1419px #FFF, 1591px 1156px #FFF, 1847px 1738px #FFF,
-    823px 1234px #FFF, 1456px 789px #FFF, 1678px 1345px #FFF, 1123px 1567px #FFF;
-  animation: animStar 150s linear infinite;
-}
-
-@keyframes animStar {
-  from { 
-    transform: translateY(0px);
-  }
-  to { 
-    transform: translateY(-2000px);
-  }
-}
-
 /* Desktop Environment Styles */
 .desktop-container {
   position: fixed;

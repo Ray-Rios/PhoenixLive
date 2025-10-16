@@ -18,7 +18,7 @@
   GET   /quest                             PhoenixAppWeb.QuestLive :index
   GET   /unreal                            PhoenixAppWeb.UnrealLive :index
   GET   /desktop                           PhoenixAppWeb.DesktopLive :index
-  GET   /babylon-test                      PhoenixAppWeb.BabylonTestLive :index
+  GET   /threejs-test                      PhoenixAppWeb.ThreeJSTestLive :index
   GET   /lobby                             PhoenixAppWeb.LobbyLive :index
   GET   /profile                           PhoenixAppWeb.ProfileLive :index
   GET   /inventory                         PhoenixAppWeb.InventoryLive :index

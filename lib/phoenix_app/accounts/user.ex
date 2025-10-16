@@ -18,7 +18,7 @@ defmodule PhoenixApp.Accounts.User do
     field :avatar_file, PhoenixApp.Avatar.Type
     field :avatar_url, :string
     field :is_online, :boolean, default: false
-    field :is_admin, :boolean, default: true
+    field :is_admin, :boolean, default: false
     field :status, :string, default: "active"
     field :role, :string, default: "member"
     field :two_factor_secret, :string
@@ -41,18 +41,13 @@ defmodule PhoenixApp.Accounts.User do
     field :last_login_ip, :string
     field :last_login_at, :utc_datetime
 
-    belongs_to :approved_by, __MODULE__, foreign_key: :approved_by_id
+    belongs_to :approved_by, __MODULE__, foreign_key: :approved_by_id, on_replace: :nilify
 
-    has_many :orders, PhoenixApp.Commerce.Order
-    has_many :posts, PhoenixApp.Content.Post
-    has_many :comments, PhoenixApp.Content.Comment
-    has_many :files, PhoenixApp.Files.UserFile
-    has_many :chat_messages, PhoenixApp.Chat.Message
-    
-    # Game relationships
-    has_many :game_sessions, PhoenixApp.Game.GameSession
-    has_many :game_events, PhoenixApp.Game.GameEvent, foreign_key: :player_id
-    has_one :player_stats, PhoenixApp.Game.PlayerStats
+    has_many :orders, PhoenixApp.Commerce.Order, on_delete: :delete_all
+    has_many :posts, PhoenixApp.Content.Post, on_delete: :nilify_all
+    has_many :comments, PhoenixApp.Content.Comment, on_delete: :nilify_all
+    has_many :files, PhoenixApp.Files.UserFile, on_delete: :delete_all
+    has_many :chat_messages, PhoenixApp.Chat.Message, on_delete: :delete_all
 
     timestamps(type: :utc_datetime)
   end
@@ -60,11 +55,12 @@ defmodule PhoenixApp.Accounts.User do
   # Registration (new user) - Enhanced security validation
   def registration_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :name, :password, :registration_ip])
+    |> cast(attrs, [:email, :name, :password, :registration_ip, :role, :is_admin])
     |> validate_required([:email, :password])
     |> validate_email()
     |> validate_password()
     |> validate_name()
+    |> validate_inclusion(:role, ["admin", "gm", "editor", "moderator", "member", "guest", "banned"])
     |> unique_constraint(:email, message: "An account with this email already exists")
     |> put_email_verification_token()
     |> put_password_hash()
@@ -119,12 +115,23 @@ defmodule PhoenixApp.Accounts.User do
   end
 
   # Update profile (email/name/avatar)
+
   def profile_changeset(user, attrs) do
     user
     |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
-    |> validate_inclusion(:role, ["administrator", "editor", "author", "contributor", "subscriber"])
+    |> unique_constraint(:email)
+  end
+
+  # Admin changeset: allow updating status and correct roles
+  def admin_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role, :status, :email_verified_at])
+    |> validate_required([:name, :email])
+    |> validate_format(:email, ~r/@/)
+    |> validate_inclusion(:role, ["admin", "gm", "editor", "moderator", "member", "guest", "banned"])
+    |> validate_inclusion(:status, ["active", "disabled", "unverified"], message: "Invalid status")
     |> unique_constraint(:email)
   end
 
@@ -177,13 +184,6 @@ defmodule PhoenixApp.Accounts.User do
     else
       changeset
     end
-  end
-
-  # Admin changeset
-  def admin_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:is_admin])
-    |> validate_required([:is_admin])
   end
 
   def role_changeset(user, attrs) do

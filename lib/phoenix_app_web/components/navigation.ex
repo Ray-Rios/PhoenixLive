@@ -94,6 +94,9 @@ defmodule PhoenixAppWeb.Components.Navigation do
                     <.link navigate={~p"/admin/blog-management"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
                       📝 Blog Management
                     </.link>
+                    <.link navigate={~p"/admin/api-toolbox"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
+                      🧰 API Toolbox
+                    </.link>
                   <% end %>
                   <hr class="border-gray-600 my-1">
                   <.link navigate={~p"/auth/logout"} class="block px-4 py-2 text-sm text-red-300 hover:bg-gray-700 hover:text-red-200">

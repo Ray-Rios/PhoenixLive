@@ -26,9 +26,11 @@ defmodule PhoenixAppWeb.UserManagementLive do
         # Ensure first user is admin
         ensure_first_user_is_admin()
         
-        # Load users for admin
+        # Load users and default role setting
         users = Accounts.list_users()
-        {:ok, assign(socket, users: users, page_title: "User Management", confirm_delete_user_id: nil, default_role: "member")}
+        default_role = PhoenixApp.Settings.get_default_user_role()
+        
+        {:ok, assign(socket, users: users, page_title: "User Management", confirm_delete_user_id: nil, default_role: default_role)}
     end
   end
 
@@ -56,8 +58,32 @@ defmodule PhoenixAppWeb.UserManagementLive do
   end
 
   @impl true
-  def handle_event("change_default_role", %{"default_role" => role}, socket) do
-    {:noreply, assign(socket, default_role: role)}
+  def handle_event("change_default_role", params, socket) do
+    # Handle both map and url-encoded string from form submission
+    role = case params do
+      %{"default_role" => role} -> role
+      %{"value" => value} when is_binary(value) ->
+        # Parse URL-encoded string like "default_role=admin"
+        case String.split(value, "=") do
+          ["default_role", role] -> role
+          _ -> nil
+        end
+      _ -> nil
+    end
+    
+    Logger.info("Attempting to change default role to: #{inspect(role)}, from params: #{inspect(params)}")
+    
+    case PhoenixApp.Settings.set_default_user_role(role) do
+      {:ok, result} ->
+        Logger.info("Successfully set default role to: #{role}, result: #{inspect(result)}")
+        {:noreply, socket 
+         |> assign(default_role: role)
+         |> put_flash(:info, "Default role updated to #{role}")}
+      
+      {:error, reason} ->
+        Logger.error("Failed to set default role: #{inspect(reason)}")
+        {:noreply, put_flash(socket, :error, "Failed to update default role")}
+    end
   end
 
   @impl true
@@ -78,15 +104,26 @@ defmodule PhoenixAppWeb.UserManagementLive do
   def handle_event("toggle_status", %{"user_id" => user_id}, socket) do
     user = Accounts.get_user!(user_id)
     
-    new_status = if (user.status || "active") == "active", do: "disabled", else: "active"
+    # Get current status (accounting for unverified users)
+    current_status = get_user_status(user)
     
-    case Accounts.update_user(user, %{status: new_status}) do
+    # Toggle: if active -> disabled, otherwise -> active
+    new_status = if current_status == "active", do: "disabled", else: "active"
+    
+    # If activating an unverified user, also verify their email
+    attrs = if current_status == "unverified" and new_status == "active" do
+      %{status: new_status, email_verified_at: DateTime.utc_now()}
+    else
+      %{status: new_status}
+    end
+    
+    case Accounts.update_user(user, attrs) do
       {:ok, _updated_user} ->
         users = Accounts.list_users()
         
         socket = 
           socket
-          |> put_flash(:info, "User status updated")
+          |> put_flash(:info, "User status updated to #{new_status}")
           |> assign(:users, users)
           
         {:noreply, socket}
@@ -130,6 +167,28 @@ defmodule PhoenixAppWeb.UserManagementLive do
     end
   end
 
+  # Helper function to determine actual user status
+  defp get_user_status(user) do
+    cond do
+      # Check if email is unverified
+      is_nil(user.email_verified_at) -> "unverified"
+      # Check explicit status field
+      user.status != nil -> user.status
+      # Default to active
+      true -> "active"
+    end
+  end
+
+  # Helper function for status badge colors
+  defp status_badge_class(status) do
+    case status do
+      "unverified" -> "bg-yellow-100 text-yellow-800"
+      "active" -> "bg-green-100 text-green-800"
+      "disabled" -> "bg-red-100 text-red-800"
+      _ -> "bg-gray-100 text-gray-800"
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -149,11 +208,11 @@ defmodule PhoenixAppWeb.UserManagementLive do
           <!-- Default Role Setting -->
           <div class="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 class="text-lg font-semibold text-white mb-4">Default Role Settings</h2>
-            <div class="flex items-center space-x-4">
+            <form phx-submit="change_default_role" class="flex items-center space-x-4">
               <label class="text-sm font-medium text-gray-300">Default role for new users:</label>
               <select 
-                phx-change="change_default_role"
                 name="default_role"
+                onchange="this.form.requestSubmit()"
                 class="bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500"
               >
                 <option value="guest" selected={@default_role == "guest"}>Guest</option>
@@ -164,7 +223,7 @@ defmodule PhoenixAppWeb.UserManagementLive do
                 <option value="admin" selected={@default_role == "admin"}>Admin</option>
               </select>
               <span class="text-xs text-gray-400">Currently set to: <strong><%= String.capitalize(@default_role) %></strong></span>
-            </div>
+            </form>
           </div>
           
           <div class="bg-gray-800 rounded-lg shadow-lg">
@@ -201,8 +260,8 @@ defmodule PhoenixAppWeb.UserManagementLive do
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300"><%= user.email %></td>
                       <td class="px-6 py-4 whitespace-nowrap">
-                        <span class={"px-2 inline-flex text-xs leading-5 font-semibold rounded-full #{if (user.status || "active") == "active", do: "bg-green-100 text-green-800", else: "bg-red-100 text-red-800"}"}>
-                          <%= String.capitalize(user.status || "active") %>
+                        <span class={"px-2 inline-flex text-xs leading-5 font-semibold rounded-full #{status_badge_class(get_user_status(user))}"}>
+                          <%= String.capitalize(get_user_status(user)) %>
                         </span>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
@@ -229,27 +288,28 @@ defmodule PhoenixAppWeb.UserManagementLive do
                       <td class="px-6 py-4 whitespace-nowrap text-sm">
                         <%= if user.id != @current_user.id do %>
                           <div class="flex flex-col lg:flex-row gap-2">
-                            <select 
-                              phx-change="change_role"
-                              phx-value-user_id={user.id}
-                              name="role"
-                              class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
-                            >
-                              <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
-                              <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
-                              <option value="member" selected={get_user_role(user) == "member"}>Member</option>
-                              <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
-                              <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
-                              <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
-                              <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
-                            </select>
+                            <form phx-change="change_role">
+                              <input type="hidden" name="user_id" value={user.id} />
+                              <select 
+                                name="role"
+                                class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
+                              >
+                                <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
+                                <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
+                                <option value="member" selected={get_user_role(user) == "member"}>Member</option>
+                                <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
+                                <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
+                                <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
+                                <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
+                              </select>
+                            </form>
                             
                             <button 
                               phx-click="toggle_status" 
                               phx-value-user_id={user.id}
-                              class={"px-3 py-1 text-xs font-medium rounded-md transition-colors #{if user.status == "active", do: "bg-yellow-600 hover:bg-yellow-700 text-white", else: "bg-green-600 hover:bg-green-700 text-white"}"}
+                              class={"px-3 py-1 text-xs font-medium rounded-md transition-colors #{if get_user_status(user) == "active", do: "bg-yellow-600 hover:bg-yellow-700 text-white", else: "bg-green-600 hover:bg-green-700 text-white"}"}
                             >
-                              <%= if user.status == "active", do: "Disable", else: "Enable" %>
+                              <%= if get_user_status(user) == "active", do: "Disable", else: "Activate" %>
                             </button>
                             
                             <%= if @confirm_delete_user_id == user.id do %>

@@ -114,7 +114,8 @@ fi
 
 echo "🧹 Cleaning up old deployment..."
 
-kubectl delete namespace phoenixapp --ignore-not-found=true
+# Try to delete namespace, but continue even if it fails (e.g. EOF, doesn't exist, etc.)
+kubectl delete namespace phoenixapp --ignore-not-found=true || echo "Namespace phoenixapp doesn't exist or couldn't be deleted - continuing anyway"
 echo "🚀 Deploying Production"
 echo "======================================"
 
@@ -148,12 +149,15 @@ kubectl create namespace phoenixapp --dry-run=client -o yaml | kubectl apply -f 
 kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
 print_status "Namespaces ready"
 
-# Build production Docker image
-echo "🔨 Building production Docker image..."
-docker build -t "phoenixapp:prod" \
-              --progress=plain \
-              --build-arg "MIX_ENV=prod" \
-              .
+# Build production Docker image with BuildKit caching...
+echo "🔨 Building production Docker image with BuildKit caching..."
+DOCKER_BUILDKIT=1 docker build \
+  -t "phoenixapp:prod" \
+  --progress=plain \
+  --build-arg "MIX_ENV=prod" \
+  --cache-from "phoenixapp:prod" \
+  --build-arg BUILDKIT_INLINE_CACHE=1 \
+  .
 print_status "Production image built: phoenixapp:prod"
 
 # Deploy SSL infrastructure first
@@ -309,16 +313,16 @@ fi
 
 
 cat << 'ASCIIART'
-                      . . . .
-                      ,`,`,`,`,
-. . . .               `\`\`\`;
-`\`\`\`,            ~|;!;!;\!
+                  . . . .
+                   `\`\`\`;
+                   ~|;!;!;\!
+`\`\`\`,           (--,!!!~`!
  ~\;\;\;\|          (--,!!!~`!       .
 (--,\\\===~\         (--,|||~`!     ./
  (--,\\\===~\         `,-,~,=,:. _,//
   (--,\\\==~`\        ~-=~-.---|\;/J,
-   (--,\\\((```==.    ~'`~/       a |      Let's
-     (-,.\\'('(`\.  ~'=~|     \_.  \       Ride.
+   (--,\\\((```==.    ~'`~/       a |      Get on,
+     (-,.\\'('(`\.  ~'=~|     \_.  \       loser.
         (,--(,(,(,'\. ~'=|       \_;>
           (,-( ,(,(,;\ ~=/        \
           (,-/ (.(.(,;\,/          )

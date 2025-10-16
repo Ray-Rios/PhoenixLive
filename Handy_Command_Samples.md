@@ -42,11 +42,11 @@ kubectl get svc -n ingress-nginx -o wide
 kubectl describe deployment phoenix-web -n phoenixapp-dev
 kubectl describe ingress phoenix-ingress -n phoenixapp
 kubectl logs -n phoenixapp-dev deploy/phoenix-web
-kubectl logs -f deployment/phoenix-web -n phoenixapp   # -f follow logs
 kubectl logs phoenix-web-766545c5d5-4hmfj -n phoenixapp -f
 kubectl exec phoenix-web-77fc6746cd-vqc7m -n phoenixapp-dev -- mix ecto.migrate
 kubectl cp pvc postgres-pvc -n phoenixapp-dev
 kubectl delete pvc postgres-pvc -n phoenixapp-dev
+kubectl logs -f deployment/phoenix-web -n phoenixapp   # -f follow logs
 kubectl delete namespace phoenixapp-dev --ignore-not-found=true   #Deletes everything including pvcs
 
 kubectl get configmap phoenix-config -n phoenixapp-dev -o yaml
@@ -149,3 +149,5 @@ This project is a kubernetes k3s build. please run commands through kubectl as n
 AI context: please do no execute migrations in the pods themselves. update the files and re-deploy the kubernetes manifest. We've been down this road before and it causes severe docker issues.
 
 
+kubectl apply -k k3s/overlays/prod/
+kubectl rollout restart deployment/phoenix-web -n phoenixapp

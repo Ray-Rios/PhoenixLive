@@ -8,7 +8,23 @@ export interface QuestGameData {
   questEngine?: any;
 }
 
-export interface QuestGameHook extends LiveViewHook, QuestGameData {}
+// TypeScript interfaces for the main app
+import type { 
+  ThreeSceneState, 
+  GameWorldState, 
+  InputState, 
+  PerformanceMetrics 
+} from '../threejs/types';
+
+interface LiveViewHook {
+  el: HTMLElement;
+  mounted(): void;
+  updated?(): void;
+  destroyed?(): void;
+  pushEvent?(event: string, payload: any): void;
+}
+
+export interface QuestGameHook {
 
 export interface MessageReactionsHook extends LiveViewHook {
   setupMessageReactions(): void;
@@ -55,7 +71,6 @@ export interface NotificationEvent {
 declare global {
   interface Window {
     __liveSocketInstr?: LiveSocketInstrumentation;
-    BabylonTest?: any;
     Stripe?: (key: string) => any;
   }
 }

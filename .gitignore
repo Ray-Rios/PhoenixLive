@@ -3,6 +3,7 @@ k3s/overlays/prod/ingress.yaml
 k3s/overlays/prod/mailhog-auth-secret.yaml
 k3s/overlays/prod/secrets.yaml
 backups/
+OpenWorldEngine/
 # Database files
 *.db
 *.sql
@@ -12,6 +13,7 @@ backups/
 # Generated secrets
 priv/cert/
 priv/static/models/
+priv/static/maps/
 
 # Logs
 *.log

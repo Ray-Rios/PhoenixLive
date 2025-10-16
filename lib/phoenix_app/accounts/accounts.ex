@@ -86,9 +86,30 @@ defmodule PhoenixApp.Accounts do
     attrs_with_ip = if ip_address, do: Map.put(attrs, "registration_ip", ip_address), else: attrs
     
     Repo.transaction(fn ->
+      # Check if this is the first user (should be admin)
+      user_count = count_users()
+      is_first_user = user_count == 0
+      
+      # Determine role: first user is always admin, others use the default role setting
+      attrs_with_role = if is_first_user do
+        attrs_with_ip
+        |> Map.put("role", "admin")
+        |> Map.put("is_admin", true)
+      else
+        # Get the default role from settings (defaults to "member" if not set)
+        default_role = PhoenixApp.Settings.get_default_user_role()
+        
+        # Map role to is_admin flag
+        is_admin = default_role == "admin"
+        
+        attrs_with_ip
+        |> Map.put("role", default_role)
+        |> Map.put("is_admin", is_admin)
+      end
+      
       # Create the user
       case %User{}
-           |> User.registration_changeset(attrs_with_ip)
+           |> User.registration_changeset(attrs_with_role)
            |> Repo.insert() do
         {:ok, user} ->
           user
@@ -186,6 +207,12 @@ defmodule PhoenixApp.Accounts do
           if check_password(user, password) do
             # Additional security checks
             cond do
+              user.role == "banned" || user.role == "BANNED" ->
+                {:error, :account_banned}
+              
+              user.status == "disabled" ->
+                {:error, :account_disabled}
+              
               user.locked_until && DateTime.compare(DateTime.utc_now(), user.locked_until) == :lt ->
                 {:error, :account_locked}
               
@@ -371,7 +398,7 @@ defmodule PhoenixApp.Accounts do
 
   def update_user(%User{} = user, attrs) do
     user
-    |> User.profile_changeset(attrs)
+    |> User.admin_changeset(attrs)
     |> Repo.update()
   end
 
@@ -440,23 +467,147 @@ defmodule PhoenixApp.Accounts do
   # Delete user
   # ---------------------
   def delete_user(%User{} = user) do
-    Repo.delete(user)
+    Repo.transaction(fn ->
+      import Ecto.Query
+
+      user_id = user.id
+      Logger.debug("delete_user: starting cascade for user_id=#{user_id}")
+
+      # Nullify self-referential relationships to avoid constraint errors
+      {updated_approved_by, _} =
+        Repo.update_all(
+          from(u in User, where: u.approved_by_id == ^user_id),
+          set: [approved_by_id: nil]
+        )
+      Logger.debug("delete_user: nullified approved_by_id on #{updated_approved_by} users")
+
+      # Remove dependent records that don't rely on DB-level cascades
+      {tokens_deleted, _} = Repo.delete_all(from(t in PhoenixApp.Accounts.UserToken, where: t.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{tokens_deleted} user tokens")
+
+      {reactions_deleted, _} = Repo.delete_all(from(r in PhoenixApp.Chat.Reaction, where: r.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{reactions_deleted} chat reactions")
+
+      {chat_msgs_deleted, _} = Repo.delete_all(from(m in PhoenixApp.Chat.Message, where: m.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{chat_msgs_deleted} chat messages")
+
+      # Legacy/optional chat messages table (avoid errors aborting the transaction)
+      if table_exists?("game_chat_messages") and column_exists?("game_chat_messages", "user_id") do
+        Logger.debug("delete_user: deleting from legacy table game_chat_messages by user_id")
+        res = Repo.query!("DELETE FROM game_chat_messages WHERE user_id = $1", [user_id])
+        Logger.debug("delete_user: deleted #{res.num_rows} rows from game_chat_messages")
+      else
+        Logger.debug("delete_user: skipping legacy game_chat_messages (table or user_id column missing)")
+      end
+
+      # Characters (GameCMS)
+      if table_exists?("game_characters") do
+        {chars_deleted, _} = Repo.delete_all(from(ch in PhoenixApp.GameCMS.Character, where: ch.user_id == ^user_id))
+        Logger.debug("delete_user: deleted #{chars_deleted} game characters")
+      else
+        Logger.debug("delete_user: skipping game_characters (table missing)")
+      end
+
+      # Game sessions
+      if table_exists?("game_sessions") do
+        {sessions_deleted, _} = Repo.delete_all(from(gs in PhoenixApp.Game.GameSession, where: gs.user_id == ^user_id))
+        Logger.debug("delete_user: deleted #{sessions_deleted} game sessions")
+      else
+        Logger.debug("delete_user: skipping game_sessions (table missing)")
+      end
+
+      # Game events can exist in two schema variants; delete by whichever column exists
+      if table_exists?("game_events") do
+        cond do
+          column_exists?("game_events", "user_id") ->
+            Logger.debug("delete_user: deleting game_events by user_id")
+            res = Repo.query!("DELETE FROM game_events WHERE user_id = $1", [user_id])
+            Logger.debug("delete_user: deleted #{res.num_rows} rows from game_events (by user_id)")
+          column_exists?("game_events", "player_id") ->
+            Logger.debug("delete_user: deleting game_events by player_id")
+            res = Repo.query!("DELETE FROM game_events WHERE player_id = $1", [user_id])
+            Logger.debug("delete_user: deleted #{res.num_rows} rows from game_events (by player_id)")
+          true -> :ok
+        end
+      else
+        Logger.debug("delete_user: skipping game_events (table missing)")
+      end
+
+      if table_exists?("player_stats") do
+        {stats_deleted, _} = Repo.delete_all(from(ps in PhoenixApp.Game.PlayerStats, where: ps.user_id == ^user_id))
+        Logger.debug("delete_user: deleted #{stats_deleted} player_stats")
+      else
+        Logger.debug("delete_user: skipping player_stats (table missing)")
+      end
+
+      {orders_deleted, _} = Repo.delete_all(from(o in PhoenixApp.Commerce.Order, where: o.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{orders_deleted} orders")
+
+      {carts_deleted, _} = Repo.delete_all(from(c in PhoenixApp.Commerce.Cart, where: c.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{carts_deleted} carts")
+
+      {files_deleted, _} = Repo.delete_all(from(f in PhoenixApp.Files.UserFile, where: f.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{files_deleted} user files")
+
+      {posts_deleted, _} = Repo.delete_all(from(p in PhoenixApp.Content.Post, where: p.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{posts_deleted} posts")
+
+      {comments_nullified, _} = Repo.update_all(from(c in PhoenixApp.Content.Comment, where: c.user_id == ^user_id), set: [user_id: nil])
+      Logger.debug("delete_user: nullified user_id on #{comments_nullified} comments")
+
+      {fp_deleted, _} = Repo.delete_all(from(df in PhoenixApp.Security.DeviceFingerprint, where: df.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{fp_deleted} device fingerprints")
+
+      {login_deleted, _} = Repo.delete_all(from(la in PhoenixApp.Security.LoginAttempt, where: la.user_id == ^user_id))
+      Logger.debug("delete_user: deleted #{login_deleted} login attempts")
+
+      {allowed_nullified, _} = Repo.update_all(from(ai in PhoenixApp.Security.AllowedIdentifier, where: ai.added_by_user_id == ^user_id), set: [added_by_user_id: nil])
+      Logger.debug("delete_user: nullified added_by_user_id on #{allowed_nullified} allowed_identifiers")
+
+      {blocked_nullified, _} = Repo.update_all(from(bi in PhoenixApp.Security.BlockedIdentifier, where: bi.blocked_by_user_id == ^user_id), set: [blocked_by_user_id: nil])
+      Logger.debug("delete_user: nullified blocked_by_user_id on #{blocked_nullified} blocked_identifiers")
+
+      case Repo.delete(user) do
+        {:ok, deleted_user} ->
+          Logger.debug("delete_user: user record deleted successfully user_id=#{user_id}")
+          deleted_user
+
+        {:error, changeset} ->
+          Logger.error("delete_user: failed to delete user record user_id=#{user_id} error=#{inspect(changeset.errors)}")
+          Repo.rollback(changeset)
+      end
+    end)
+    |> case do
+      {:ok, deleted_user} -> {:ok, deleted_user}
+      {:error, reason} ->
+        Logger.error("delete_user: transaction failed for user_id=#{user.id} reason=#{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  # ---------------------
+  # Internal helpers to guard optional legacy tables/columns
+  # ---------------------
+  defp table_exists?(table_name) when is_binary(table_name) do
+    case Repo.query("SELECT to_regclass($1)", ["public." <> table_name]) do
+      {:ok, %{rows: [[regclass]]}} when not is_nil(regclass) -> true
+      _ -> false
+    end
+  end
+
+  defp column_exists?(table_name, column_name) when is_binary(table_name) and is_binary(column_name) do
+    sql = "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2 LIMIT 1"
+    case Repo.query(sql, [table_name, column_name]) do
+      {:ok, %{num_rows: n}} when n > 0 -> true
+      _ -> false
+    end
   end
 
   # ---------------------
   # Safe delete user
   # ---------------------
   def safe_delete_user(%User{} = user) do
-    Repo.transaction(fn ->
-      # Delete user
-      case Repo.delete(user) do
-        {:ok, deleted_user} ->
-          deleted_user
-        
-        {:error, changeset} ->
-          Repo.rollback(changeset)
-      end
-    end)
+    delete_user(user)
   end
 
   # ---------------------

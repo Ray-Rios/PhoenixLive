@@ -5,55 +5,47 @@ defmodule PhoenixAppWeb.HomeLive do
 
   def mount(_params, _session, socket) do
     # If user is logged in and has a cached location, redirect there
-    # Otherwise redirect to lobby for the full 3D experience
+    # Otherwise redirect to dashboard
     if socket.assigns.current_user do
       # Check if user has a cached location (future feature)
-      # For now, always redirect to lobby
-      {:ok, push_navigate(socket, to: ~p"/lobby")}
+      # For now, always redirect to dashboard
+      {:ok, push_navigate(socket, to: ~p"/dashboard")}
     else
-      {:ok, assign(socket, page_title: "Welcome")}
+      # Ensure we explicitly set that user is not authenticated
+      # This helps prevent race conditions with hook elements
+      {:ok, assign(socket, page_title: "Welcome", user_authenticated: false, will_redirect: false)}
     end
   end
 
   def render(assigns) do
     ~H"""
     <.page_with_navbar current_user={@current_user} flash={@flash}>
-      <!-- Babylon.js Galaxy Background (only for non-logged-in users) -->
-      <%= if !@current_user do %>
-        <div 
-          id="home-galaxy-scene" 
-          phx-hook="HomeGalaxyScene" 
-          class="fixed inset-0 z-0"
-          style="width: 100vw; height: 100vh; top: 0; left: 0;"
-        >
-          <canvas 
-            id="home-galaxy-canvas" 
-            class="w-full h-full"
-            style="display: block; width: 100vw; height: 100vh;"
-          ></canvas>
-        </div>
-      <% end %>
+      <!-- Full Screen Three.js Galaxy Scene -->
+      <div id="home-galaxy-canvas" 
+           style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1;">
+      </div>
       
-      <div class="w-full bg-transparent relative overflow-hidden">
-        <!-- Main Content -->
-        <div class="home-centered-wrapper relative z-10 transition-all duration-300 ease-in-out flex items-center justify-center min-h-[80vh]">
-          <div class="text-center text-white px-4">
+      <!-- Content Overlay -->
+      <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; display: flex; align-items: center; justify-content: center;">
+        <div style="pointer-events: auto;" class="text-center text-white px-4">
             <!-- Welcome Section with Terminal Typewriter Effect -->
               <div class="relative z-20">
                 <!-- Terminal-style Welcome Text -->
-                <div 
-                  id="terminal-typewriter" 
-                  phx-hook="TerminalTypewriter" 
-                  class="mb-8"
-                >
-                  <!-- Removed invalid Tailwind class 'text-md'; font-size now controlled by CSS on .typewriter-text -->
-                  <div class="text-green-400">
-                    <span class="typewriter-text font-sad-machine" data-text="IT'S A SECRET TO EVERYBODY."></span>
-                    <span class="typewriter-cursor">_</span>
+                <%= if is_nil(@current_user) do %>
+                  <!-- Terminal Typewriter Effect -->
+                  <div id="terminal-typewriter" 
+                    phx-hook="TerminalTypewriter"
+                    phx-update="ignore"
+                    class="mb-8">
+                    <div class="text-green-400">
+                      <span class="typewriter-text font-sad-machine" data-text="IT'S A SECRET TO EVERYBODY."></span>
+                      <span class="typewriter-cursor">_</span>
+                    </div>
                   </div>
-                </div>
+                <% end %>
                 
-                <!-- Main Welcome Content -->
+                <!-- Main Welcome Content (only show for non-authenticated users) -->
+                <%= if is_nil(@current_user) do %>
                 <h1 class="text-4xl md:text-5xl font-bold mb-6 animate-pulse">
                   Welcome to Rio-Tek
                 </h1>
@@ -75,8 +67,8 @@ defmodule PhoenixAppWeb.HomeLive do
                     Sign In
                   </.link>
                 </div>
+                <% end %>
               </div>
-          </div>
         </div>
       </div>
     </.page_with_navbar>

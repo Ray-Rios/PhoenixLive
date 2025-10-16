@@ -1,0 +1,578 @@
+defmodule PhoenixAppWeb.Admin.SecurityLive do
+  use PhoenixAppWeb, :live_view
+  alias PhoenixApp.Security
+  alias PhoenixApp.RateLimiter
+
+  @impl true
+  def mount(_params, _session, socket) do
+    # Ensure user is admin
+    if socket.assigns[:current_user] && socket.assigns.current_user.is_admin do
+      if connected?(socket) do
+        # Update stats every 5 seconds
+        :timer.send_interval(5000, self(), :update_stats)
+      end
+
+      {:ok, load_security_data(socket)}
+    else
+      {:ok, socket |> put_flash(:error, "Access denied") |> redirect(to: "/")}
+    end
+  end
+
+  @impl true
+  def handle_info(:update_stats, socket) do
+    {:noreply, load_security_data(socket)}
+  end
+
+  @impl true
+  def handle_event("block_identifier", %{"identifier" => identifier, "type" => type, "reason" => reason}, socket) do
+    case Security.block_identifier(%{
+      identifier: identifier,
+      identifier_type: type,
+      reason: reason,
+      blocked_at: DateTime.utc_now(),
+      auto_blocked: false,
+      blocked_by_user_id: socket.assigns.current_user.id
+    }) do
+      {:ok, _} ->
+        # Also block in rate limiter
+        RateLimiter.block(identifier)
+        {:noreply, load_security_data(socket) |> put_flash(:info, "Identifier blocked successfully")}
+      
+      {:error, _changeset} ->
+        {:noreply, socket |> put_flash(:error, "Failed to block identifier")}
+    end
+  end
+
+  @impl true
+  def handle_event("unblock_identifier", %{"identifier" => identifier, "type" => type}, socket) do
+    case Security.unblock_identifier(identifier, type) do
+      {:ok, _} ->
+        # Also unblock in rate limiter
+        RateLimiter.unblock(identifier)
+        {:noreply, load_security_data(socket) |> put_flash(:info, "Identifier unblocked successfully")}
+      
+      {:error, _} ->
+        {:noreply, socket |> put_flash(:error, "Failed to unblock identifier")}
+    end
+  end
+
+  @impl true
+  def handle_event("allow_identifier", %{"identifier" => identifier, "type" => type, "reason" => reason}, socket) do
+    case Security.allow_identifier(%{
+      identifier: identifier,
+      identifier_type: type,
+      reason: reason,
+      added_at: DateTime.utc_now(),
+      added_by_user_id: socket.assigns.current_user.id
+    }) do
+      {:ok, _} ->
+        {:noreply, load_security_data(socket) |> put_flash(:info, "Identifier added to allowlist")}
+      
+      {:error, _} ->
+        {:noreply, socket |> put_flash(:error, "Failed to add to allowlist")}
+    end
+  end
+
+  @impl true
+  def handle_event("disallow_identifier", %{"identifier" => identifier, "type" => type}, socket) do
+    case Security.disallow_identifier(identifier, type) do
+      {:ok, _} ->
+        {:noreply, load_security_data(socket) |> put_flash(:info, "Identifier removed from allowlist")}
+      
+      {:error, _} ->
+        {:noreply, socket |> put_flash(:error, "Failed to remove from allowlist")}
+    end
+  end
+
+  @impl true
+  def handle_event("clear_rate_limiter", %{"identifier" => identifier}, socket) do
+    RateLimiter.record_success(identifier)
+    {:noreply, load_security_data(socket) |> put_flash(:info, "Rate limiter cleared for #{identifier}")}
+  end
+
+  defp load_security_data(socket) do
+    stats = Security.get_security_stats()
+    
+    socket
+    |> assign(:stats, stats)
+    |> assign(:blocked_identifiers, Security.list_blocked_identifiers())
+    |> assign(:allowed_identifiers, Security.list_allowed_identifiers())
+    |> assign(:recent_failures, Security.get_recent_failed_attempts(50))
+    |> assign(:rate_limiter_blocked, RateLimiter.list_blocked())
+    |> assign(:page_title, "Security Dashboard")
+  end
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Security Dashboard</h1>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Monitor login attempts and manage security controls</p>
+      </div>
+
+      <!-- Statistics Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Attempts (Last Hour)
+                  </dt>
+                  <dd class="flex items-baseline">
+                    <div class="text-2xl font-semibold text-gray-900 dark:text-white">
+                      <%= @stats.total_attempts_last_hour %>
+                    </div>
+                    <div class="ml-2 flex items-baseline text-sm font-semibold text-red-600">
+                      <%= @stats.failed_attempts_last_hour %> failed
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Attempts (Last 24h)
+                  </dt>
+                  <dd class="flex items-baseline">
+                    <div class="text-2xl font-semibold text-gray-900 dark:text-white">
+                      <%= @stats.total_attempts_last_day %>
+                    </div>
+                    <div class="ml-2 flex items-baseline text-sm font-semibold text-red-600">
+                      <%= @stats.failed_attempts_last_day %> failed
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Blocked Identifiers
+                  </dt>
+                  <dd class="text-2xl font-semibold text-gray-900 dark:text-white">
+                    <%= @stats.blocked_identifiers %>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                </svg>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                    Device Fingerprints
+                  </dt>
+                  <dd class="text-2xl font-semibold text-gray-900 dark:text-white">
+                    <%= @stats.unique_fingerprints %>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rate Limiter Active Blocks -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
+        <div class="px-4 py-5 sm:p-6">
+          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            Rate Limiter Active Blocks
+          </h3>
+          <%= if Enum.empty?(@rate_limiter_blocked) do %>
+            <p class="text-sm text-gray-500 dark:text-gray-400">No active rate-limited identifiers</p>
+          <% else %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead>
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Identifier
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Failed Attempts
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <%= for identifier <- @rate_limiter_blocked do %>
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                        <%= identifier %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        10+ (Auto-blocked)
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          phx-click="clear_rate_limiter"
+                          phx-value-identifier={identifier}
+                          class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          Clear
+                        </button>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Add to Block/Allow List Forms -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <!-- Block Form -->
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+              Block Identifier
+            </h3>
+            <form phx-submit="block_identifier">
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Identifier (IP or Fingerprint)
+                  </label>
+                  <input
+                    type="text"
+                    name="identifier"
+                    required
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="192.168.1.1 or fingerprint hash"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Type
+                  </label>
+                  <select
+                    name="type"
+                    required
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  >
+                    <option value="ip">IP Address</option>
+                    <option value="fingerprint">Device Fingerprint</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Reason
+                  </label>
+                  <input
+                    type="text"
+                    name="reason"
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Suspicious activity detected"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Block Identifier
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Allow Form -->
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+              Add to Allowlist
+            </h3>
+            <form phx-submit="allow_identifier">
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Identifier (IP or Fingerprint)
+                  </label>
+                  <input
+                    type="text"
+                    name="identifier"
+                    required
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="192.168.1.1 or fingerprint hash"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Type
+                  </label>
+                  <select
+                    name="type"
+                    required
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  >
+                    <option value="ip">IP Address</option>
+                    <option value="fingerprint">Device Fingerprint</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Reason
+                  </label>
+                  <input
+                    type="text"
+                    name="reason"
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Trusted administrator"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
+                  Add to Allowlist
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blocked Identifiers Table -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
+        <div class="px-4 py-5 sm:p-6">
+          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            Blocked Identifiers
+          </h3>
+          <%= if Enum.empty?(@blocked_identifiers) do %>
+            <p class="text-sm text-gray-500 dark:text-gray-400">No blocked identifiers</p>
+          <% else %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead>
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Identifier
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Reason
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Blocked At
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Auto
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <%= for blocked <- @blocked_identifiers do %>
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                        <%= blocked.identifier %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
+                          <%= blocked.identifier_type %>
+                        </span>
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        <%= blocked.reason || "N/A" %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <%= Calendar.strftime(blocked.blocked_at, "%Y-%m-%d %H:%M") %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <%= if blocked.auto_blocked, do: "Yes", else: "No" %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          phx-click="unblock_identifier"
+                          phx-value-identifier={blocked.identifier}
+                          phx-value-type={blocked.identifier_type}
+                          class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          Unblock
+                        </button>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Allowed Identifiers Table -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
+        <div class="px-4 py-5 sm:p-6">
+          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            Allowlist
+          </h3>
+          <%= if Enum.empty?(@allowed_identifiers) do %>
+            <p class="text-sm text-gray-500 dark:text-gray-400">No allowed identifiers</p>
+          <% else %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead>
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Identifier
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Reason
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Added At
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <%= for allowed <- @allowed_identifiers do %>
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                        <%= allowed.identifier %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300">
+                          <%= allowed.identifier_type %>
+                        </span>
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        <%= allowed.reason || "N/A" %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <%= Calendar.strftime(allowed.added_at, "%Y-%m-%d %H:%M") %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          phx-click="disallow_identifier"
+                          phx-value-identifier={allowed.identifier}
+                          phx-value-type={allowed.identifier_type}
+                          class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Recent Failed Attempts -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            Recent Failed Login Attempts
+          </h3>
+          <%= if Enum.empty?(@recent_failures) do %>
+            <p class="text-sm text-gray-500 dark:text-gray-400">No recent failed attempts</p>
+          <% else %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead>
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Identifier
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      IP Address
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      User Agent
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Time
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <%= for attempt <- @recent_failures do %>
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                        <%= String.slice(attempt.identifier, 0..20) %><%= if String.length(attempt.identifier) > 20, do: "..." %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <%= attempt.ip_address || "N/A" %>
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                        <%= if attempt.user_agent do %>
+                          <%= String.slice(attempt.user_agent, 0..50) %><%= if String.length(attempt.user_agent) > 50, do: "..." %>
+                        <% else %>
+                          N/A
+                        <% end %>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <%= if attempt.last_attempt_at do %>
+                          <%= Calendar.strftime(attempt.last_attempt_at, "%Y-%m-%d %H:%M:%S") %>
+                        <% else %>
+                          N/A
+                        <% end %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+end

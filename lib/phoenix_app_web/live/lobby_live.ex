@@ -38,8 +38,8 @@ defmodule PhoenixAppWeb.LobbyLive do
      assign(socket,
        scene_config: %{
          camera: %{
-           position: %{x: 0, y: 55, z: 0},
-           target: %{x: 0, y: 50, z: 0},
+           position: %{x: 0, y: 65, z: 40},
+           target: %{x: 0, y: 52, z: 0},
            rotation: %{x: 0, y: 0, z: 0}
          },
          lighting: %{
@@ -209,10 +209,8 @@ defmodule PhoenixAppWeb.LobbyLive do
     <.page_with_navbar current_user={@current_user} flash={@flash} full_viewport={true}>
       <div id="world-builder-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #001122; z-index: 1;">
         <!-- Main 3D Scene -->
-        <div id="scene-wrapper" phx-update="ignore" style="width: 100vw; height: 100vh; position: relative;">
-          <!-- data-users temporarily empty to prevent churn; re-enable when multi-player rendering implemented -->
+        <div id="scene-wrapper" style="width: 100vw; height: 100vh; position: relative;">
           <canvas id="world-builder-scene"
-            phx-hook="OpenWorldLobbyScene"
             data-scene-config={Jason.encode!(@scene_config)}
             data-user={Jason.encode!(@user)}
             data-user-id={if @current_user, do: @current_user.id, else: ""}
