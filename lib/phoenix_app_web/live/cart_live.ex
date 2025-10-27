@@ -1,9 +1,8 @@
 defmodule PhoenixAppWeb.CartLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Commerce
-  alias PhoenixAppWeb.Components.PageWrapper
 
-  on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
+  on_mount {PhoenixAppWeb.UserAuth, :require_authenticated_user}
 
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
@@ -72,15 +71,8 @@ defmodule PhoenixAppWeb.CartLive do
 
   def render(assigns) do
     ~H"""
-    <PageWrapper.page_with_navbar current_user={@current_user} flash={@flash}>
-      <div class="starry-background w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <div class="stars-container">
-          <div class="stars"></div>
-          <div class="stars2"></div>
-          <div class="stars3"></div>
-        </div>
-        
-        
+    <div class="min-h-screen w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
+      <div class="auth-glass-panel p-8 rounded-xl">
         <div class="max-w-4xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">Shopping Cart</h1>
           
@@ -179,7 +171,7 @@ defmodule PhoenixAppWeb.CartLive do
           </div>
         </div>
       </div>
-    </PageWrapper.page_with_navbar>
+    </div>
     """
   end
 end

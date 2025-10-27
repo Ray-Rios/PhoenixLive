@@ -1,9 +1,8 @@
 defmodule PhoenixAppWeb.AdminLive.ServicesLive do
   use PhoenixAppWeb, :live_view
-  alias PhoenixAppWeb.UserAuth
 
   # Ensure current_user is loaded and authenticated
-  on_mount {UserAuth, :require_authenticated_user}
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -82,15 +81,7 @@ defmodule PhoenixAppWeb.AdminLive.ServicesLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="starry-background">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-
-      <.navbar current_user={@current_user} />
-
+    <div class="min-h-screen">
       <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
         <div class="max-w-6xl mx-auto">
           <div class="flex justify-between items-center mb-8">

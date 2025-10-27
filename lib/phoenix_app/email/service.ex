@@ -6,7 +6,7 @@ defmodule PhoenixApp.Email.Service do
   require Logger
 
   # Helper functions to get email configuration at runtime
-  defp get_from_email, do: System.get_env("FROM_EMAIL") || "no-reply@rio-tek.com"
+  defp get_from_email, do: System.get_env("FROM_EMAIL") || "no-reply@phxlive.net"
   defp get_from_name, do: System.get_env("FROM_NAME") || "PhxLive"
 
   def send_verification_email(user, verification_code) do

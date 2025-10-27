@@ -41,7 +41,7 @@ defmodule PhoenixAppWeb.AvatarLive do
           {:noreply,
            socket
            |> put_flash(:info, "Avatar saved successfully!")
-           |> redirect(to: ~p"/dashboard")}
+           |> redirect(to: ~p"/desktop")}
         
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to save avatar")}
@@ -74,15 +74,8 @@ defmodule PhoenixAppWeb.AvatarLive do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-      <!-- Starry Background -->
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-
-      <div class="container mx-auto px-4 py-8">
+    <div class="min-h-screen">
+      <div class="container mx-auto px-4 py-8 relative z-10">
         <div class="text-center mb-8">
           <h1 class="text-4xl font-bold text-white mb-4">Choose Your Avatar</h1>
           <p class="text-gray-300">Select a shape and color to represent you in the app</p>

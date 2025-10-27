@@ -22,9 +22,9 @@ defmodule PhoenixAppWeb.AuthLive do
       ua -> ua
     end
 
-    # If user is already logged in, redirect to dashboard
+    # If user is already logged in, redirect to desktop
     if current_user do
-      {:ok, redirect(socket, to: ~p"/dashboard")}
+      {:ok, redirect(socket, to: ~p"/desktop")}
     else
       form_data = %{}
       form = to_form(form_data, as: "user")
@@ -530,16 +530,9 @@ defmodule PhoenixAppWeb.AuthLive do
     ~H"""
       <.flash_group flash={@flash} />
       
-      <!-- Starry Background -->
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-      
       <!-- Auth Form -->
-      <div class="relative z-10 flex items-center justify-center min-h-[80vh]">
-        <div class="bg-gray-900 bg-opacity-90 backdrop-blur-sm p-8 rounded-xl shadow-2xl w-full max-w-md">
+      <div class="relative z-10 flex items-center justify-center min-h-screen py-12 px-4">
+        <div class="auth-glass-panel p-8 rounded-xl shadow-2xl w-full max-w-md">
           
           <%= if @action == :verify_code do %>
             <!-- Email Verification Form -->
@@ -627,20 +620,18 @@ defmodule PhoenixAppWeb.AuthLive do
             
           <% else %>
             <!-- Login/Register Form -->
-            <!-- Back to Home Link (only show on login) -->
-            <%= if @action == :login do %>
-              <div class="mb-4">
-                <.link 
-                  navigate={~p"/"} 
-                  class="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors text-sm"
-                >
-                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                  </svg>
-                  Back to Home
-                </.link>
-              </div>
-            <% end %>
+            <!-- Back to Home Link -->
+            <div class="mb-4">
+              <.link 
+                navigate={~p"/"} 
+                class="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors text-sm"
+              >
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back to Home
+              </.link>
+            </div>
             
             <h2 class="text-3xl font-bold text-white text-center mb-6">
               <%= if @action == :login, do: "Sign In", else: "Create Account" %>
@@ -658,7 +649,6 @@ defmodule PhoenixAppWeb.AuthLive do
               <form 
                 id="auth-form"
                 phx-submit="submit"
-                phx-hook="FormPreserver"
                 class="space-y-4"
               >
                 <input type="hidden" name="user[device_fingerprint]" value="" />
@@ -671,7 +661,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   name="user[email]" 
                   id="user_email"
                   required
-                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  class="w-full px-4 py-3 glass-dark text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
                   placeholder={if @action == :login, do: "Enter your email or username", else: "Enter your email"}
                 />
               </div>
@@ -682,7 +672,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   type="text" 
                   name="user[name]" 
                   id="user_name"
-                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  class="w-full px-4 py-3 glass-dark text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
                   placeholder="Enter your name"
                 />
               </div>
@@ -694,7 +684,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   name="user[password]" 
                   id="user_password"
                   required
-                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  class="w-full px-4 py-3 glass-dark text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
                   placeholder="Enter your password"
                 />
               </div>
@@ -711,7 +701,7 @@ defmodule PhoenixAppWeb.AuthLive do
               <button 
                 type="submit"
                 disabled={@loading}
-                class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading, do: "opacity-50 cursor-not-allowed", else: ""}"}
+                class={"w-full glass-button hover:glass-button text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading, do: "opacity-50 cursor-not-allowed", else: ""}"}
               >
                 <%= if @loading do %>
                   <div class="flex items-center justify-center">

@@ -6,4 +6,5 @@ resources:
 - redis-deployment.yaml
 - mailhog-deployment.yaml
 - phoenix-deployment.yaml
+- phoenix-uploads-pvc.yaml
 - db-init-job.yaml

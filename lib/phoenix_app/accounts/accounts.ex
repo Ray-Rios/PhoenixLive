@@ -485,10 +485,10 @@ defmodule PhoenixApp.Accounts do
       {tokens_deleted, _} = Repo.delete_all(from(t in PhoenixApp.Accounts.UserToken, where: t.user_id == ^user_id))
       Logger.debug("delete_user: deleted #{tokens_deleted} user tokens")
 
-      {reactions_deleted, _} = Repo.delete_all(from(r in PhoenixApp.Chat.Reaction, where: r.user_id == ^user_id))
+      {reactions_deleted, _} = Repo.delete_all(from(r in PhoenixApp.Forum.Reaction, where: r.user_id == ^user_id))
       Logger.debug("delete_user: deleted #{reactions_deleted} chat reactions")
 
-      {chat_msgs_deleted, _} = Repo.delete_all(from(m in PhoenixApp.Chat.Message, where: m.user_id == ^user_id))
+      {chat_msgs_deleted, _} = Repo.delete_all(from(m in PhoenixApp.Forum.Message, where: m.user_id == ^user_id))
       Logger.debug("delete_user: deleted #{chat_msgs_deleted} chat messages")
 
       # Legacy/optional chat messages table (avoid errors aborting the transaction)

@@ -3,24 +3,76 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="csrf-token" content={Phoenix.HTML.Tag.csrf_token_value()} />
+    <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()} />
     <.live_title suffix="  ฅ^•ﻌ•^ฅ">
       <%= assigns[:page_title] || "… . . ᘛ⁐̤ᕐᐷ" %>
     </.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
     </script>
-    
-    <style>
-      /* Flash notice positioning */
-      .flash-notice {
-        right: 15px;
-        top: 32px;
-      }
-    </style>
-
   </head>
-  <body class="bg-black antialiased">
+  <body class="bg-black antialiased" phx-hook="GlassTheme" id="global-glass-theme">
+    <!-- Mount Global Camera Controller separately (phx-hook accepts a single hook) -->
+    <div id="global-camera-hook" phx-hook="GlobalCameraController" class="hidden" aria-hidden="true"></div>
+    <!-- Global background canvas (outside LiveView-managed @inner_content to avoid being patched) -->
+    <%!-- Determine user's background preference and render either a Three.js scene hook or a CSS overlay for gradient/solid --%>
+    <% bg_pref = (assigns[:current_user] && assigns[:current_user].background_preference) || "galaxy" %>
+    <% custom = (assigns[:current_user] && assigns[:current_user].background_custom_data) || %{} %>
+
+    <!-- Initialize glass theme globally -->
+    <script>
+      window.addEventListener('DOMContentLoaded', function() {
+        const user = <%= if assigns[:current_user] do %>
+          <%= Phoenix.HTML.raw(Jason.encode!(%{
+            glass_theme: get_in(custom, ["glass_theme"]) || "dark",
+            glass_opacity: get_in(custom, ["glass_opacity"]) || "0.15", 
+            glass_blur: get_in(custom, ["glass_blur"]) || "15"
+          })) %>
+    <% else %>
+      {"glass_theme": "dark", "glass_opacity": "0.15", "glass_blur": "15"}
+        <% end %>;        
+        const root = document.documentElement;
+        
+        // Theme colors mapping - base colors only, opacity is applied separately
+        const themeColors = {
+          'dark': { bg: 'rgba(17, 24, 39, OPACITY)', border: 'rgba(255, 255, 255, 0.15)' },
+          'blue': { bg: 'rgba(59, 130, 246, OPACITY)', border: 'rgba(59, 130, 246, 0.3)' },
+          'purple': { bg: 'rgba(147, 51, 234, OPACITY)', border: 'rgba(147, 51, 234, 0.3)' },
+          'green': { bg: 'rgba(34, 197, 94, OPACITY)', border: 'rgba(34, 197, 94, 0.3)' },
+          'red': { bg: 'rgba(239, 68, 68, OPACITY)', border: 'rgba(239, 68, 68, 0.3)' },
+          'amber': { bg: 'rgba(245, 158, 11, OPACITY)', border: 'rgba(245, 158, 11, 0.3)' },
+          'teal': { bg: 'rgba(20, 184, 166, OPACITY)', border: 'rgba(20, 184, 166, 0.3)' }
+        };
+        
+        const theme = themeColors[user.glass_theme] || themeColors.dark;
+        const opacity = user.glass_opacity || "0.15";
+        const blur = user.glass_blur || "15";
+        
+        // Set CSS custom properties globally with proper opacity
+        root.style.setProperty('--glass-bg', theme.bg.replace('OPACITY', opacity));
+        root.style.setProperty('--glass-border', theme.border);
+        root.style.setProperty('--glass-blur', blur + 'px');
+        root.style.setProperty('--glass-saturation', '120%');
+        
+        console.log('Global glass theme initialized:', {theme: user.glass_theme, opacity, blur});
+      });
+    </script>
+
+    <%= if bg_pref in ["gradient", "solid"] do %>
+      <%= if bg_pref == "gradient" do %>
+        <% start_c = Map.get(custom, "gradient_start", "#3B82F6") %>
+        <% end_c = Map.get(custom, "gradient_end", "#9333EA") %>
+        <div id="global-background-canvas" phx-update="ignore" class="fixed inset-0 z-0 pointer-events-none background-overlay" style={"background: linear-gradient(135deg, #{start_c}, #{end_c});"} data-bg-type="gradient"></div>
+      <% else %>
+        <% color = Map.get(custom, "solid_color", "#0F172A") %>
+        <div id="global-background-canvas" phx-update="ignore" class="fixed inset-0 z-0 pointer-events-none background-overlay" style={"background: #{color};"} data-bg-type="solid"></div>
+      <% end %>
+      <!-- Hidden canvas for camera controls even on non-3D backgrounds -->
+      <div id="camera-control-canvas" phx-update="ignore" data-static-scene="HomeGalaxyScene" class="fixed inset-0 z-0 pointer-events-auto opacity-0"></div>
+    <% else %>
+      <% hook_name = PhoenixAppWeb.Layouts.background_hook_name(bg_pref) %>
+      <div id="global-background-canvas" phx-update="ignore" data-static-scene={hook_name} class="fixed inset-0 z-0"></div>
+    <% end %>
 
     <%= @inner_content %>
   </body>

@@ -37,13 +37,7 @@ defmodule PhoenixAppWeb.AdminLive.Users do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background min-h-screen">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-      
+    <div class="min-h-screen">
       <div class="flex relative z-10">
         <!-- Admin Sidebar -->
         <div class="w-64 bg-gray-900 min-h-screen">

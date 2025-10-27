@@ -14,21 +14,14 @@
   GET   /cart                              PhoenixAppWeb.CartLive :index
   GET   /checkout                          PhoenixAppWeb.CheckoutLive :index
   GET   /chat                              PhoenixAppWeb.ChatLive :index
-  GET   /chat/:channel_id                  PhoenixAppWeb.ChatLive :channel
-  GET   /quest                             PhoenixAppWeb.QuestLive :index
-  GET   /unreal                            PhoenixAppWeb.UnrealLive :index
+  GET   /forum/:channel_id                 PhoenixAppWeb.ForumLive :channel
   GET   /desktop                           PhoenixAppWeb.DesktopLive :index
-  GET   /threejs-test                      PhoenixAppWeb.ThreeJSTestLive :index
-  GET   /lobby                             PhoenixAppWeb.LobbyLive :index
-  GET   /profile                           PhoenixAppWeb.ProfileLive :index
-  GET   /inventory                         PhoenixAppWeb.InventoryLive :index
-  GET   /dashboard                         PhoenixAppWeb.DashboardLive :index
   GET   /profile                           PhoenixAppWeb.ProfileLive :index
   GET   /profile/security                  PhoenixAppWeb.ProfileLive :security
   GET   /profile/orders                    PhoenixAppWeb.ProfileLive :orders
   GET   /avatar                            PhoenixAppWeb.AvatarLive :index
   GET   /files                             PhoenixAppWeb.FilesLive :index
-  GET   /files/upload                      PhoenixAppWeb.FilesLive :upload
+
   GET   /auth/login_success                PhoenixAppWeb.AuthController :login_success
   GET   /auth/logout                       PhoenixAppWeb.AuthController :logout
   POST  /auth/logout                       PhoenixAppWeb.AuthController :logout

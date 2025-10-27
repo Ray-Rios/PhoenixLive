@@ -1,6 +1,9 @@
 defmodule PhoenixAppWeb.Components.Navigation do
   use PhoenixAppWeb, :html
 
+  attr :current_user, :any, default: nil
+  attr :id_prefix, :string, default: ""
+  
   def navbar(assigns) do
     ~H"""
     <!-- Navigation Toggle Button -->
@@ -12,12 +15,12 @@ defmodule PhoenixAppWeb.Components.Navigation do
       </svg>
     </button>
 
-    <nav id="main-navbar" class="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 fixed top-0 left-0 z-50 w-full h-[30px] transition-transform duration-300 ease-in-out">
+    <nav id="main-navbar" class="auth-glass-panel border-b border-gray-700 fixed top-0 left-0 z-50 w-full h-[30px] transition-transform duration-300 ease-in-out">
       <div class="px-4">
         <div class="flex top-8 justify-between items-center">
           <!-- Left side - Logo and main navigation -->
           <div class="flex items-center space-x-4 flex-1 min-w-0">
-            <.link navigate={~p"/dashboard"} class="text-xl font-bold text-white hover:text-blue-400 transition-colors duration-300 flex-shrink-0">
+            <.link navigate={~p"/desktop"} class="text-xl font-bold text-white hover:text-blue-400 transition-colors duration-300 flex-shrink-0">
               Phx<span class="rainbow-text">Live</span>
             </.link>
             <div class="hidden lg:flex space-x-4 flex-1 justify-center">
@@ -32,14 +35,11 @@ defmodule PhoenixAppWeb.Components.Navigation do
                   </span>
                 <% end %>
               </.link>
-              <.link navigate={~p"/chat"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                🎭 Chat
+              <.link navigate={~p"/forum"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
+                🎭 Forum
               </.link>
-              <.link navigate={~p"/dashboard"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                🍖 dashboard
-              </.link>
-              <.link navigate={~p"/lobby"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                ⛺ Lobby
+              <.link navigate={~p"/desktop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
+                🖥️ Desktop
               </.link>
               <.link navigate={~p"/blog"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 🚬 Blog
@@ -58,15 +58,15 @@ defmodule PhoenixAppWeb.Components.Navigation do
               <!-- User Avatar and Dropdown -->
               <.live_component 
                 module={PhoenixAppWeb.Components.Dropdown}
-                id="user-dropdown"
+                id={"#{@id_prefix}user-dropdown"}
                 trigger_class="flex items-center space-x-1 text-white hover:text-blue-400 transition-colors duration-300 min-w-0"
                 dropdown_class="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50"
               >
                 <:trigger>
                   <%= if get_user_avatar_url(@current_user) do %>
-                    <img src={get_user_avatar_url(@current_user)} alt="Avatar" class="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                    <img src={get_user_avatar_url(@current_user)} alt="Avatar" class={"w-6 h-6 object-cover flex-shrink-0 #{avatar_shape_classes(get_user_avatar_shape(@current_user))}"} />
                   <% else %>
-                    <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" 
+                    <div class={"w-6 h-6 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 #{avatar_shape_classes(get_user_avatar_shape(@current_user))}"} 
                          style={"background-color: #{get_user_avatar_color(@current_user)}"}>
                       <%= get_user_initial(@current_user) %>
                     </div>
@@ -80,9 +80,6 @@ defmodule PhoenixAppWeb.Components.Navigation do
                   <.link navigate={~p"/profile"} class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
                     👤 Profile Settings
                   </.link>
-                  <.link navigate={~p"/files"} class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
-                    📁 Files
-                  </.link>
                   <%= if @current_user.is_admin do %>
                     <hr class="border-gray-600 my-1">
                     <.link navigate={~p"/admin"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
@@ -94,6 +91,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
                     <.link navigate={~p"/admin/blog-management"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
                       📝 Blog Management
                     </.link>
+
                     <.link navigate={~p"/admin/api-toolbox"} class="block px-4 py-2 text-sm text-orange-300 hover:bg-gray-700 hover:text-orange-200">
                       🧰 API Toolbox
                     </.link>
@@ -121,19 +119,22 @@ defmodule PhoenixAppWeb.Components.Navigation do
     <script>
       function toggleNavbar() {
         const navbar = document.getElementById('main-navbar');
+        const taskbar = document.getElementById('taskbar');
         const icon = document.getElementById('nav-toggle-icon');
         const pageContent = document.querySelector('.page-content');
         const chatContainer = document.querySelector('.chat-container');
         
         if (navbar.style.transform === 'translateY(-100%)') {
-          // Show navbar
+          // Show navbar and taskbar
           navbar.style.transform = 'translateY(0)';
+          if (taskbar) taskbar.style.transform = 'translateY(0)';
           icon.style.transform = 'rotate(0deg)';
           if (pageContent) pageContent.classList.remove('navbar-hidden');
           if (chatContainer) chatContainer.classList.remove('navbar-hidden');
         } else {
-          // Hide navbar
+          // Hide navbar and taskbar
           navbar.style.transform = 'translateY(-100%)';
+          if (taskbar) taskbar.style.transform = 'translateY(100%)';
           icon.style.transform = 'rotate(180deg)';
           if (pageContent) pageContent.classList.add('navbar-hidden');
           if (chatContainer) chatContainer.classList.add('navbar-hidden');
@@ -204,6 +205,22 @@ defmodule PhoenixAppWeb.Components.Navigation do
       is_map(user) && Map.has_key?(user, :avatar_url) && user.avatar_url -> user.avatar_url
       is_map(user) && Map.has_key?(user, "avatar_url") && user["avatar_url"] -> user["avatar_url"]
       true -> nil
+    end
+  end
+
+  defp get_user_avatar_shape(user) do
+    cond do
+      is_map(user) && Map.has_key?(user, :avatar_shape) && user.avatar_shape -> user.avatar_shape
+      is_map(user) && Map.has_key?(user, "avatar_shape") && user["avatar_shape"] -> user["avatar_shape"]
+      true -> "circle"
+    end
+  end
+
+  defp avatar_shape_classes(shape) do
+    case shape do
+      "square" -> "rounded-none"
+      "rounded" -> "rounded-lg"
+      _ -> "rounded-full"  # default to circle
     end
   end
 end

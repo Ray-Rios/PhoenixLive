@@ -66,7 +66,7 @@ defmodule PhoenixApp.Schema do
     field :message_added, :chat_message do
       config fn _args, %{context: context} ->
         case context[:current_user] do
-          %{id: _user_id} -> {:ok, topic: "chat:lobby"}
+          %{id: _user_id} -> {:ok, topic: "chat:general"}
           _ -> {:error, "Must be logged in"}
         end
       end
@@ -76,7 +76,7 @@ defmodule PhoenixApp.Schema do
     field :user_presence, :presence_update do
       config fn _args, %{context: context} ->
         case context[:current_user] do
-          %{id: _user_id} -> {:ok, topic: "presence:lobby"}
+          %{id: _user_id} -> {:ok, topic: "presence:general"}
           _ -> {:error, "Must be logged in"}
         end
       end

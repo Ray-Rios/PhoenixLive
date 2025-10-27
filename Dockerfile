@@ -54,13 +54,13 @@
             RUN mix deps.get && mix deps.compile
             
         # -------------------------------
-        # Copy source code and compile - $(date)
+        # Copy source code and compile
         # -------------------------------
             COPY lib ./lib
             COPY priv ./priv
             
         # -------------------------------
-        # Copy assets and build them
+        # Copy assets and build them - FORCE REBUILD 2025-01-18
         # -------------------------------
             COPY assets ./assets
             RUN cd assets && \
@@ -91,6 +91,11 @@
     # Expose port & start script
     # -------------------------------
     EXPOSE 4000
+    
+    # Create uploads directory with proper permissions
+    RUN mkdir -p /app/uploads && \
+        chmod 777 /app/uploads
+    
     COPY phx-start.sh /usr/local/bin/phx-start.sh
     RUN chmod +x /usr/local/bin/phx-start.sh
     

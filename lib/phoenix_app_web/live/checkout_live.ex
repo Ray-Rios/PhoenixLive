@@ -82,14 +82,7 @@ defmodule PhoenixAppWeb.CheckoutLive do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background chat-container min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-
-      <!-- Chat Container -->
+    <div class="min-h-screen">
       <div class="container mx-auto px-4 py-8 relative z-10">
         <div class="max-w-6xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">Checkout</h1>

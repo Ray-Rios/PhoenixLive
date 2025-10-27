@@ -48,12 +48,19 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/uploads
         # Temporarily removed security context to fix permission issues
         # securityContext:
         #   allowPrivilegeEscalation: false
         #   capabilities:
         #     drop:
         #     - ALL
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: phoenix-uploads-pvc
 ---
 apiVersion: v1
 kind: Service

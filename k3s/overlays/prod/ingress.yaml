@@ -19,11 +19,11 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - rio-tek.com
-    - www.rio-tek.com
-    secretName: rio-tek-tls
+    - phxlive.net
+    - www.phxlive.net
+    secretName: phxlive-tls
   rules:
-  - host: rio-tek.com
+  - host: phxlive.net
     http:
       paths:
       - path: /
@@ -33,7 +33,7 @@ spec:
             name: phoenix-web
             port:
               number: 80
-  - host: www.rio-tek.com
+  - host: www.phxlive.net
     http:
       paths:
       - path: /
@@ -59,10 +59,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - mail.rio-tek.com
+    - mail.phxlive.net
     secretName: mailhog-tls
   rules:
-  - host: mail.rio-tek.com
+  - host: mail.phxlive.net
     http:
       paths:
       - path: /

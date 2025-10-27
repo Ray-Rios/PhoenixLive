@@ -1,10 +1,9 @@
 defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
-  alias PhoenixAppWeb.UserAuth
 
   # Ensure current_user is loaded and authenticated
-  on_mount {UserAuth, :require_authenticated_user}
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -23,7 +22,13 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
       true ->
         # Load users for admin
         users = Accounts.list_users()
-        {:ok, assign(socket, users: users, page_title: "User Management", confirm_delete_user_id: nil, default_role: "member")}
+        
+        {:ok, assign(socket, 
+          users: users, 
+          page_title: "User Management", 
+          confirm_delete_user_id: nil, 
+          default_role: "member"
+        )}
     end
   end
 
@@ -103,28 +108,20 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="starry-background">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-
-      <.navbar current_user={@current_user} />
-
+    <div class="min-h-screen">
       <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
         <div class="max-w-7xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">User Management</h1>
           
           <!-- Default Role Setting -->
-          <div class="bg-gray-800 rounded-lg p-6 mb-6">
+          <div class="auth-glass-panel rounded-lg p-6 mb-6">
             <h2 class="text-lg font-semibold text-white mb-4">Default Role Settings</h2>
             <div class="flex items-center space-x-4">
               <label class="text-sm font-medium text-gray-300">Default role for new users:</label>
               <select 
                 phx-change="change_default_role"
                 name="default_role"
-                class="bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500"
+                class="glass-dark text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500"
               >
                 <option value="guest" selected={@default_role == "guest"}>Guest</option>
                 <option value="member" selected={@default_role == "member"}>Member</option>
@@ -137,14 +134,14 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
             </div>
           </div>
           
-          <div class="bg-gray-800 rounded-lg shadow-lg">
+          <div class="auth-glass-panel rounded-lg shadow-lg">
             <div class="p-6 border-b border-gray-700">
               <h2 class="text-lg font-semibold text-white">Users (<%= length(@users) %>)</h2>
             </div>
             <div class="overflow-x-auto">
               <div class="min-w-full inline-block align-middle">
                 <table class="min-w-full">
-                <thead class="bg-gray-700">
+                <thead class="glass-dark">
                   <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">User</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Email</th>

@@ -47,7 +47,7 @@ defmodule PhoenixApp.GameCMS.Item do
     |> validate_length(:name, min: 2, max: 100)
     |> validate_length(:description, max: 500)
     |> validate_inclusion(:item_type, [
-      "weapon", "armor", "accessory", "consumable", "material", "quest", "misc"
+      "weapon", "armor", "accessory", "consumable", "material", "misc"
     ])
     |> validate_inclusion(:rarity, [
       "common", "uncommon", "rare", "epic", "legendary", "artifact"

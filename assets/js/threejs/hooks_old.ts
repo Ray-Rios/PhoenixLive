@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import ThreeSceneManager from './core/scene-manager';
 import CharacterModelManager from './characters/model-manager';
 
-// Main Three.js Scene Hook - Replaces OpenWorldLobbySceneHook
+// Main Three.js Scene Hook
   private container: HTMLElement;
   private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;

@@ -5,9 +5,9 @@ defmodule PhoenixAppWeb.ResetPasswordLive do
   def mount(%{"token" => token}, session, socket) do
     current_user = maybe_fetch_user(session["user_id"])
 
-    # If user is already logged in, redirect to dashboard
+    # If user is already logged in, redirect to desktop
     if current_user do
-      {:ok, redirect(socket, to: ~p"/dashboard")}
+      {:ok, redirect(socket, to: ~p"/desktop")}
     else
       # Validate the token first
       case validate_reset_token(token) do

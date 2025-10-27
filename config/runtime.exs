@@ -104,16 +104,40 @@ config :phoenix_app, :enable_redis,
   System.get_env("ENABLE_REDIS", "false") == "true"
 
 # -------------------------------------------------
-# Swoosh / Mailer
+# Swoosh / Mailer (dynamic runtime config)
+# If SMTP_HOST is provided, use authenticated SMTP (recommended for prod).
+# Otherwise, fall back to Local adapter (preview emails without sending).
 # -------------------------------------------------
-config :phoenix_app, PhoenixApp.Mailer,
-  adapter: Swoosh.Adapters.SMTP,
-  relay: System.get_env("SMTP_HOST") || "mailhog",
-  port: String.to_integer(System.get_env("SMTP_PORT") || "1025"),
-  username: System.get_env("SMTP_USER"),
-  password: System.get_env("SMTP_PASS"),
-  tls: :never,
-  retries: 1
+smtp_host = System.get_env("SMTP_HOST") || ""
+smtp_port = System.get_env("SMTP_PORT")
+smtp_user = System.get_env("SMTP_USER")
+smtp_pass = System.get_env("SMTP_PASS")
+
+if smtp_host != "" do
+  # Use SMTP relay; defaults target STARTTLS on 587. Set SMTP_PORT if different.
+  parsed_port = (smtp_port && String.to_integer(smtp_port)) || 587
+  {ssl?, tls_mode} =
+    case parsed_port do
+      465 -> {true, :never}   # Implicit SSL
+      _ -> {false, :if_available} # STARTTLS if supported
+    end
+
+  config :phoenix_app, PhoenixApp.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: smtp_host,
+    port: parsed_port,
+    username: smtp_user,
+    password: smtp_pass,
+    auth: :always,
+    tls: tls_mode,
+    ssl: ssl?,
+    retries: 2,
+    no_mx_lookups: false
+else
+  # No SMTP configured: use local mailbox preview (Swoosh mailbox preview route or logs)
+  config :phoenix_app, PhoenixApp.Mailer,
+    adapter: Swoosh.Adapters.Local
+end
 
 # -------------------------------------------------
 # CORS

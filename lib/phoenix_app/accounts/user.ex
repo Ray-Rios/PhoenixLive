@@ -28,6 +28,10 @@ defmodule PhoenixApp.Accounts.User do
     field :position_y, :float, default: 300.0
     field :last_activity, :utc_datetime
 
+    # Background customization - NOW ENABLED
+    field :background_preference, :string, default: "galaxy"
+    field :background_custom_data, :map, default: %{}
+
     # Email verification & security fields
     field :email_verified_at, :utc_datetime
     field :email_verification_token, :string
@@ -47,7 +51,7 @@ defmodule PhoenixApp.Accounts.User do
     has_many :posts, PhoenixApp.Content.Post, on_delete: :nilify_all
     has_many :comments, PhoenixApp.Content.Comment, on_delete: :nilify_all
     has_many :files, PhoenixApp.Files.UserFile, on_delete: :delete_all
-    has_many :chat_messages, PhoenixApp.Chat.Message, on_delete: :delete_all
+    has_many :chat_messages, PhoenixApp.Forum.Message, on_delete: :delete_all
 
     timestamps(type: :utc_datetime)
   end
@@ -127,11 +131,12 @@ defmodule PhoenixApp.Accounts.User do
   # Admin changeset: allow updating status and correct roles
   def admin_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role, :status, :email_verified_at])
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role, :status, :email_verified_at, :background_preference, :background_custom_data])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
     |> validate_inclusion(:role, ["admin", "gm", "editor", "moderator", "member", "guest", "banned"])
     |> validate_inclusion(:status, ["active", "disabled", "unverified"], message: "Invalid status")
+    |> validate_inclusion(:background_preference, ["galaxy", "nebula", "starfield", "void", "gradient", "solid"])
     |> unique_constraint(:email)
   end
 

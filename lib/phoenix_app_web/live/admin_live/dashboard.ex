@@ -5,14 +5,19 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
   def mount(_params, _session, socket) do
     if socket.assigns.current_user && socket.assigns.current_user.is_admin do
       stats = get_dashboard_stats()
-      
+
       {:ok, assign(socket,
         stats: stats,
-        page_title: "Admin Dashboard"
+        page_title: "Admin Dashboard",
+        sidebar_collapsed: false
       )}
     else
       {:ok, redirect(socket, to: "/")}
     end
+  end
+
+  def handle_event("toggle_sidebar", _params, socket) do
+    {:noreply, assign(socket, sidebar_collapsed: !socket.assigns.sidebar_collapsed)}
   end
 
   defp get_dashboard_stats do
@@ -22,7 +27,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
         total_orders: Commerce.count_orders() || 0,
         total_products: Commerce.count_products() || 0,
         total_posts: Content.count_posts() || 0,
-        total_files: PhoenixApp.FileManagement.count_files() || 0,
+        total_files: PhoenixApp.Files.count_files() || 0,
         recent_users: Accounts.list_recent_users(5) || [],
         recent_orders: Commerce.list_recent_orders(5) || [],
         revenue_today: Commerce.get_revenue_today() || 0,
@@ -45,58 +50,132 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
 
   def render(assigns) do
     ~H"""
-    <div class="starry-background min-h-screen">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-      
-      <.navbar current_user={@current_user} />
-      
-      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10">
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-      
+    <div class="min-h-screen">
       <div class="flex relative z-10">
         <!-- Admin Sidebar -->
-        <div class="w-64 bg-gray-900 min-h-screen">
-          <div class="p-6">
-            <h2 class="text-xl font-bold text-white mb-6">Admin Panel</h2>
-            <nav class="space-y-2">
-              <.link navigate="/admin" class="admin-nav-link active">
-                📊 Dashboard
+        <div class={"auth-glass-panel min-h-screen transition-all duration-300 " <> if @sidebar_collapsed, do: "w-16", else: "w-64"}>
+          <div class="p-4">
+            <!-- Sidebar Header with Toggle -->
+            <div class="flex items-center justify-between mb-6">
+              <h2 class={"text-xl font-bold text-white transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0", else: "opacity-100"}>
+                Admin Panel
+              </h2>
+              <button
+                phx-click="toggle_sidebar"
+                class="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800"
+                title={if @sidebar_collapsed, do: "Expand sidebar", else: "Collapse sidebar"}
+              >
+                <%= if @sidebar_collapsed do %>
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                <% else %>
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  </svg>
+                <% end %>
+              </button>
+            </div>
+
+            <!-- Navigation Menu -->
+            <nav class="space-y-1">
+              <!-- Dashboard -->
+              <.link navigate="/admin" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                <span class="text-lg">📊</span>
+                <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                  Dashboard
+                </span>
               </.link>
-              <.link navigate="/admin/user-management" class="admin-nav-link">
-                👥 Users
+
+              <!-- User Management -->
+              <.link navigate="/admin/user-management" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                <span class="text-lg">👥</span>
+                <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                  Users
+                </span>
               </.link>
-              <.link navigate="/admin/products" class="admin-nav-link">
-                🛍️ Products
-              </.link>
-              <.link navigate="/admin/orders" class="admin-nav-link">
-                📦 Orders
-              </.link>
-              <.link navigate="/admin/posts" class="admin-nav-link">
-                📝 Blog Posts
-              </.link>
-              <.link navigate="/admin/channels" class="admin-nav-link">
-                💬 Chat Channels
-              </.link>
-              <.link navigate="/admin/sql" class="admin-nav-link">
-                🗄️ SQL Console
-              </.link>
+
+              <!-- Content Management Section -->
+              <div class={"border-t border-gray-700 pt-4 mt-4 " <> if @sidebar_collapsed, do: "pt-2", else: ""}>
+                <div class={"text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                  Content
+                </div>
+                <.link navigate="/admin/blog-management" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">�</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    Blog Posts
+                  </span>
+                </.link>
+                <.link navigate="/admin/uploads" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">�</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    Uploads
+                  </span>
+                </.link>
+              </div>
+
+              <!-- Commerce Section -->
+              <div class={"border-t border-gray-700 pt-4 mt-4 " <> if @sidebar_collapsed, do: "pt-2", else: ""}>
+                <div class={"text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                  Commerce
+                </div>
+                <.link navigate="/admin/products" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">�️</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    Products
+                  </span>
+                </.link>
+                <.link navigate="/admin/orders" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">�</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    Orders
+                  </span>
+                </.link>
+              </div>
+
+              <!-- Communication Section -->
+              <div class={"border-t border-gray-700 pt-4 mt-4 " <> if @sidebar_collapsed, do: "pt-2", else: ""}>
+                <div class={"text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                  Communication
+                </div>
+                <.link navigate="/admin/channels" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">�</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    Chat Channels
+                  </span>
+                </.link>
+              </div>
+
+              <!-- Tools Section -->
+              <div class={"border-t border-gray-700 pt-4 mt-4 " <> if @sidebar_collapsed, do: "pt-2", else: ""}>
+                <div class={"text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                  Tools
+                </div>
+                <.link navigate="/admin/sql" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">�️</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    SQL Console
+                  </span>
+                </.link>
+                <.link navigate="/admin/api-toolbox" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">🧰</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    API Toolbox
+                  </span>
+                </.link>
+              </div>
             </nav>
           </div>
         </div>
 
         <!-- Main Content -->
         <div class="flex-1 p-8">
+          <div class="auth-glass-panel p-8 rounded-xl">
           <h1 class="text-3xl font-bold text-white mb-8">Dashboard</h1>
           
           <!-- Stats Grid -->
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="auth-glass-panel rounded-lg p-6">
               <div class="flex items-center">
                 <div class="text-3xl text-blue-400 mr-4">👥</div>
                 <div>
@@ -228,13 +307,14 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
               </.link>
             </div>
           </div>
+          </div>
         </div>
       </div>
     </div>
 
     <style>
       .admin-nav-link {
-        @apply block w-full text-left px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded transition-colors;
+        @apply flex items-center w-full text-left px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded transition-all duration-300;
       }
       .admin-nav-link.active {
         @apply bg-blue-600 text-white;

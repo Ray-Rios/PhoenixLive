@@ -1,10 +1,12 @@
 defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
   use PhoenixAppWeb, :live_view
 
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
+
   alias PhoenixApp.Accounts
   alias PhoenixApp.Content
   alias PhoenixApp.Commerce
-  alias PhoenixApp.FileManagement
+  alias PhoenixApp.Files
 
   @impl true
   def mount(_params, _session, socket) do
@@ -241,7 +243,7 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
   end
 
   defp execute_action("count_files", _params, _current_user) do
-    count = FileManagement.count_files()
+    count = Files.count_files()
 
     {:ok,
      %{
@@ -360,15 +362,7 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="starry-background">
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-
-      <.navbar current_user={@current_user} />
-
+    <div class="min-h-screen">
       <div class="w-full max-w-[95%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
         <div class="max-w-7xl mx-auto">
           <!-- Header -->

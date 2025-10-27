@@ -1,10 +1,13 @@
-// Three.js Phoenix LiveView Hooks - Replaces ALL Babylon.js hooks
+// Three.js Phoenix LiveView Hooks
 import * as THREE from 'three';
 import ThreeSceneManager from './core/scene-manager';
-import CharacterModelManager from './characters/model-manager';
+import { CharacterModelManager } from './characters/model-manager';
 import { HomeGalaxyScene } from './galaxy-scene';
+import { NebulaScene } from './scenes/nebula-scene';
+import { StarfieldScene } from './scenes/starfield-scene';
+import { VoidScene } from './scenes/void-scene';
 
-// Main Three.js Scene Hook - Replaces OpenWorldLobbySceneHook
+// Main Three.js Scene Hook
 export const ThreeJSScene = {
   el: null as any,
   threeSceneManager: null as any,
@@ -259,5 +262,8 @@ export const ThreeJSTestScene = {
 export default {
   ThreeJSScene,
   ThreeJSTestScene,
-  HomeGalaxyScene
+  HomeGalaxyScene,
+  NebulaScene,
+  StarfieldScene,
+  VoidScene
 };

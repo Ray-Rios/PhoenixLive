@@ -34,6 +34,10 @@ defmodule PhoenixAppWeb.Router do
     plug Guardian.Plug.EnsureAuthenticated
     plug Guardian.Plug.LoadResource
   end
+  
+  pipeline :quiet_health do
+    plug PhoenixAppWeb.Plugs.QuietHealthCheck
+  end
 
   # --------------------
   # Public LiveViews
@@ -66,37 +70,17 @@ defmodule PhoenixAppWeb.Router do
     live "/shop/product/:id", ShopLive, :product
     live "/cart", CartLive, :index
     live "/checkout", CheckoutLive, :index
-    live "/chat", ChatLive, :index
-    live "/chat/:channel_id", ChatLive, :channel
-    live "/quest", QuestLive, :index
-    live "/unreal", UnrealLive, :index
+    live "/forum", ForumLive, :index
+    live "/forum/:channel_id", ForumLive, :channel
     live "/desktop", DesktopLive, :index
-    live "/threejs-test", ThreeJSTestLive, :index
-    live "/lobby", LobbyLive, :index
-    live "/inventory", InventoryLive, :index
+
+    # Profile routes (with auth check in mount)
+    live "/profile", ProfileLive, :index
+    live "/profile/security", ProfileLive, :security
+    live "/profile/orders", ProfileLive, :orders
+    live "/avatar", AvatarLive, :index
 
   end
-  end
-
-  # --------------------
-  # Authenticated LiveViews
-  # --------------------
-  scope "/", PhoenixAppWeb do
-    pipe_through :browser
-
-    live_session :authenticated,
-      on_mount: {PhoenixAppWeb.UserAuth, :require_authenticated_user},
-      layout: {PhoenixAppWeb.Layouts, :app} do
-
-      live "/dashboard", DashboardLive, :index
-      live "/profile", ProfileLive, :index
-      live "/profile/security", ProfileLive, :security
-      live "/profile/orders", ProfileLive, :orders
-      live "/avatar", AvatarLive, :index
-      live "/files", FilesLive, :index
-      live "/files/upload", FilesLive, :upload
-
-    end
   end
 
   # --------------------
@@ -125,6 +109,7 @@ defmodule PhoenixAppWeb.Router do
       live "/", AdminLive.Dashboard, :index
       live "/blog-management", AdminLive.BlogManagement, :index
       live "/user-management", UserManagementLive, :index
+      live "/files", AdminLive.Files, :index
       live "/sql", AdminLive.SQL, :index
       live "/security", Admin.SecurityLive, :index
       live "/api-toolbox", AdminLive.ApiToolbox, :index
@@ -159,18 +144,7 @@ defmodule PhoenixAppWeb.Router do
 
   
 
-  # --------------------
-  # Protected Game API endpoints (require JWT authentication)
-  # --------------------
-  scope "/api/game", PhoenixAppWeb do
-    pipe_through :api_authenticated
 
-    get "/profile", Api.GameController, :get_profile
-    get "/characters", Api.GameController, :list_characters
-    post "/characters", Api.GameController, :create_character
-    get "/inventory/:character_id", Api.GameController, :get_inventory
-    post "/login-game", Api.GameController, :login_to_game
-  end
 
   # --------------------
   # Admin API (authenticated + admin-only via controller plug)
@@ -189,6 +163,8 @@ defmodule PhoenixAppWeb.Router do
   # Health Check (for Kubernetes)
   # --------------------
   scope "/", PhoenixAppWeb do
+    pipe_through :quiet_health
+    
     get "/health", HealthController, :check
   end
 

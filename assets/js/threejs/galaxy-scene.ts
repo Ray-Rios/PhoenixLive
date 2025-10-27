@@ -1,5 +1,6 @@
 // Simple Full-Screen Galaxy Scene with Drifting Stars
 import * as THREE from 'three';
+import { CameraController } from './controls/camera-controller';
 
 interface GalaxySceneHook {
   el: HTMLElement;
@@ -9,6 +10,7 @@ interface GalaxySceneHook {
   stars: THREE.Points | null;
   animationId: number | null;
   time: number;
+  cameraController: CameraController | null;
 }
 
 export const HomeGalaxyScene = {
@@ -19,6 +21,7 @@ export const HomeGalaxyScene = {
   stars: null as THREE.Points | null,
   animationId: null as number | null,
   time: 0,
+  cameraController: null as CameraController | null,
 
   mounted(this: GalaxySceneHook) {
     console.log('🌌 Home Galaxy Scene mounting...');
@@ -44,7 +47,7 @@ export const HomeGalaxyScene = {
       width: 100%;
       height: 100%;
       display: block;
-      pointer-events: none;
+      pointer-events: auto;
     `;
     this.el.appendChild(canvas);
 
@@ -73,6 +76,12 @@ export const HomeGalaxyScene = {
     });
     this.renderer.setSize(width, height, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // Don't create our own camera controller - let GlobalCameraController handle it
+    // Just notify that a scene has been initialized
+    window.dispatchEvent(new CustomEvent('scene-initialized', {
+      detail: { scene: this, camera: this.camera, canvas: canvas }
+    }));
   },
 
   createStarField(this: GalaxySceneHook) {
@@ -168,8 +177,15 @@ export const HomeGalaxyScene = {
   },
 
   startAnimation(this: GalaxySceneHook) {
+    let lastTime = performance.now();
+    
     const animate = () => {
       this.animationId = requestAnimationFrame(animate);
+
+      // Calculate delta time
+      const currentTime = performance.now();
+      const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
+      lastTime = currentTime;
 
       // Ensure canvas always matches window size
       if (this.renderer) {
@@ -191,14 +207,7 @@ export const HomeGalaxyScene = {
         (this.stars.material as THREE.ShaderMaterial).uniforms.time.value = this.time;
       }
 
-      // Slowly rotate the camera for a gentle drift effect
-      if (this.camera) {
-        this.camera.rotation.z += 0.0005;
-        
-        // Subtle camera movement
-        this.camera.position.x = Math.sin(this.time * 0.1) * 2;
-        this.camera.position.y = Math.cos(this.time * 0.15) * 1;
-      }
+      // Camera controller is now handled globally, no need to update here
 
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
@@ -230,11 +239,14 @@ export const HomeGalaxyScene = {
 
   destroyed(this: GalaxySceneHook) {
     console.log('🗑️ Galaxy scene cleanup');
+    try { console.trace('Galaxy scene destroyed at:'); } catch(e) {}
     
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+
+    // Camera controller is now managed globally, don't dispose it here
 
     if (this.stars) {
       this.stars.geometry.dispose();
@@ -250,5 +262,6 @@ export const HomeGalaxyScene = {
     this.camera = null;
     this.renderer = null;
     this.stars = null;
+    this.cameraController = null;
   }
 };

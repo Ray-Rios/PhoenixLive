@@ -1,7 +1,7 @@
 defmodule PhoenixApp.Emails do
   import Swoosh.Email
 
-  @from_email "no-reply@rio-tek.com"
+  @from_email "no-reply@phxlive.net"
   @from_name "PhxLive"
 
   def password_reset_email(user, reset_url) do

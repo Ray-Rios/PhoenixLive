@@ -23,7 +23,7 @@ defmodule PhoenixAppWeb.AuthController do
 
         conn
         |> put_flash(:info, "Successfully logged in! You now have unified access to all features.")
-        |> redirect(to: ~p"/dashboard")
+        |> redirect(to: ~p"/desktop")
     end
   end
 

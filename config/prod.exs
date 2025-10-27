@@ -5,12 +5,12 @@ import Config
 # ----------------------------
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
-  url: [host: System.get_env("PHOENIX_HOST") || "rio-tek.com", port: 443, scheme: "https"],
+  url: [host: System.get_env("PHOENIX_HOST") || "phxlive.net", port: 443, scheme: "https"],
   check_origin: [
-    "https://rio-tek.com",
-    "https://www.rio-tek.com"
+    "https://phxlive.net",
+    "https://www.phxlive.net"
   ],
-  force_ssl: [rewrite_on: [:x_forwarded_proto]],
+  force_ssl: [rewrite_on: [:x_forwarded_proto], log: false, exclude: ["health"]],
   server: true,
   secret_key_base: (System.get_env("SECRET_KEY_BASE") ||
     raise("SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`")),
@@ -21,8 +21,8 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
 # CORS origins for production
 config :cors_plug,
   origin: [
-    "https://rio-tek.com",
-    "https://www.rio-tek.com"
+    "https://phxlive.net",
+    "https://www.phxlive.net"
   ],
   max_age: 86400,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -43,11 +43,18 @@ config :phoenix_app, :redis_url,
 config :phoenix_app, :enable_redis, 
   System.get_env("ENABLE_REDIS", "true") == "true"
 
+# For now, use local adapter to log emails instead of SendGrid (until sender is verified)
+# To enable SendGrid, verify no-reply@phxlive.net at https://sendgrid.com/docs/for-developers/sending-email/sender-identity/
+# then change adapter to Swoosh.Adapters.Sendgrid and set SENDGRID_API_KEY env var
 config :phoenix_app, PhoenixApp.Mailer,
-  adapter: Swoosh.Adapters.SMTP,
-  relay: System.get_env("SMTP_HOST") || "smtp.yourprovider.com",
-  port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
-  username: System.get_env("SMTP_USER"),
-  password: System.get_env("SMTP_PASS"),
-  tls: :if_available,
-  retries: 3
+  adapter: Swoosh.Adapters.Local
+
+# SMTP alternative (uncomment and configure if you prefer SMTP over SendGrid):
+# config :phoenix_app, PhoenixApp.Mailer,
+#   adapter: Swoosh.Adapters.SMTP,
+#   relay: System.get_env("SMTP_HOST") || "smtp.yourprovider.com",
+#   port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
+#   username: System.get_env("SMTP_USER"),
+#   password: System.get_env("SMTP_PASS"),
+#   tls: :if_available,
+#   retries: 3

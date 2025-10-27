@@ -2,19 +2,29 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
   alias PhoenixApp.Content.Post
+  alias PhoenixApp.Content.Media
 
-  on_mount {PhoenixAppWeb.Auth, :ensure_admin}
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
   def mount(_params, _session, socket) do
     posts = Content.list_posts()
     
-    {:ok, assign(socket,
-      posts: posts,
-      page_title: "Blog Management",
-      show_form: false,
-      editing_post: nil,
-      form: to_form(Post.changeset(%Post{}, %{}))
-    )}
+    {:ok, 
+     socket
+     |> assign(
+       posts: posts,
+       page_title: "Blog Management",
+       show_form: false,
+       editing_post: nil,
+       uploaded_media: [],
+       show_media_picker: false,
+       form: to_form(Post.changeset(%Post{}, %{}))
+     )
+     |> allow_upload(:featured_image,
+       accept: ~w(.jpg .jpeg .png .gif .webp),
+       max_entries: 1,
+       max_file_size: 5_000_000
+     )}
   end
 
   def handle_event("new_post", _params, socket) do
@@ -77,8 +87,41 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   end
 
   def handle_event("save", %{"post" => post_params}, socket) do
-    # Process tags from comma-separated string to list
-    processed_params = process_post_params(post_params)
+    # Process uploads first
+    uploaded_files = consume_uploaded_entries(socket, :featured_image, fn %{path: path}, entry ->
+      # Create uploads directory for user
+      user_id = socket.assigns.current_user.id
+      dest_dir = Path.join(["uploads", "users", user_id, "blog", "images"])
+      File.mkdir_p!(dest_dir)
+      
+      # Generate unique filename
+      ext = Path.extname(entry.client_name)
+      filename = "#{:crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)}#{ext}"
+      dest_path = Path.join(dest_dir, filename)
+      
+      # Copy file
+      File.cp!(path, dest_path)
+      
+      # Create media record
+      {:ok, media} = Media.create_media(socket.assigns.current_user, %{
+        "filename" => filename,
+        "original_filename" => entry.client_name,
+        "file_type" => "image",
+        "mime_type" => entry.client_type,
+        "file_size" => entry.client_size,
+        "file_path" => dest_path,
+        "url" => "/#{dest_path}",
+        "usage_context" => "blog_featured"
+      })
+      
+      {:ok, media.url}
+    end)
+    
+    # Add featured image URL to post params if uploaded
+    processed_params = 
+      post_params
+      |> process_post_params()
+      |> maybe_add_featured_image(uploaded_files)
     
     case socket.assigns.editing_post do
       nil ->
@@ -114,6 +157,85 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     end
   end
 
+  def handle_event("publish_now", %{"post" => post_params}, socket) do
+    # Validate that we have the minimum required fields
+    if is_nil(post_params["title"]) or String.trim(post_params["title"]) == "" or 
+       is_nil(post_params["content"]) or String.trim(post_params["content"]) == "" do
+      {:noreply, put_flash(socket, :error, "Cannot publish: Post must have a title and content")}
+    else
+      # Process uploads first (same as save)
+      uploaded_files = consume_uploaded_entries(socket, :featured_image, fn %{path: path}, entry ->
+        user_id = socket.assigns.current_user.id
+        dest_dir = Path.join(["uploads", "users", user_id, "blog", "images"])
+        File.mkdir_p!(dest_dir)
+        
+        ext = Path.extname(entry.client_name)
+        filename = "#{:crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)}#{ext}"
+        dest_path = Path.join(dest_dir, filename)
+        
+        File.cp!(path, dest_path)
+        
+        {:ok, media} = Media.create_media(socket.assigns.current_user, %{
+          "filename" => filename,
+          "original_filename" => entry.client_name,
+          "file_type" => "image",
+          "mime_type" => entry.client_type,
+          "file_size" => entry.client_size,
+          "file_path" => dest_path,
+          "url" => "/#{dest_path}",
+          "usage_context" => "blog_featured"
+        })
+        
+        {:ok, media.url}
+      end)
+      
+      # Force publish status to true
+      processed_params = 
+        post_params
+        |> process_post_params()
+        |> maybe_add_featured_image(uploaded_files)
+        |> Map.put("is_published", true)
+    
+    case socket.assigns.editing_post do
+      nil ->
+        # Create new published post
+        case Content.create_post(socket.assigns.current_user, processed_params) do
+          {:ok, _post} ->
+            posts = Content.list_posts()
+            {:noreply, assign(socket,
+              posts: posts,
+              show_form: false,
+              form: to_form(Post.changeset(%Post{}, %{}))
+            ) |> put_flash(:info, "Post published successfully!")}
+          
+          {:error, changeset} ->
+            {:noreply, assign(socket, form: to_form(changeset))}
+        end
+      
+      post ->
+        # Update and publish existing post
+        case Content.update_post(post, processed_params) do
+          {:ok, _post} ->
+            posts = Content.list_posts()
+            {:noreply, assign(socket,
+              posts: posts,
+              show_form: false,
+              editing_post: nil,
+              form: to_form(Post.changeset(%Post{}, %{}))
+            ) |> put_flash(:info, "Post updated and published successfully!")}
+          
+          {:error, changeset} ->
+            {:noreply, assign(socket, form: to_form(changeset))}
+        end
+    end
+    end
+  end
+
+  # Fallback for publish_now without form data
+  def handle_event("publish_now", _params, socket) do
+    {:noreply, put_flash(socket, :error, "Cannot publish: Form data is missing. Please fill out all required fields.")}
+  end
+
   def handle_event("delete_post", %{"id" => id}, socket) do
     post = Content.get_post!(id)
     
@@ -131,15 +253,75 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     post = Content.get_post!(id)
     new_published_status = !post.is_published
     
-    case Content.update_post(post, %{is_published: new_published_status}) do
-      {:ok, _post} ->
-        posts = Content.list_posts()
-        status_text = if new_published_status, do: "published", else: "unpublished"
-        {:noreply, assign(socket, posts: posts) |> put_flash(:info, "Post #{status_text} successfully!")}
-      
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update post")}
+    IO.puts("=== TOGGLE PUBLISH DEBUG ===")
+    IO.inspect(post.id, label: "Post ID")
+    IO.inspect(post.title, label: "Post Title")
+    IO.inspect(post.content, label: "Post Content (first 100 chars)")
+    IO.inspect(post.is_published, label: "Current Published Status")
+    IO.inspect(new_published_status, label: "New Published Status")
+    
+    # Validate post has required fields before publishing
+    if new_published_status and (is_nil(post.title) or String.trim(post.title) == "" or is_nil(post.content) or String.trim(post.content) == "") do
+      IO.puts("❌ Validation failed: missing title or content")
+      {:noreply, put_flash(socket, :error, "Cannot publish: Post must have a title and content")}
+    else
+      IO.puts("✅ Validation passed, attempting to update...")
+      case Content.update_post(post, %{is_published: new_published_status}) do
+        {:ok, updated_post} ->
+          IO.puts("✅ Post updated successfully!")
+          IO.inspect(updated_post.is_published, label: "Updated Published Status")
+          posts = Content.list_posts()
+          status_text = if new_published_status, do: "published", else: "unpublished"
+          
+          {:noreply, 
+            socket
+            |> assign(posts: posts)
+            |> put_flash(:info, "Post #{status_text} successfully!")}
+        
+        {:error, changeset} ->
+          IO.puts("❌ Update failed!")
+          IO.inspect(changeset.errors, label: "Changeset Errors")
+          error_msg = changeset.errors
+            |> Enum.map(fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+            |> Enum.join(", ")
+          
+          {:noreply, put_flash(socket, :error, "Failed to update post: #{error_msg}")}
+      end
     end
+  end
+
+  def handle_event("open_media_picker", _params, socket) do
+    {:noreply, assign(socket, show_media_picker: true)}
+  end
+
+  def handle_info(:close_media_picker, socket) do
+    {:noreply, assign(socket, show_media_picker: false)}
+  end
+
+  def handle_info({:media_selected, url, filename}, socket) do
+    # Get current content from the form
+    current_changeset = socket.assigns.form.source
+    current_content = case current_changeset.changes[:content] do
+      nil -> current_changeset.data.content || ""
+      content -> content
+    end
+    
+    # Create appropriate markdown based on file type
+    media_markdown = if String.contains?(String.downcase(filename), [".jpg", ".jpeg", ".png", ".gif", ".webp"]) do
+      "\n![#{filename}](#{url})\n"
+    else
+      "\n[#{filename}](#{url})\n"
+    end
+    
+    new_content = current_content <> media_markdown
+    
+    # Update the changeset with the new content
+    updated_changeset = Ecto.Changeset.put_change(current_changeset, :content, new_content)
+    
+    {:noreply, 
+     socket
+     |> assign(show_media_picker: false, form: to_form(updated_changeset))
+     |> put_flash(:info, "Media inserted: #{filename}")}
   end
 
   # Helper function to process post parameters
@@ -168,25 +350,21 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     end
   end
 
+  defp maybe_add_featured_image(params, []), do: params
+  defp maybe_add_featured_image(params, [url | _]), do: Map.put(params, "featured_image", url)
+
   def render(assigns) do
     ~H"""
-    <div class="starry-background min-h-screen overflow-y-auto">
-      <div class="stars-container fixed inset-0 pointer-events-none">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
-      
-      <.navbar current_user={@current_user} />
-      
-      <div class="content-area w-full max-w-[90%] mx-auto px-4 py-8 relative z-10 min-h-screen">
+    <div class="min-h-screen pointer-events-none">
+      <div class="w-full max-w-[90%] mx-auto px-4 py-8 mt-16 pointer-events-auto">
         <div class="max-w-6xl mx-auto">
-          <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-white">Blog Management</h1>
-            <button phx-click="new_post" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">
-              ✍️ New Post
-            </button>
-          </div>
+          <div class="auth-glass-panel p-8 rounded-xl">
+            <div class="flex justify-between items-center mb-8">
+              <h1 class="text-3xl font-bold text-white">Blog Management</h1>
+              <button phx-click="new_post" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">
+                ✍️ New Post
+              </button>
+            </div>
 
           <!-- Blog Post Form -->
           <%= if @show_form do %>
@@ -230,7 +408,17 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                 </div>
 
                 <div>
-                  <.input field={@form[:content]} type="textarea" label="Content" placeholder="Write your post content here... (Supports Markdown)" rows="15" autocomplete="off" />
+                  <div class="flex justify-between items-center mb-2">
+                    <label class="text-sm font-medium text-gray-300">Content</label>
+                    <button 
+                      type="button"
+                      phx-click="open_media_picker"
+                      class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded transition-colors"
+                    >
+                      📷 Insert Media
+                    </button>
+                  </div>
+                  <.input field={@form[:content]} type="textarea" label="" placeholder="Write your post content here... (Supports Markdown)" rows="15" autocomplete="off" />
                   <div class="text-xs text-gray-400 mt-1">Supports Markdown formatting</div>
                 </div>
 
@@ -241,6 +429,32 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                 <div>
                   <.input field={@form[:tags]} label="Tags" placeholder="tag1, tag2, tag3" autocomplete="off" />
                   <div class="text-xs text-gray-400 mt-1">Separate tags with commas</div>
+                </div>
+
+                <!-- Featured Image Upload -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Featured Image</label>
+                  <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 hover:border-blue-500 transition-colors"
+                       phx-drop-target={@uploads.featured_image.ref}>
+                    <.live_file_input upload={@uploads.featured_image} class="hidden" id="featured-image-upload" />
+                    
+                    <div class="text-center">
+                      <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <label for="featured-image-upload" class="cursor-pointer text-blue-500 hover:text-blue-400 text-sm">
+                        Click to upload or drag and drop
+                      </label>
+                      <p class="text-xs text-gray-500 mt-1">PNG, JPG, GIF up to 5MB</p>
+                    </div>
+
+                    <%= for entry <- @uploads.featured_image.entries do %>
+                      <div class="mt-2">
+                        <.live_img_preview entry={entry} class="max-w-xs rounded mx-auto" />
+                        <div class="text-xs text-gray-400 text-center mt-1"><%= entry.client_name %></div>
+                      </div>
+                    <% end %>
+                  </div>
                 </div>
 
                 <div class="flex items-center space-x-4">
@@ -261,14 +475,17 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
 
                 <div class="mt-6">
                   <div class="flex space-x-4">
-                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
-                      <%= if @editing_post, do: "Update Post", else: "Create Post" %>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
+                      <%= if @editing_post, do: "Save Changes", else: "Save Draft" %>
+                    </button>
+                    <button type="button" phx-click="publish_now" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
+                      <%= if @editing_post, do: "Update & Publish", else: "Publish Now" %>
                     </button>
                     <button type="button" phx-click="cancel_form" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
                       Cancel
                     </button>
                   </div>
-                  <div class="mt-2 text-xs text-gray-400">Drafts are autosaved every 10 seconds.</div>
+                  <div class="mt-2 text-xs text-gray-400">Drafts are autosaved every 10 seconds. Use "Publish Now" to immediately publish the post.</div>
                 </div>
               </.form>
             </div>
@@ -355,9 +572,19 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
               </div>
             <% end %>
           </div>
+          </div>
         </div>
       </div>
     </div>
+
+      <!-- Media Picker Modal -->
+      <%= if @show_media_picker do %>
+        <.live_component 
+          module={PhoenixAppWeb.MediaPickerComponent} 
+          id="media-picker" 
+          current_user={@current_user}
+        />
+      <% end %>
     """
   end
 end

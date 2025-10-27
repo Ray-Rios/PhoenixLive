@@ -1,7 +1,12 @@
-
-<main class="w-full min-h-screen">
-  <div class="w-full max-w-[85%] mx-auto px-4 py-8">
-    <.flash_group flash={@flash} />
+<div class="min-h-screen">
+  <!-- Background rendering moved to root layout to avoid LiveView patches replacing the canvas -->
+  <!-- Background preference logic temporarily disabled until migration adds DB columns -->
+  
+  <PhoenixAppWeb.Components.Navigation.navbar current_user={assigns[:current_user]} id_prefix="main-" />
+  
+  <.flash_group flash={@flash} />
+  
+  <main class="relative z-10 w-full">
     <%= @inner_content %>
-  </div>
-</main>
+  </main>
+</div>

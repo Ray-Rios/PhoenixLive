@@ -9,4 +9,17 @@ defmodule PhoenixAppWeb.Layouts do
   # Navigation import removed - not used
 
   embed_templates "layouts/*"
+
+  @doc """
+  Returns the appropriate Phoenix LiveView hook name for a background type
+  """
+  def background_hook_name(background_type) do
+    case background_type do
+      "galaxy" -> "HomeGalaxyScene"
+      "nebula" -> "NebulaScene"
+      "starfield" -> "StarfieldScene"
+      "void" -> "VoidScene"
+      _ -> "HomeGalaxyScene"  # Default fallback
+    end
+  end
 end

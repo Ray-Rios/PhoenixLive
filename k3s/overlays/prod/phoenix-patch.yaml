@@ -11,21 +11,6 @@ spec:
         env:
         - name: MIX_ENV
           value: "prod"
-        - name: SENDGRID_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: phoenix-secrets
-              key: SENDGRID_API_KEY
-        - name: HCAPTCHA_SITE_KEY
-          valueFrom:
-            secretKeyRef:
-              name: phoenix-secrets
-              key: HCAPTCHA_SITE_KEY
-        - name: HCAPTCHA_SECRET_KEY
-          valueFrom:
-            secretKeyRef:
-              name: phoenix-secrets
-              key: HCAPTCHA_SECRET_KEY
         resources:
           requests:
             memory: "512Mi"

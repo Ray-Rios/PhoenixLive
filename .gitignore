@@ -14,6 +14,7 @@ OpenWorldEngine/
 priv/cert/
 priv/static/models/
 priv/static/maps/
+priv/static/uploads/
 
 # Logs
 *.log

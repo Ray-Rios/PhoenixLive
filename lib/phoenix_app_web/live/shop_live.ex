@@ -1,9 +1,8 @@
 defmodule PhoenixAppWeb.ShopLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Commerce
-  alias PhoenixAppWeb.Components.PageWrapper
 
-  on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
+  on_mount {PhoenixAppWeb.UserAuth, :default}
 
   def mount(_params, _session, socket) do
     products = Commerce.list_products()
@@ -107,17 +106,11 @@ defmodule PhoenixAppWeb.ShopLive do
 
   def render(assigns) do
     ~H"""
-    <PageWrapper.page_with_navbar current_user={@current_user} flash={@flash}>
-      <div class="starry-background chat-container starry-background min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-        <div class="stars-container">
-          <div class="stars"></div>
-          <div class="stars2"></div>
-          <div class="stars3"></div>
-        </div>
-        
-        <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <!-- Product List View -->
-        <div :if={@view != :product_detail}>
+    <div class="min-h-screen pointer-events-none">
+      <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px] pointer-events-auto">
+        <div class="auth-glass-panel p-8 rounded-xl">
+        <%= if @view != :product_detail do %>
+          <!-- Product List View -->
           <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold text-white">
               <%= if @selected_category, do: @selected_category.name, else: "Shop" %>
@@ -157,101 +150,110 @@ defmodule PhoenixAppWeb.ShopLive do
                     </button>
                   </div>
                   
-                  <div :if={product.stock_quantity <= 5} class="mt-2">
-                    <span class="text-orange-400 text-sm">Only <%= product.stock_quantity %> left!</span>
-                  </div>
+                  <%= if product.stock_quantity <= 5 do %>
+                    <div class="mt-2">
+                      <span class="text-orange-400 text-sm">Only <%= product.stock_quantity %> left!</span>
+                    </div>
+                  <% end %>
                 </div>
               </div>
             <% end %>
           </div>
 
-          <div :if={@products == []} class="text-center py-16">
-            <div class="text-gray-400 text-xl">No products found</div>
-            <p class="text-gray-500 mt-2">Try selecting a different category</p>
-          </div>
-        </div>
-
-        <!-- Product Detail View -->
-        <div :if={@view == :product_detail} class="max-w-6xl mx-auto">
-          <nav class="mb-8">
-            <.link navigate="/shop" class="text-blue-400 hover:text-blue-300">← Back to Shop</.link>
-          </nav>
-
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            <!-- Product Images -->
-            <div>
-              <div class="w-full h-96 bg-gradient-to-br from-gray-600 to-gray-800 rounded-lg shadow-lg flex items-center justify-center">
-                <span class="text-8xl">📦</span>
-              </div>
+          <%= if @products == [] do %>
+            <div class="text-center py-16">
+              <div class="text-gray-400 text-xl">No products found</div>
+              <p class="text-gray-500 mt-2">Try selecting a different category</p>
             </div>
+          <% end %>
+        <% end %>
 
-            <!-- Product Info -->
-            <div class="text-white">
-              <h1 class="text-3xl font-bold mb-4"><%= @product.name %></h1>
-              <p class="text-4xl font-bold text-green-400 mb-6">$<%= @product.price %></p>
-              
-              <div class="prose prose-invert mb-8">
-                <p><%= @product.description %></p>
-              </div>
+        <%= if @view == :product_detail do %>
+          <!-- Product Detail View -->
+          <div class="max-w-6xl mx-auto">
+            <nav class="mb-8">
+              <.link navigate="/shop" class="text-blue-400 hover:text-blue-300">← Back to Shop</.link>
+            </nav>
 
-              <div class="space-y-4 mb-8">
-                <div class="flex items-center">
-                  <span class="text-gray-400 w-24">SKU:</span>
-                  <span><%= @product.sku %></span>
-                </div>
-                <div class="flex items-center">
-                  <span class="text-gray-400 w-24">Stock:</span>
-                  <span class={if @product.stock_quantity > 0, do: "text-green-400", else: "text-red-400"}>
-                    <%= if @product.stock_quantity > 0, do: "#{@product.stock_quantity} available", else: "Out of stock" %>
-                  </span>
-                </div>
-                <div :if={@product.weight} class="flex items-center">
-                  <span class="text-gray-400 w-24">Weight:</span>
-                  <span><%= @product.weight %> lbs</span>
-                </div>
-                <div :if={@product.dimensions} class="flex items-center">
-                  <span class="text-gray-400 w-24">Dimensions:</span>
-                  <span><%= @product.dimensions %></span>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              <!-- Product Images -->
+              <div>
+                <div class="w-full h-96 bg-gradient-to-br from-gray-600 to-gray-800 rounded-lg shadow-lg flex items-center justify-center">
+                  <span class="text-8xl">📦</span>
                 </div>
               </div>
 
-              <div class="flex space-x-4">
-                <button phx-click="add_to_cart" phx-value-product_id={@product.id}
-                        disabled={@product.stock_quantity == 0}
-                        class="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed 
-                               text-white px-8 py-3 rounded-lg font-semibold transition-colors">
-                  <%= if @product.stock_quantity > 0, do: "Add to Cart", else: "Out of Stock" %>
-                </button>
+              <!-- Product Info -->
+              <div class="text-white">
+                <h1 class="text-3xl font-bold mb-4"><%= @product.name %></h1>
+                <p class="text-4xl font-bold text-green-400 mb-6">$<%= @product.price %></p>
                 
-                <button class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors">
-                  ♡ Wishlist
-                </button>
-              </div>
+                <div class="prose prose-invert mb-8">
+                  <p><%= @product.description %></p>
+                </div>
 
-              <!-- Product Features -->
-              <div class="mt-12">
-                <h3 class="text-xl font-semibold mb-4">Features</h3>
-                <ul class="space-y-2 text-gray-300">
-                  <li>• High quality materials</li>
-                  <li>• Fast shipping</li>
-                  <li>• 30-day return policy</li>
-                  <li>• Customer support</li>
-                </ul>
+                <div class="space-y-4 mb-8">
+                  <div class="flex items-center">
+                    <span class="text-gray-400 w-24">SKU:</span>
+                    <span><%= @product.sku %></span>
+                  </div>
+                  <div class="flex items-center">
+                    <span class="text-gray-400 w-24">Stock:</span>
+                    <span class={if @product.stock_quantity > 0, do: "text-green-400", else: "text-red-400"}>
+                      <%= if @product.stock_quantity > 0, do: "#{@product.stock_quantity} available", else: "Out of stock" %>
+                    </span>
+                  </div>
+                  <%= if @product.weight do %>
+                    <div class="flex items-center">
+                      <span class="text-gray-400 w-24">Weight:</span>
+                      <span><%= @product.weight %> lbs</span>
+                    </div>
+                  <% end %>
+                  <%= if @product.dimensions do %>
+                    <div class="flex items-center">
+                      <span class="text-gray-400 w-24">Dimensions:</span>
+                      <span><%= @product.dimensions %></span>
+                    </div>
+                  <% end %>
+                </div>
+
+                <div class="flex space-x-4">
+                  <button phx-click="add_to_cart" phx-value-product_id={@product.id}
+                          disabled={@product.stock_quantity == 0}
+                          class="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-8 py-3 rounded-lg font-semibold transition-colors">
+                    <%= if @product.stock_quantity > 0, do: "Add to Cart", else: "Out of Stock" %>
+                  </button>
+                  
+                  <button class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors">
+                    ♡ Wishlist
+                  </button>
+                </div>
+
+                <!-- Product Features -->
+                <div class="mt-12">
+                  <h3 class="text-xl font-semibold mb-4">Features</h3>
+                  <ul class="space-y-2 text-gray-300">
+                    <li>• High quality materials</li>
+                    <li>• Fast shipping</li>
+                    <li>• 30-day return policy</li>
+                    <li>• Customer support</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- Related Products -->
+            <div class="mt-16">
+              <h2 class="text-2xl font-bold text-white mb-8">Related Products</h2>
+              <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- This would show related products -->
               </div>
             </div>
           </div>
-
-          <!-- Related Products -->
-          <div class="mt-16">
-            <h2 class="text-2xl font-bold text-white mb-8">Related Products</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              <!-- This would show related products -->
-            </div>
-          </div>
-        </div>
+        <% end %>
         </div>
       </div>
-    </PageWrapper.page_with_navbar>
+    </div>
     """
   end
 end

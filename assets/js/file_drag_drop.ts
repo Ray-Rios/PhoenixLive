@@ -10,11 +10,13 @@ interface FileUploadHook extends LiveViewHook {}
 export const FileDragDrop: FileDragDropHook = {
   mounted() {
     const self = this; // Capture 'this' context for use in callbacks
-    const dropZone = this.el.querySelector('#drop-zone') as HTMLElement;
-    const fileInput = this.el.querySelector('#file-upload') as HTMLInputElement;
     
-    if (!dropZone || !fileInput) {
-      console.error('FileDragDrop: Required elements not found');
+    // For file manager component, the drop zone is the element itself
+    const dropZone = this.el.id?.includes('drop-zone') ? this.el : this.el.querySelector('[id*="drop-zone"]') as HTMLElement;
+    const dropOverlay = this.el.querySelector('[id*="drop-overlay"]') as HTMLElement;
+    
+    if (!dropZone) {
+      console.error('FileDragDrop: Drop zone not found');
       return;
     }
 
@@ -36,8 +38,11 @@ export const FileDragDrop: FileDragDropHook = {
     // Handle dropped files
     dropZone.addEventListener('drop', handleDrop, false);
     
-    // Handle file input change
-    fileInput.addEventListener('change', handleFileSelect, false);
+    // Handle file input change (if present)
+    const fileInput = this.el.querySelector('#file-upload') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.addEventListener('change', handleFileSelect, false);
+    }
 
     function preventDefaults(e: Event): void {
       e.preventDefault();
@@ -46,10 +51,18 @@ export const FileDragDrop: FileDragDropHook = {
 
     function highlight(e: Event): void {
       dropZone.classList.add('border-blue-500', 'bg-blue-900/20');
+      if (dropOverlay) {
+        dropOverlay.classList.remove('hidden');
+        dropOverlay.classList.add('flex');
+      }
     }
 
     function unhighlight(e: Event): void {
       dropZone.classList.remove('border-blue-500', 'bg-blue-900/20');
+      if (dropOverlay) {
+        dropOverlay.classList.add('hidden');
+        dropOverlay.classList.remove('flex');
+      }
     }
 
     function handleDrop(e: DragEvent): void {

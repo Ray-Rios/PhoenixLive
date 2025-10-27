@@ -11,9 +11,9 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
       _ -> "unknown"
     end
 
-    # If user is already logged in, redirect to dashboard
+    # If user is already logged in, redirect to desktop
     if current_user do
-      {:ok, redirect(socket, to: ~p"/dashboard")}
+      {:ok, redirect(socket, to: ~p"/desktop")}
     else
       form_data = %{}
       form = to_form(form_data, as: "forgot_password")
@@ -26,8 +26,6 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
          errors: [],
          loading: false,
          ip_address: ip_address,
-         captcha_token: nil,
-         show_captcha: captcha_required?(),
          success_message: nil,
          page_title: "Forgot Password"
        )}
@@ -42,86 +40,36 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
     form_data = Map.merge(socket.assigns.form_data, params)
     form = to_form(form_data, as: "forgot_password")
     
-    # Don't clear errors on validate, and preserve captcha token
     {:noreply, assign(socket, form: form, form_data: form_data)}
   end
 
   def handle_event("submit", %{"forgot_password" => params}, socket) do
     email_or_username = String.trim(params["email_or_username"] || "")
-    captcha_token = socket.assigns.captcha_token
     ip_address = socket.assigns.ip_address
 
-    # Validate captcha if required
-    if socket.assigns.show_captcha and is_nil(captcha_token) do
-      {:noreply, put_flash(socket, :error, "Please complete the captcha")}
-    else
-      # Verify captcha if present
-      captcha_valid = if socket.assigns.show_captcha do
-        PhoenixApp.Captcha.verify_hcaptcha(captcha_token, ip_address)
-      else
-        true
-      end
-
-      if captcha_valid do
-        # Set loading state
-        socket = assign(socket, loading: true)
-        
-        # Process forgot password request
-        case Accounts.send_password_reset_email(email_or_username, ip_address) do
-          {:ok, _message} ->
-            {:noreply,
-             socket
-             |> assign(loading: false, success_message: "If an account with that email/username exists, you should receive an email with instructions shortly.")
-             |> assign(captcha_token: nil)  # Reset captcha but keep form data
-            }
-          {:error, :rate_limited} ->
-            {:noreply,
-             socket
-             |> assign(loading: false)
-             |> put_flash(:error, "Too many password reset attempts. Please wait before trying again.")
-            }
-          {:error, message} ->
-            {:noreply,
-             socket
-             |> assign(loading: false)
-             |> put_flash(:error, message)
-            }
-        end
-      else
+    # Set loading state
+    socket = assign(socket, loading: true)
+    
+    # Process forgot password request
+    case Accounts.send_password_reset_email(email_or_username, ip_address) do
+      {:ok, _message} ->
+        {:noreply,
+         socket
+         |> assign(loading: false, success_message: "If an account with that email/username exists, you should receive an email with instructions shortly.")
+        }
+      {:error, :rate_limited} ->
         {:noreply,
          socket
          |> assign(loading: false)
-         |> put_flash(:error, "Invalid captcha. Please try again.")
+         |> put_flash(:error, "Too many password reset attempts. Please wait before trying again.")
         }
-      end
+      {:error, message} ->
+        {:noreply,
+         socket
+         |> assign(loading: false)
+         |> put_flash(:error, message)
+        }
     end
-  end
-
-  # Handle hCaptcha token from JavaScript  
-  def handle_event("captcha_verified", %{"token" => token}, socket) do
-    # Only update the captcha token, preserve everything else
-    {:noreply, assign(socket, :captcha_token, token)}
-  end
-
-  def handle_event("captcha_error", _params, socket) do
-    {:noreply, assign(socket, :captcha_token, nil)}
-  end
-
-  def handle_event("captcha_expired", _params, socket) do
-    {:noreply, assign(socket, :captcha_token, nil)}
-  end
-
-  # Keep the old event names for backwards compatibility
-  def handle_event("hcaptcha-token", %{"token" => token}, socket) do
-    {:noreply, assign(socket, :captcha_token, token)}
-  end
-
-  def handle_event("hcaptcha-expired", _params, socket) do
-    {:noreply, assign(socket, :captcha_token, nil)}
-  end
-
-  def handle_event("hcaptcha-error", _params, socket) do
-    {:noreply, assign(socket, :captcha_token, nil)}
   end
 
   defp maybe_fetch_user(nil), do: nil
@@ -132,18 +80,9 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
     end
   end
 
-  defp captcha_required? do
-    # Always require captcha for forgot password to prevent abuse
-    true
-  end
-
-  defp get_hcaptcha_site_key do
-    System.get_env("HCAPTCHA_SITE_KEY") || "10000000-ffff-ffff-ffff-000000000001"
-  end
-
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div class="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 relative z-10">
       <div class="max-w-md w-full space-y-8">
         <div class="text-center">
           <h2 class="mt-6 text-3xl font-extrabold text-white">
@@ -167,7 +106,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
             </p>
           </div>
         <% else %>
-          <div class="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl shadow-2xl p-8 border border-gray-700">
+          <div class="auth-glass-panel rounded-xl shadow-2xl p-8">
           <.form 
             for={@form} 
             phx-submit="submit" 
@@ -189,22 +128,10 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
               />
             </div>
             
-            <!-- CAPTCHA Widget -->
-            <%= if @show_captcha do %>
-              <div class="captcha-container" phx-update="ignore" id="captcha-container">
-                <div 
-                  id="hcaptcha-widget" 
-                  phx-hook="HCaptcha" 
-                  data-sitekey={get_hcaptcha_site_key()}
-                  class="flex justify-center"
-                ></div>
-              </div>
-            <% end %>
-            
             <button 
               type="submit"
-              disabled={@loading or (@show_captcha and is_nil(@captcha_token))}
-              class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading or (@show_captcha and is_nil(@captcha_token)), do: "opacity-50 cursor-not-allowed", else: ""}"}
+              disabled={@loading}
+              class={"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 #{if @loading, do: "opacity-50 cursor-not-allowed", else: ""}"}
             >
               <%= if @loading do %>
                 <div class="flex items-center justify-center">

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: phoenix-uploads-pvc
+  namespace: phoenixapp
+  labels:
+    app: phoenix-web
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # Use hostpath storage class (matching postgres/redis)
+  storageClassName: hostpath

@@ -1,9 +1,8 @@
 defmodule PhoenixAppWeb.BlogLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
-  alias PhoenixAppWeb.Components.PageWrapper
 
-  on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
+  on_mount {PhoenixAppWeb.UserAuth, :default}
 
   def mount(_params, _session, socket) do
     posts = Content.list_published_posts()
@@ -53,14 +52,8 @@ defmodule PhoenixAppWeb.BlogLive do
 
   def render(assigns) do
     ~H"""
-    <PageWrapper.page_with_navbar current_user={@current_user} flash={@flash}>
-      <div class="starry-background w-full">
-      <div class="max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px]">
-        <div class="stars-container">
-          <div class="stars"></div>
-          <div class="stars2"></div>
-          <div class="stars3"></div>
-        </div>
+    <div class="min-h-screen w-full pointer-events-none">
+      <div class="max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px] pointer-events-auto">
         <!-- Blog List View -->
         <div :if={@view != :post_detail}>
         <h1 class="text-4xl font-bold text-white mb-8 text-center">Our Blog</h1>
@@ -198,7 +191,6 @@ defmodule PhoenixAppWeb.BlogLive do
         }
       }, 5000);
     </script>
-    </PageWrapper.page_with_navbar>
     """
   end
 end

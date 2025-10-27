@@ -5,7 +5,7 @@ defmodule PhoenixApp.MixProject do
     [
       app: :phoenix_app,
       version: "0.1.0",
-      elixir: "~> 1.18.4",
+      elixir: "~> 1.19.0",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -14,7 +14,11 @@ defmodule PhoenixApp.MixProject do
       # Optimize compilation
       consolidate_protocols: Mix.env() != :dev,
       build_embedded: Mix.env() == :prod,
-      compilers: Mix.compilers()
+      compilers: Mix.compilers(),
+      # Suppress warnings from dependencies (not our code)
+      elixirc_options: [
+        warnings_as_errors: true
+      ]
     ]
   end
 
@@ -30,32 +34,32 @@ defmodule PhoenixApp.MixProject do
 
   defp deps do
     [
-      {:phoenix, "~> 1.7.0"},
-      {:phoenix_ecto, "~> 4.4"},
-      {:ecto_sql, "~> 3.10"},
-      {:postgrex, ">= 0.17.0"},
-      {:phoenix_html, "~> 3.3"},
-      {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 0.20.17"},
-      {:floki, ">= 0.30.0", only: :test},
-      {:phoenix_live_dashboard, "~> 0.8.0"},
-      {:esbuild, "~> 0.7", runtime: Mix.env() == :dev},
-      {:swoosh, "~> 1.3"},
-      {:gen_smtp, "~> 1.0"},
-      {:finch, "~> 0.13"},
-      {:telemetry_metrics, "~> 0.6"},
-      {:telemetry_poller, "~> 1.0"},
-      {:gettext, "~> 0.20"},
-      {:jason, "~> 1.2"},
-      {:joken, "~> 2.5"},
+      {:phoenix, "~> 1.7.18"},
+      {:phoenix_ecto, "~> 4.6"},
+      {:ecto_sql, "~> 3.12"},
+      {:postgrex, "~> 0.19.0"},
+      {:phoenix_html, "~> 4.1"},
+      {:phoenix_live_reload, "~> 1.5", only: :dev},
+      {:phoenix_live_view, "~> 1.0.0"},
+      {:floki, "~> 0.36.0", only: :test},
+      {:phoenix_live_dashboard, "~> 0.8.5"},
+      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
+      {:swoosh, "~> 1.16"},
+      {:gen_smtp, "~> 1.2"},
+      {:finch, "~> 0.18"},
+      {:telemetry_metrics, "~> 1.0"},
+      {:telemetry_poller, "~> 1.1"},
+      {:gettext, "~> 0.26"},
+      {:jason, "~> 1.4"},
+      {:joken, "~> 2.6"},
       {:guardian, "~> 2.3"},
-      {:plug_cowboy, "~> 2.5"},
+      {:plug_cowboy, "~> 2.7"},
       {:absinthe, "~> 1.7"},
       {:absinthe_plug, "~> 1.5"},
       {:absinthe_phoenix, "~> 2.0"},
       {:dataloader, "~> 2.0"},
-      {:redix, "~> 1.2"},
-      {:pbkdf2_elixir, "~> 2.0"},
+      {:redix, "~> 1.5"},
+      {:pbkdf2_elixir, "~> 2.2"},
       ## E-commerce & Payments
       #{:stripity_stripe, "~> 3.0"},
       #{:decimal, "~> 2.0"},

@@ -23,7 +23,7 @@ defmodule PhoenixApp.GameCMS.GameEvent do
     |> cast(attrs, [:event_type, :message, :data, :severity, :user_id, :character_id])
     |> validate_required([:event_type, :message])
     |> validate_inclusion(:event_type, [
-      "player_join", "player_leave", "level_up", "quest_complete", 
+      "player_join", "player_leave", "level_up", 
       "item_found", "combat", "death", "guild_join", "guild_leave",
       "chat_message", "system_message", "admin_action"
     ])

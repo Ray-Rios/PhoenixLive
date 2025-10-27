@@ -71,6 +71,7 @@ defmodule PhoenixAppWeb.CoreComponents do
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
   attr :id_suffix, :any, default: nil, doc: "suffix to make flash IDs unique"
+  attr :stack_index, :integer, default: 0, doc: "index in the flash stack for positioning"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
   
   slot :inner_block
@@ -84,22 +85,26 @@ defmodule PhoenixAppWeb.CoreComponents do
     
     assigns = assign(assigns, :flash_id, flash_id)
     
+    # Calculate top position based on stack index (33px base + 30px per additional flash)
+    base_top = 33
+    top_position = base_top + (assigns.stack_index * 30)
+    
+    assigns = assign(assigns, :top_position, top_position)
+    
     ~H"""
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@flash_id}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind})}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> JS.transition("translate-x-full opacity-0", time: 300)}
+      phx-mounted={JS.transition("translate-x-0 opacity-100", time: 300, to: "##{@flash_id}")}
+      phx-remove={JS.transition("translate-x-full opacity-0", time: 300)}
+      phx-hook="AutoDismissFlash"
+      data-auto-dismiss="8000"
       role="alert"
-      phx-hook="FlashNotification"
-      style={
-        case @kind do
-          :info -> "position: fixed; top: 1rem; right: 1rem; z-index: 50;"
-          :error -> "position: fixed; top: 6rem; right: 1rem; z-index: 50;"
-        end
-      }
+      style={"position: fixed; top: #{@top_position}px; right: -50px; z-index: #{10000 - assigns.stack_index};"}
       class={[
-        "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer",
-        "transform translate-x-0 opacity-100 transition-all duration-300 ease-out",
+        "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer shadow-xl",
+        "transform translate-x-full opacity-90 transition-all duration-300 ease-in-out",
         @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
         @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
       ]}
@@ -126,12 +131,100 @@ defmodule PhoenixAppWeb.CoreComponents do
 
   def flash_group(assigns) do
     assigns = assign(assigns, :flash_id, assigns.id || "flash-group-#{System.unique_integer([:positive])}")
+
+    # Collect all active flash messages with their types and stable IDs
+    active_flashes = [
+      {:info, Phoenix.Flash.get(assigns.flash, :info), :info},
+      {:error, Phoenix.Flash.get(assigns.flash, :error), :error}
+    ] |> Enum.filter(fn {_, msg, _} -> msg end)
+
+    assigns = assign(assigns, :active_flashes, active_flashes)
+
     ~H"""
     <div id={@flash_id}>
-      <.flash kind={:info} title="Success!" flash={@flash} id_suffix={System.unique_integer([:positive])} />
-      <.flash kind={:error} title="Error!" flash={@flash} id_suffix={System.unique_integer([:positive])} />
+      <%= for {{kind, _message, stable_id}, index} <- Enum.with_index(@active_flashes) do %>
+        <.flash kind={kind} title={if(kind == :info, do: "Success!", else: "Error!")} flash={@flash} id_suffix={stable_id} stack_index={index} />
+      <% end %>
     </div>
     """
+  end
+
+  @doc """
+  A small pagination component that renders page links and prev/next buttons.
+
+  Usage:
+    <.pagination current_page={@current_page} total_pages={@total_pages} on_page_change="change_page" />
+  """
+  attr :current_page, :integer, required: true
+  attr :total_pages, :integer, required: true
+  attr :on_page_change, :string, required: true
+  attr :page_size, :integer, default: nil
+  attr :rest, :global, include: ~w(id class)
+
+  def pagination(assigns) do
+    assigns = assign_new(assigns, :current_page, fn -> 1 end)
+    assigns = assign_new(assigns, :total_pages, fn -> 1 end)
+    assigns = assign_new(assigns, :on_page_change, fn -> "change_page" end)
+
+    # compute a small window of pages around the current page
+    pages =
+      if assigns.total_pages <= 7 do
+        Enum.to_list(1..assigns.total_pages)
+      else
+        start_page = max(1, assigns.current_page - 2)
+        end_page = min(assigns.total_pages, assigns.current_page + 2)
+        pages = Enum.to_list(start_page..end_page)
+
+        # ensure we include first/last when necessary
+        pages =
+          pages
+          |> maybe_prepend(1)
+          |> maybe_append(assigns.total_pages)
+
+        pages
+      end
+
+    assigns = assign(assigns, :pages, pages)
+
+    ~H"""
+    <nav aria-label="Pagination" {@rest} class={"flex items-center gap-2"}>
+      <button
+        :if={@current_page > 1}
+        phx-click={@on_page_change}
+        phx-value-page={@current_page - 1}
+        class="px-3 py-1 bg-zinc-800 text-white rounded"
+      >
+        ‹ Prev
+      </button>
+
+      <%= for page <- @pages do %>
+        <button
+          phx-click={@on_page_change}
+          phx-value-page={page}
+          class={"px-3 py-1 rounded " <> if(page == @current_page, do: "bg-blue-600 text-white", else: "bg-zinc-800 text-gray-200")}
+        >
+          <%= page %>
+        </button>
+      <% end %>
+
+      <button
+        :if={@current_page < @total_pages}
+        phx-click={@on_page_change}
+        phx-value-page={@current_page + 1}
+        class="px-3 py-1 bg-zinc-800 text-white rounded"
+      >
+        Next ›
+      </button>
+    </nav>
+    """
+  end
+
+  defp maybe_prepend(pages, 1) do
+    if List.first(pages) == 1, do: pages, else: [1 | pages]
+  end
+
+  defp maybe_append(pages, last) do
+    if List.last(pages) == last, do: pages, else: pages ++ [last]
   end
 
   @doc """

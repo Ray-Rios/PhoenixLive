@@ -1,9 +1,8 @@
 defmodule PhoenixAppWeb.DesktopLive do
   use PhoenixAppWeb, :live_view
   alias Phoenix.PubSub
-  import PhoenixAppWeb.Components.PageWrapper
 
-  on_mount {PhoenixAppWeb.Auth, :maybe_authenticated}
+  on_mount {PhoenixAppWeb.UserAuth, :require_authenticated_user}
 
   def mount(_params, _session, socket) do
     _user = socket.assigns.current_user
@@ -32,8 +31,13 @@ defmodule PhoenixAppWeb.DesktopLive do
       desktop_files: get_desktop_files(),
       selected_files: [],
       context_menu: nil,
-      page_title: "Desktop"
+      page_title: "Desktop",
+      show_start_menu: false
     )}
+  end
+
+  def handle_event("toggle_start_menu", _params, socket) do
+    {:noreply, assign(socket, show_start_menu: !socket.assigns.show_start_menu)}
   end
 
   def handle_event("open_app", %{"app" => app}, socket) do
@@ -41,6 +45,22 @@ defmodule PhoenixAppWeb.DesktopLive do
     
     new_window = case app do
       "file_manager" ->
+        # Load file manager data
+        user = socket.assigns.current_user
+        is_admin = user && user.is_admin
+        
+        uploads = if is_admin do
+          list_all_uploads()
+        else
+          list_user_uploads(user)
+        end
+
+        stats = if is_admin do
+          get_upload_stats(uploads)
+        else
+          get_user_upload_stats(uploads)
+        end
+
         %{
           id: window_id,
           title: "File Manager",
@@ -51,7 +71,16 @@ defmodule PhoenixAppWeb.DesktopLive do
           height: 600,
           minimized: false,
           maximized: false,
-          z_index: socket.assigns.next_z_index
+          z_index: socket.assigns.next_z_index,
+          uploads: uploads,
+          filtered_uploads: uploads,
+          stats: stats,
+          search_query: "",
+          filter: "all",
+          view_mode: "grid",
+          current_page: 1,
+          page_size: 20,
+          is_admin: is_admin || false
         }
       
       "text_editor" ->
@@ -315,16 +344,134 @@ defmodule PhoenixAppWeb.DesktopLive do
     ]
   end
 
+  # File management helpers (borrowed from UploadsLive)
+  defp list_all_uploads do
+    alias PhoenixApp.Repo
+    import Ecto.Query
+
+    # Combine both UserMedia and UserFile uploads
+    media_uploads = Repo.all(
+      from m in PhoenixApp.Content.UserMedia,
+      preload: [:user],
+      order_by: [desc: m.inserted_at]
+    )
+
+    file_uploads = Repo.all(
+      from f in PhoenixApp.Files.UserFile,
+      where: not is_nil(f.user_id),
+      preload: [:user],
+      order_by: [desc: f.inserted_at]
+    )
+
+    # Normalize the data structure
+    normalized_media = Enum.map(media_uploads, &normalize_media_upload/1)
+    normalized_files = Enum.map(file_uploads, &normalize_file_upload/1)
+
+    (normalized_media ++ normalized_files)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+  end
+
+  defp list_user_uploads(user) when is_nil(user), do: []
+
+  defp list_user_uploads(user) do
+    alias PhoenixApp.Repo
+    import Ecto.Query
+
+    # Get only uploads for the specific user
+    media_uploads = Repo.all(
+      from m in PhoenixApp.Content.UserMedia,
+      where: m.user_id == ^user.id,
+      preload: [:user],
+      order_by: [desc: m.inserted_at]
+    )
+
+    file_uploads = Repo.all(
+      from f in PhoenixApp.Files.UserFile,
+      where: f.user_id == ^user.id,
+      preload: [:user],
+      order_by: [desc: f.inserted_at]
+    )
+
+    # Normalize the data structure
+    normalized_media = Enum.map(media_uploads, &normalize_media_upload/1)
+    normalized_files = Enum.map(file_uploads, &normalize_file_upload/1)
+
+    (normalized_media ++ normalized_files)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+  end
+
+  defp normalize_media_upload(media) do
+    %{
+      id: media.id,
+      filename: media.filename,
+      original_filename: media.original_filename,
+      file_type: media.file_type,
+      mime_type: media.mime_type,
+      file_size: media.file_size,
+      file_path: media.file_path,
+      url: media.url,
+      is_public: media.is_public,
+      user: media.user,
+      inserted_at: media.inserted_at,
+      source: :media
+    }
+  end
+
+  defp normalize_file_upload(file) do
+    %{
+      id: file.id,
+      filename: file.filename,
+      original_filename: file.original_filename,
+      file_type: determine_file_type(file.content_type || ""),
+      mime_type: file.content_type,
+      file_size: file.file_size,
+      file_path: file.file_path,
+      url: file.file && PhoenixApp.UserFileUpload.url({file.file, file}),
+      is_public: file.is_public,
+      user: file.user,
+      inserted_at: file.inserted_at,
+      source: :files
+    }
+  end
+
+  defp get_upload_stats(uploads) do
+    %{
+      total_uploads: length(uploads),
+      total_size: Enum.sum(Enum.map(uploads, & &1.file_size)),
+      images: Enum.count(uploads, & &1.file_type == "image"),
+      videos: Enum.count(uploads, & &1.file_type == "video"),
+      audio: Enum.count(uploads, & &1.file_type == "audio"),
+      documents: Enum.count(uploads, & &1.file_type == "document"),
+      other: Enum.count(uploads, & &1.file_type not in ["image", "video", "audio", "document"]),
+      public: Enum.count(uploads, & &1.is_public),
+      private: Enum.count(uploads, & !&1.is_public)
+    }
+  end
+
+  defp get_user_upload_stats(uploads) do
+    get_upload_stats(uploads)
+  end
+
+  defp determine_file_type(mime_type) when is_nil(mime_type), do: "other"
+  defp determine_file_type(mime_type) do
+    cond do
+      String.starts_with?(mime_type, "image/") -> "image"
+      String.starts_with?(mime_type, "video/") -> "video"
+      String.starts_with?(mime_type, "audio/") -> "audio"
+      mime_type in ["model/gltf+json", "model/gltf-binary", "application/octet-stream"] -> "3d"
+      mime_type in ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"] -> "document"
+      String.starts_with?(mime_type, "application/") -> "document"
+      true -> "other"
+    end
+  end
+
   def render(assigns) do
     ~H"""
-    <.page_with_navbar current_user={@current_user} flash={@flash}>
-      <div class="desktop-container starry-background">
-
-      <div class="stars-container">
-        <div class="stars"></div>
-        <div class="stars2"></div>
-        <div class="stars3"></div>
-      </div>
+    <div class="min-h-screen pointer-events-none">
+      <!-- Flash Messages -->
+      <.flash_group flash={@flash} />
+      
+      <div class="desktop-container pointer-events-auto">
             
       <!-- Desktop Icons -->
       <div class="absolute top-4 left-4 space-y-4 z-10">
@@ -339,191 +486,94 @@ defmodule PhoenixAppWeb.DesktopLive do
 
       <!-- Windows -->
       <%= for window <- @windows do %>
-        <div :if={!window.minimized} 
-             class={["desktop-window", if(window.maximized, do: "!w-full !h-full !top-0 !left-0")]}
-             style={"left: #{window.x}px; top: #{window.y}px; width: #{window.width}px; height: #{window.height}px; z-index: #{window.z_index}"}
-             id={"window-#{window.id}"}
-             phx-hook="DesktopWindow"
-             phx-click="focus_window" phx-value-window_id={window.id}>
-          
-          <!-- Window Header -->
-          <div class="window-header">
-            <span class="font-medium text-gray-800"><%= window.title %></span>
-            <div class="window-controls">
-              <div class="window-control minimize" phx-click="minimize_window" phx-value-window_id={window.id}></div>
-              <div class="window-control maximize" phx-click="maximize_window" phx-value-window_id={window.id}></div>
-              <div class="window-control close" phx-click="close_window" phx-value-window_id={window.id}></div>
-            </div>
-          </div>
-
-          <!-- Window Content -->
-          <div class="window-content">
-            <!-- Welcome App -->
-            <div :if={window.app == "welcome"}>
-              <h2 class="text-2xl font-bold mb-4">Welcome to Phoenix Desktop!</h2>
-              <p class="mb-4">This is a web-based desktop environment built with Phoenix LiveView.</p>
-              <div class="grid grid-cols-2 gap-4">
-                <button phx-click="open_app" phx-value-app="file_manager" 
-                        class="bg-blue-500 text-white p-4 rounded hover:bg-blue-600 transition-colors">
-                  📁 File Manager
-                </button>
-                <button phx-click="open_app" phx-value-app="text_editor"
-                        class="bg-green-500 text-white p-4 rounded hover:bg-green-600 transition-colors">
-                  📝 Text Editor
-                </button>
-                <button phx-click="open_app" phx-value-app="calculator"
-                        class="bg-purple-500 text-white p-4 rounded hover:bg-purple-600 transition-colors">
-                  🧮 Calculator
-                </button>
-                <button phx-click="open_app" phx-value-app="terminal"
-                        class="bg-gray-800 text-white p-4 rounded hover:bg-gray-700 transition-colors">
-                  💻 Terminal
-                </button>
-                <button phx-click="open_app" phx-value-app="chat"
-                        class="bg-indigo-500 text-white p-4 rounded hover:bg-indigo-600 transition-colors">
-                  💬 Chat
-                </button>
-                <button phx-click="open_app" phx-value-app="browser"
-                        class="bg-orange-500 text-white p-4 rounded hover:bg-orange-600 transition-colors">
-                  🌐 Browser
-                </button>
+        <PhoenixAppWeb.Components.Window.desktop_window window={window} current_user={@current_user}>
+          <%= case window.app do %>
+            <% "file_manager" -> %>
+              <PhoenixAppWeb.Components.Window.file_manager_content 
+                window={window}
+                current_user={@current_user}
+                uploads={Map.get(window, :uploads, [])}
+                stats={Map.get(window, :stats, %{})}
+                filtered_uploads={Map.get(window, :filtered_uploads, [])}
+                search_query={Map.get(window, :search_query, "")}
+                filter={Map.get(window, :filter, "all")}
+                view_mode={Map.get(window, :view_mode, "grid")}
+                current_page={Map.get(window, :current_page, 1)}
+                page_size={Map.get(window, :page_size, 20)}
+                is_admin={Map.get(window, :is_admin, false)}
+              />
+            <% "welcome" -> %>
+              <div class="p-6">
+                <h2 class="text-2xl font-bold mb-4">Welcome to Phoenix Desktop!</h2>
+                <p class="mb-4">This is a desktop environment built with Phoenix LiveView.</p>
+                <p class="mb-4">Click the Start button in the taskbar to open applications.</p>
+                <div class="space-y-2">
+                  <button phx-click="open_app" phx-value-app="file_manager" class="block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                    📁 Open File Manager
+                  </button>
+                  <button phx-click="open_app" phx-value-app="terminal" class="block bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                    💻 Open Terminal
+                  </button>
+                  <button phx-click="open_app" phx-value-app="calculator" class="block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    🧮 Open Calculator
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <!-- File Manager App -->
-            <div :if={window.app == "file_manager"}>
-              <div class="flex items-center mb-4 space-x-2">
-                <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Back</button>
-                <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Forward</button>
-                <div class="flex-1 bg-gray-100 px-3 py-1 rounded">/home/user</div>
-              </div>
-              <div class="grid grid-cols-4 gap-4">
-                <%= for file <- @desktop_files do %>
-                  <div class="flex flex-col items-center p-2 hover:bg-gray-100 rounded cursor-pointer">
-                    <div class="text-3xl mb-2"><%= file.icon %></div>
-                    <div class="text-sm text-center"><%= file.name %></div>
+            <% "terminal" -> %>
+              <div class="p-4 font-mono text-sm h-full overflow-hidden flex flex-col">
+                <div class="flex-1 overflow-auto bg-black p-4 rounded">
+                  <%= for line <- Enum.reverse(Map.get(window, :history, [])) do %>
+                    <div class="text-green-400"><%= line %></div>
+                  <% end %>
+                </div>
+                <form phx-submit="terminal_command" phx-value-window_id={window.id} class="mt-2">
+                  <div class="flex">
+                    <span class="text-green-400 mr-2">$</span>
+                    <input
+                      type="text"
+                      name="command"
+                      value={Map.get(window, :current_input, "")}
+                      class="flex-1 bg-transparent text-white focus:outline-none"
+                      autocomplete="off"
+                    />
                   </div>
-                <% end %>
+                </form>
               </div>
-            </div>
-
-            <!-- Text Editor App -->
-            <div :if={window.app == "text_editor"}>
-              <div class="flex items-center mb-2 space-x-2">
-                <button phx-click="text_editor_save" phx-value-window_id={window.id} phx-value-content={window.content || ""}
-                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">Save</button>
-                <span class="text-sm text-gray-600">Untitled.txt</span>
-              </div>
-              <textarea class="w-full h-80 p-2 border rounded font-mono text-sm resize-none"
-                        placeholder="Start typing..."
-                        value={window.content || ""}></textarea>
-            </div>
-
-            <!-- Calculator App -->
-            <div :if={window.app == "calculator"}>
-              <div class="bg-gray-900 text-white p-4 rounded">
-                <div class="bg-black p-4 mb-4 text-right text-2xl font-mono rounded">
-                  <%= window.display || "0" %>
+            <% "calculator" -> %>
+              <div class="p-4">
+                <div class="bg-black text-white text-2xl p-4 rounded mb-4 text-right">
+                  <%= Map.get(window, :display, "0") %>
                 </div>
                 <div class="grid grid-cols-4 gap-2">
-                  <%= for button <- ["C", "/", "*", "-", "7", "8", "9", "+", "4", "5", "6", "+", "1", "2", "3", "=", "0", "0", ".", "="] do %>
-                    <button phx-click="calculator_input" phx-value-window_id={window.id} phx-value-value={button}
-                            class={["p-3 rounded font-bold transition-colors",
-                                   if(button in ["C", "/", "*", "-", "+", "="], 
-                                      do: "bg-orange-500 hover:bg-orange-600", 
-                                      else: "bg-gray-700 hover:bg-gray-600")]}>
+                  <%= for button <- ["C", "±", "%", "÷", "7", "8", "9", "×", "4", "5", "6", "−", "1", "2", "3", "+", "0", "0", ".", "="] do %>
+                    <button
+                      phx-click="calculator_input"
+                      phx-value-window_id={window.id}
+                      phx-value-value={button}
+                      class="bg-gray-600 hover:bg-gray-700 text-white p-3 rounded text-lg font-semibold"
+                    >
                       <%= button %>
                     </button>
                   <% end %>
                 </div>
               </div>
-            </div>
-
-            <!-- Terminal App -->
-            <div :if={window.app == "terminal"}>
-              <div class="bg-black text-green-400 p-4 font-mono text-sm h-full overflow-hidden flex flex-col">
-                <div class="flex-1 overflow-y-auto mb-2">
-                  <%= for line <- Enum.reverse(window.history || []) do %>
-                    <div><%= line %></div>
-                  <% end %>
-                </div>
-                <form phx-submit="terminal_command" phx-value-window_id={window.id} class="flex">
-                  <span class="mr-2">$</span>
-                  <input type="text" name="command" value={window.current_input || ""}
-                         class="flex-1 bg-transparent outline-none text-green-400"
-                         autocomplete="off" />
-                </form>
+            <% _ -> %>
+              <div class="p-6">
+                <h2 class="text-xl font-bold mb-4"><%= window.title %></h2>
+                <p>Application content goes here...</p>
               </div>
-            </div>
-
-            <!-- Chat App -->
-            <div :if={window.app == "chat"}>
-              <div class="flex flex-col h-full">
-                <div class="flex-1 overflow-y-auto p-2 bg-gray-50 mb-2">
-                  <div class="text-center text-gray-500 text-sm">Desktop Chat Room</div>
-                  <%= for message <- window.messages || [] do %>
-                    <div class="mb-2">
-                      <span class="font-bold"><%= message.user %>:</span>
-                      <span><%= message.content %></span>
-                    </div>
-                  <% end %>
-                </div>
-                <div class="flex">
-                  <input type="text" placeholder="Type a message..." 
-                         class="flex-1 px-3 py-2 border rounded-l" />
-                  <button class="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600">Send</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Browser App -->
-            <div :if={window.app == "browser"}>
-              <div class="flex items-center mb-2 space-x-2">
-                <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">←</button>
-                <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">→</button>
-                <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">⟳</button>
-                <input type="text" value={window.url || "https://example.com"}
-                       class="flex-1 px-3 py-1 border rounded" />
-              </div>
-              <div class="bg-white border rounded h-80 p-4">
-                <h1 class="text-2xl font-bold mb-4">Example Website</h1>
-                <p class="mb-4">This is a simulated web browser within the desktop environment.</p>
-                <p>In a real implementation, this could load actual web content or internal applications.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+          <% end %>
+        </PhoenixAppWeb.Components.Window.desktop_window>
       <% end %>
 
       <!-- Taskbar -->
-      <div class="desktop-taskbar">
-        <div class="flex items-center space-x-4">
-          <!-- Start Menu -->
-          <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
-            🏠 Start
-          </button>
-          
-          <!-- Running Apps -->
-          <%= for window <- @windows do %>
-            <button phx-click={if window.minimized, do: "restore_window", else: "focus_window"} 
-                    phx-value-window_id={window.id}
-                    class={["px-3 py-1 rounded text-sm transition-colors",
-                           if(window.minimized, 
-                              do: "bg-gray-600 text-gray-300 hover:bg-gray-500", 
-                              else: "bg-gray-700 text-white hover:bg-gray-600")]}>
-              <%= window.title %>
-            </button>
-          <% end %>
-        </div>
-        
-        <!-- System Tray -->
-        <div class="flex items-center space-x-2 text-white text-sm">
-          <span><%= DateTime.utc_now() |> Calendar.strftime("%H:%M") %></span>
-          <span><%= Date.utc_today() |> Calendar.strftime("%m/%d/%Y") %></span>
-        </div>
+      <PhoenixAppWeb.Components.Taskbar.taskbar 
+        current_user={@current_user} 
+        open_windows={@windows}
+        show_start_menu={@show_start_menu} 
+      />
       </div>
-      </div>
-    </.page_with_navbar>
+    </div>
     """
   end
 end

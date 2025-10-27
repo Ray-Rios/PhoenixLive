@@ -1,0 +1,196 @@
+// Converted from assets/js/desktop.js -> TypeScript
+// Provides LiveView hooks for draggable/resizable desktop windows,
+// and small global initializers for the taskbar start button image
+// and the system clock updater.
+
+type HookContext = { el: HTMLElement } & Record<string, any>;
+
+const DesktopWindow: any = {
+  mounted(this: HookContext) {
+    this.isDragging = false;
+    this.dragOffset = { x: 0, y: 0 };
+
+    const header = this.el.querySelector('.window-header') as HTMLElement | null;
+    if (!header) return;
+
+    // Make window draggable
+    const onMouseDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('button')) return; // Don't drag when clicking buttons
+
+      this.isDragging = true;
+      const rect = this.el.getBoundingClientRect();
+      this.dragOffset = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!this.isDragging) return;
+      const container = document.querySelector('.desktop-container') as HTMLElement | null;
+      const containerRect = container ? container.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight } as DOMRect;
+
+      let newX = e.clientX - containerRect.left - this.dragOffset.x;
+      let newY = e.clientY - containerRect.top - this.dragOffset.y;
+
+      // Keep window within bounds
+      newX = Math.max(0, Math.min(newX, (containerRect.width || window.innerWidth) - this.el.offsetWidth));
+      newY = Math.max(0, Math.min(newY, (containerRect.height || window.innerHeight) - this.el.offsetHeight));
+
+      this.el.style.left = newX + 'px';
+      this.el.style.top = newY + 'px';
+    };
+
+    const onMouseUp = () => { this.isDragging = false; };
+
+    header.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    // Save references for cleanup
+    (this as any)._desktop_listeners = { onMouseDown, onMouseMove, onMouseUp, header };
+  },
+
+  destroyed(this: HookContext) {
+    const refs = (this as any)._desktop_listeners;
+    if (!refs) return;
+    refs.header.removeEventListener('mousedown', refs.onMouseDown);
+    document.removeEventListener('mousemove', refs.onMouseMove);
+    document.removeEventListener('mouseup', refs.onMouseUp);
+  }
+};
+
+const ResizeHandle: any = {
+  mounted(this: HookContext) {
+    this.isResizing = false;
+    this.direction = this.el.dataset.direction || '';
+    this.startSize = {} as any;
+    this.startPos = {} as any;
+
+    const onMouseDown = (e: MouseEvent) => {
+      this.isResizing = true;
+      this.window = this.el.closest('.desktop-window') as HTMLElement;
+
+      const rect = this.window.getBoundingClientRect();
+      this.startSize = { width: rect.width, height: rect.height };
+      this.startPos = { x: rect.left, y: rect.top, mouseX: e.clientX, mouseY: e.clientY };
+
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!this.isResizing) return;
+
+      const deltaX = e.clientX - this.startPos.mouseX;
+      const deltaY = e.clientY - this.startPos.mouseY;
+
+      let newWidth = this.startSize.width;
+      let newHeight = this.startSize.height;
+      let newLeft = this.startPos.x;
+      let newTop = this.startPos.y;
+
+      if (this.direction.includes('e')) {
+        newWidth = Math.max(300, this.startSize.width + deltaX);
+      }
+      if (this.direction.includes('w')) {
+        newWidth = Math.max(300, this.startSize.width - deltaX);
+        newLeft = this.startPos.x + deltaX;
+      }
+      if (this.direction.includes('s')) {
+        newHeight = Math.max(200, this.startSize.height + deltaY);
+      }
+      if (this.direction.includes('n')) {
+        newHeight = Math.max(200, this.startSize.height - deltaY);
+        newTop = this.startPos.y + deltaY;
+      }
+
+      // Apply new dimensions and position
+      this.window.style.width = newWidth + 'px';
+      this.window.style.height = newHeight + 'px';
+
+      // If the element had inline left/top, use those offsets; otherwise compute from rect
+      const curLeft = parseInt(this.window.style.left || '0', 10) || 0;
+      const curTop = parseInt(this.window.style.top || '0', 10) || 0;
+      this.window.style.left = (newLeft - this.startPos.x + curLeft) + 'px';
+      this.window.style.top = (newTop - this.startPos.y + curTop) + 'px';
+    };
+
+    const onMouseUp = () => { this.isResizing = false; };
+
+    this.el.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    (this as any)._resize_listeners = { onMouseDown, onMouseMove, onMouseUp };
+  },
+
+  destroyed(this: HookContext) {
+    const refs = (this as any)._resize_listeners;
+    if (!refs) return;
+    this.el.removeEventListener('mousedown', refs.onMouseDown);
+    document.removeEventListener('mousemove', refs.onMouseMove);
+    document.removeEventListener('mouseup', refs.onMouseUp);
+  }
+};
+
+// Attach hooks to window so app.ts can register them into Phoenix hooks
+(window as any).DesktopWindow = DesktopWindow;
+(window as any).ResizeHandle = ResizeHandle;
+
+// --- Global small initializers for taskbar UI ---
+const initTaskbarStartImage = () => {
+  try {
+    const startBtn = document.querySelector('#taskbar .start-button') as HTMLElement | null;
+    if (!startBtn) return;
+    
+    // The start button should now just be the tri.gif image - no additional setup needed
+    // since it's now handled server-side in the template
+    console.log('Start button initialized with tri.gif image');
+  } catch (e) {
+    console.error('Failed to init start image', e);
+  }
+};
+
+let _clockInterval: number | null = null;
+const initTaskbarClock = () => {
+  try {
+    const el = document.getElementById('taskbar-clock');
+    if (!el) return;
+
+    const update = () => {
+      const now = new Date();
+      const hhmm = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const mmdd = String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0');
+
+      const timeEl = el.querySelector('.time');
+      const dateEl = el.querySelector('.date');
+      if (timeEl) (timeEl as HTMLElement).textContent = hhmm;
+      if (dateEl) (dateEl as HTMLElement).textContent = mmdd;
+    };
+
+    // Run immediately then every 1s
+    update();
+    if (_clockInterval) window.clearInterval(_clockInterval);
+    _clockInterval = window.setInterval(update, 1000);
+  } catch (e) {
+    console.error('Failed to init taskbar clock', e);
+  }
+};
+
+// Initialize on DOMContentLoaded and also when LiveView finishes page loading
+document.addEventListener('DOMContentLoaded', () => {
+  initTaskbarStartImage();
+  initTaskbarClock();
+});
+
+window.addEventListener('phx:page-loading-stop', () => {
+  setTimeout(() => {
+    initTaskbarStartImage();
+    initTaskbarClock();
+  }, 200);
+});
+
+export {};
