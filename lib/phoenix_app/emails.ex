@@ -1,13 +1,13 @@
 defmodule PhoenixApp.Emails do
   import Swoosh.Email
 
-  @from_email "no-reply@phxlive.net"
-  @from_name "PhxLive"
+  defp from_email, do: System.get_env("FROM_EMAIL") || "no-reply@phxlive.net"
+  defp from_name, do: System.get_env("FROM_NAME") || "PhxLive"
 
   def password_reset_email(user, reset_url) do
     new()
     |> to(user.email)
-    |> from({@from_name, @from_email})
+    |> from({from_name(), from_email()})
     |> subject("Reset your PhxLive password")
     |> html_body(password_reset_html_body(user, reset_url))
     |> text_body(password_reset_text_body(user, reset_url))
@@ -16,7 +16,7 @@ defmodule PhoenixApp.Emails do
   def verification_email(user, verification_code) do
     new()
     |> to(user.email)
-    |> from({@from_name, @from_email})
+    |> from({from_name(), from_email()})
     |> subject("Verify your PhxLive account")
     |> html_body(verification_html_body(user, verification_code))
     |> text_body(verification_text_body(user, verification_code))

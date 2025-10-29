@@ -74,17 +74,31 @@ export class CameraController {
   private onMouseDown(event: MouseEvent): void {
     if (!this.isEnabled) return;
 
+    // Check if the target is a UI element that should handle its own interactions
+    const target = event.target as HTMLElement;
+    if (this.shouldIgnoreMouseEvent(target)) {
+      return; // Let the UI element handle this event
+    }
+
     this.isMouseDown = true;
     this.lastMouseX = event.clientX;
     this.lastMouseY = event.clientY;
     this.lastInteractionTime = Date.now();
 
-    // Prevent text selection
+    // Prevent text selection and default behaviors
     event.preventDefault();
   }
 
   private onMouseMove(event: MouseEvent): void {
     if (!this.isEnabled || !this.isMouseDown) return;
+
+    // Check if we moved over a UI element during drag
+    const target = event.target as HTMLElement;
+    if (this.shouldIgnoreMouseEvent(target)) {
+      // Release mouse capture if we moved over a UI element
+      this.isMouseDown = false;
+      return;
+    }
 
     const deltaX = event.clientX - this.lastMouseX;
     const deltaY = event.clientY - this.lastMouseY;
@@ -176,6 +190,45 @@ export class CameraController {
     this.isMouseDown = false;
     // Clear all keys
     this.keys = {};
+  }
+
+  private shouldIgnoreMouseEvent(target: HTMLElement): boolean {
+    // Ignore mouse events on interactive UI elements
+    const interactiveTags = ['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A', 'LABEL'];
+    const interactiveClasses = ['phx-click', 'phx-submit', 'phx-change', 'phx-value', 'clickable'];
+    
+    // Check tag name
+    if (interactiveTags.includes(target.tagName)) {
+      return true;
+    }
+    
+    // Check for Phoenix LiveView attributes
+    if (target.hasAttribute('phx-click') || target.hasAttribute('phx-submit') || 
+        target.hasAttribute('phx-change') || target.hasAttribute('phx-value')) {
+      return true;
+    }
+    
+    // Check for clickable classes
+    for (const className of interactiveClasses) {
+      if (target.classList.contains(className)) {
+        return true;
+      }
+    }
+    
+    // Check parent elements (up to 3 levels) for interactive elements
+    let parent = target.parentElement;
+    let depth = 0;
+    while (parent && depth < 3) {
+      if (interactiveTags.includes(parent.tagName) || 
+          parent.hasAttribute('phx-click') || parent.hasAttribute('phx-submit') || 
+          parent.hasAttribute('phx-change') || parent.hasAttribute('phx-value')) {
+        return true;
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+    
+    return false;
   }
 
   // Exposed API

@@ -10,6 +10,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
   attr :current_user, :map, default: nil
   attr :open_windows, :list, default: []
   attr :show_start_menu, :boolean, default: false
+  attr :target, :any, default: nil
 
   def taskbar(assigns) do
     ~H"""
@@ -19,8 +20,8 @@ defmodule PhoenixAppWeb.Components.Taskbar do
         <div class="relative">
           <button 
             phx-click="toggle_start_menu"
-            class="start-button p-2 hover:bg-gray-700 rounded transition-colors duration-200"
-          >
+            phx-target={@target}
+            class="start-button p-2 hover:bg-gray-700 rounded transition-colors duration-200">
             <img src="/tri.gif" alt="Start" class="w-8 h-8 object-contain" />
           </button>
           
@@ -54,6 +55,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 <button 
                   phx-click="open_app" 
                   phx-value-app="file_manager"
+                  phx-target={@target}
                   class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-700 transition-colors group"
                 >
                   <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">📁</div>
@@ -63,6 +65,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 <button 
                   phx-click="open_app" 
                   phx-value-app="terminal"
+                  phx-target={@target}
                   class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-700 transition-colors group"
                 >
                   <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">💻</div>
@@ -72,6 +75,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 <button 
                   phx-click="open_app" 
                   phx-value-app="calculator"
+                  phx-target={@target}
                   class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-700 transition-colors group"
                 >
                   <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">🧮</div>
@@ -81,6 +85,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 <button 
                   phx-click="open_app" 
                   phx-value-app="notepad"
+                  phx-target={@target}
                   class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-700 transition-colors group"
                 >
                   <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">📝</div>
@@ -90,6 +95,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 <button 
                   phx-click="open_app" 
                   phx-value-app="media_player"
+                  phx-target={@target}
                   class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-700 transition-colors group"
                 >
                   <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">🎵</div>
@@ -99,6 +105,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 <button 
                   phx-click="open_app" 
                   phx-value-app="settings"
+                  phx-target={@target}
                   class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-700 transition-colors group"
                 >
                   <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">⚙️</div>
@@ -148,6 +155,18 @@ defmodule PhoenixAppWeb.Components.Taskbar do
           </div>
         </div>
         
+        <!-- Pinned Items -->
+        <div class="flex items-center space-x-1 px-2">
+          <button 
+            phx-click="open_app" 
+            phx-value-app="file_manager"
+            class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors group"
+            title="File Explorer"
+          >
+            <span class="text-lg group-hover:scale-110 transition-transform">📁</span>
+          </button>
+        </div>
+        
         <!-- Window Buttons (Running Applications) -->
         <div class="flex-1 flex items-center space-x-1 px-4">
           <% max_z_index = Enum.max_by(@open_windows, & &1.z_index, fn -> %{z_index: 0} end).z_index %>
@@ -189,8 +208,8 @@ defmodule PhoenixAppWeb.Components.Taskbar do
           <!-- Clock -->
           <div id="taskbar-clock" class="text-white text-sm font-medium px-3 py-2 bg-gray-800 rounded">
             <div class="text-center">
-              <div class="time"><%= DateTime.utc_now() |> Calendar.strftime("%H:%M") %></div>
-              <div class="text-xs text-gray-400 date"><%= Date.utc_today() |> Calendar.strftime("%m/%d") %></div>
+              <div class="time">--:--</div>
+              <div class="text-xs text-gray-400 date">--/--</div>
             </div>
           </div>
         </div>

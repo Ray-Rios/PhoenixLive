@@ -53,11 +53,11 @@ defmodule PhoenixAppWeb.HomeLive do
                 </p>
                 
                 <!-- Action Buttons -->
-                <div class="space-x-4">
-                  <.link navigate={~p"/register"} class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-lg text-lg transition-all duration-300 ease-in-out transform hover:scale-105">
+                <div class="flex flex-wrap gap-4 justify-center">
+                  <.link navigate={~p"/register"} class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-lg text-lg transition-all duration-300 ease-in-out transform hover:scale-105 whitespace-nowrap">
                     Create Account
                   </.link>
-                  <.link navigate={~p"/login"} class="border-2 border-white text-white hover:bg-white hover:text-black px-8 py-3 rounded-lg text-lg transition-all duration-300 ease-in-out">
+                  <.link navigate={~p"/login"} class="border-2 border-white text-white hover:bg-white hover:text-black px-8 py-3 rounded-lg text-lg transition-all duration-300 ease-in-out whitespace-nowrap">
                     Sign In
                   </.link>
                 </div>

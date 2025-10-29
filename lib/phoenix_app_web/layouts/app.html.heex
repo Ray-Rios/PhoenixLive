@@ -6,7 +6,16 @@
   
   <.flash_group flash={@flash} />
   
-  <main class="relative z-10 w-full">
+  <!-- Phoenix Desktop (taskbar + windows) - renders for authenticated users -->
+  <%= if assigns[:current_user] do %>
+    <.live_component 
+      module={PhoenixAppWeb.PhoenixDesktopLive} 
+      id="phoenix-desktop"
+      current_user={@current_user}
+    />
+  <% end %>
+  
+  <main class="relative z-10 w-full pb-12">
     <%= @inner_content %>
   </main>
 </div>

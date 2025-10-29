@@ -9,22 +9,27 @@ defmodule PhoenixAppWeb.ForumLive do
 
     if user do
       channels = Forum.list_channels()
-      default_channel = List.first(channels) || Forum.get_or_create_default_channel()
+      
+      # Ensure we have at least a default channel
+      default_channel = if Enum.empty?(channels) do
+        Forum.get_or_create_default_channel()
+      else
+        List.first(channels)
+      end
 
       # Subscribe to channel updates
       Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "chat:channels")
 
       socket = assign(socket,
-        channels: channels,
+        channels: if(Enum.empty?(channels), do: [default_channel], else: channels),
         current_channel: default_channel,
-        messages: [],
+        messages: Forum.list_messages(default_channel.id),
         current_message: "",
         online_users: %{},
         typing_users: MapSet.new(),
         show_create_channel: false,
         channel_form: Forum.change_channel(%Forum.Channel{}),
-        page_title: "Forum",
-        view_mode: :channel_list, # :channel_list or :channel_detail
+        page_title: "Forum - #{default_channel.name}",
         user_channels: Forum.list_user_channels(user.id),
         public_channels: Forum.list_public_channels(),
         show_channel_modal: false,
@@ -37,6 +42,9 @@ defmodule PhoenixAppWeb.ForumLive do
         max_entries: 5,
         max_file_size: 25_000_000
       )
+      
+      # Subscribe to the default channel
+      PubSub.subscribe(PhoenixApp.PubSub, "channel:#{default_channel.id}")
 
       {:ok, socket}
     else
@@ -192,7 +200,13 @@ defmodule PhoenixAppWeb.ForumLive do
 
   # Channel CRUD Events
   def handle_event("show_create_channel", _params, socket) do
-    {:noreply, assign(socket, show_create_channel: true)}
+    user = socket.assigns.current_user
+    
+    if user && (user.is_admin || user.role in ["admin", "gm", "editor"]) do
+      {:noreply, assign(socket, show_create_channel: true)}
+    else
+      {:noreply, put_flash(socket, :error, "You don't have permission to create channels.")}
+    end
   end
 
   def handle_event("hide_create_channel", _params, socket) do
@@ -209,20 +223,30 @@ defmodule PhoenixAppWeb.ForumLive do
   end
 
   def handle_event("create_channel", %{"channel" => channel_params}, socket) do
-    case Forum.create_user_channel(socket.assigns.current_user, channel_params) do
-      {:ok, channel} ->
-        channels = Forum.list_channels()
-        user_channels = Forum.list_user_channels(socket.assigns.current_user.id)
-        public_channels = Forum.list_public_channels()
+    user = socket.assigns.current_user
+    
+    # Check if user has permission to create channels
+    if user && (user.is_admin || user.role in ["admin", "gm", "editor"]) do
+      case Forum.create_user_channel(user, channel_params) do
+        {:ok, channel} ->
+          channels = Forum.list_channels()
+          user_channels = Forum.list_user_channels(user.id)
+          public_channels = Forum.list_public_channels()
 
-        {:noreply,
-         socket
-         |> assign(show_create_channel: false, channel_form: Forum.change_channel(%Forum.Channel{}))
-         |> assign(channels: channels, user_channels: user_channels, public_channels: public_channels)
-         |> put_flash(:info, "Channel '#{channel.name}' created successfully!")}
+          {:noreply,
+           socket
+           |> assign(show_create_channel: false, channel_form: Forum.change_channel(%Forum.Channel{}))
+           |> assign(channels: channels, user_channels: user_channels, public_channels: public_channels)
+           |> put_flash(:info, "Channel '#{channel.name}' created successfully!")}
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, channel_form: changeset)}
+        {:error, changeset} ->
+          {:noreply, assign(socket, channel_form: changeset)}
+      end
+    else
+      {:noreply,
+       socket
+       |> assign(show_create_channel: false)
+       |> put_flash(:error, "You don't have permission to create channels. Contact an admin.")}
     end
   end
 
@@ -356,12 +380,14 @@ defmodule PhoenixAppWeb.ForumLive do
                 <h1 class="text-3xl font-bold text-white mb-2">Community Forum</h1>
                 <p class="text-gray-400">Discuss, share, and connect with the community</p>
               </div>
-              <button
-                phx-click="show_create_channel"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-              >
-                📝 Create Channel
-              </button>
+              <%= if @current_user && (@current_user.is_admin || @current_user.role in ["admin", "gm", "editor"]) do %>
+                <button
+                  phx-click="show_create_channel"
+                  class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  📝 Create Channel
+                </button>
+              <% end %>
             </div>
           </div>
 
@@ -461,27 +487,7 @@ defmodule PhoenixAppWeb.ForumLive do
 
             <!-- Main Content -->
             <div class="col-span-9">
-              <%= if @view_mode == :channel_list do %>
-                <!-- Channel List View -->
-                <div class="bg-gray-800 rounded-lg p-6">
-                  <h2 class="text-white text-xl font-semibold mb-4">Browse Channels</h2>
-                  <p class="text-gray-400 mb-6">Select a channel from the sidebar to start discussing.</p>
-
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <%= for channel <- @public_channels ++ @user_channels do %>
-                      <div class="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition-colors">
-                        <.link navigate={"/forum/#{channel.id}"} class="block">
-                          <h3 class="text-white font-medium mb-2"><%= channel.name %></h3>
-                          <p class="text-gray-400 text-sm"><%= channel.description || "No description" %></p>
-                          <div class="text-gray-500 text-xs mt-2">
-                            <%= if channel.channel_type == "public", do: "Public", else: "Private" %> Channel
-                          </div>
-                        </.link>
-                      </div>
-                    <% end %>
-                  </div>
-                </div>
-              <% else %>
+              <%= if @current_channel do %>
                 <!-- Channel Detail View -->
                 <div class="bg-gray-800 rounded-lg overflow-hidden">
                   <!-- Channel Header -->
@@ -581,12 +587,11 @@ defmodule PhoenixAppWeb.ForumLive do
                       <div class="flex-1">
                         <textarea name="message"
                                   id="message-input"
-                                  value={@current_message}
-                                  phx-change="update_message"
-                                  placeholder="Type your message..."
+                                  phx-debounce="300"
+                                  placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
                                   rows="1"
                                   class="w-full bg-gray-700 text-white px-4 py-3 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none resize-none"
-                                  phx-hook="AutoResizeTextarea"></textarea>
+                                  phx-hook="ChatInput"></textarea>
                       </div>
                       <button type="button"
                               phx-click="toggle_uploads"

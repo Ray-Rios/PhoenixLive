@@ -2,8 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Babylon.js styles */
-@import "./babylon.css";
+/* 
+  ==================== Z-INDEX HIERARCHY ====================
+  Global z-index stack for layering UI elements:
+  
+  - z-0:  Background (Three.js canvas)
+  - z-10: Page content (main, forms, cards)
+  - z-20: Navbar
+  - z-30: Reserved
+  - z-40: Desktop windows (PhoenixDesktop)
+  - z-50: Taskbar, flash messages
+  - z-60: Modals, dialogs
+  - z-70: Tooltips, context menus
+  - z-1000: Critical overlays
+  
+  Note: PhoenixDesktopLive uses inline z-index for window stacking
+*/
 
 /* Alpine.js dropdown fix - ensure dropdowns are hidden by default until Alpine.js loads */
 [x-cloak] { 
@@ -18,102 +32,9 @@
   display: block !important;
 }
 
-/* Custom CSS for avatar shapes */
-.triangle {
-  width: 0;
-  height: 0;
-  border-left: 20px solid transparent;
-  border-right: 20px solid transparent;
-  border-bottom: 35px solid;
-  background: transparent !important;
-}
-
-.diamond {
-  width: 40px;
-  height: 40px;
-  transform: rotate(45deg);
-}
-
-.hexagon {
-  width: 40px;
-  height: 23px;
-  position: relative;
-}
-
-.hexagon:before,
-.hexagon:after {
-  content: "";
-  position: absolute;
-  width: 0;
-  border-left: 20px solid transparent;
-  border-right: 20px solid transparent;
-}
-
-.hexagon:before {
-  bottom: 100%;
-  border-bottom: 12px solid;
-}
-
-.hexagon:after {
-  top: 100%;
-  border-top: 12px solid;
-}
-
-.star {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 40px;
-}
-
-.star:before,
-.star:after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 40px;
-  height: 40px;
-  background: inherit;
-}
-
-.star:before {
-  transform: rotate(30deg);
-}
-
-.star:after {
-  transform: rotate(60deg);
-}
-
-.heart {
-  position: relative;
-  width: 40px;
-  height: 36px;
-  transform: rotate(-45deg);
-}
-
-.heart:before,
-.heart:after {
-  content: '';
-  width: 20px;
-  height: 32px;
-  position: absolute;
-  left: 20px;
-  background: inherit;
-  border-radius: 20px 20px 0 0;
-  transform: rotate(-45deg);
-  transform-origin: 0 100%;
-}
-
-.heart:after {
-  left: 0;
-  transform: rotate(45deg);
-  transform-origin: 100% 100%;
-}
-
 /* Smooth transitions for all interactive elements */
 * {
-  transition: all 0.3s ease;
+  transition: all 0.1s ease;
 }
 
 /* Custom scrollbar */
@@ -149,73 +70,7 @@
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Chat bubble styles */
-.chat-bubble {
-.play-ui-panel.play-ui-hidden {
-  transform: translateY(20px);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.build-ui-panel.build-ui-active {
-  transform: translate(-50%, 0);
-  opacity: 1;
-  pointer-events: auto;
-}
-  position: relative;
-  background: rgba(206, 117, 117, 0.9);
-.build-tool-btn {
-  background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid #334155;
-  padding: 6px 10px;
-  font-family: monospace;
-  font-size: 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background .2s ease, color .2s ease, transform .15s ease;
-}
-.build-tool-btn:hover { background:#1e293b; }
-.build-tool-btn:active { transform: scale(.94); }
-.build-tool-btn.active { background:#2563eb; border-color:#1d4ed8; color:#fff; }
-  border-radius: 12px;
-  padding: 8px 12px;
-#build-ui-panel input[type=range] { accent-color: #2563eb; }
-  margin-bottom: 8px;
-  max-width: 200px;
-  word-wrap: break-word;
-}
-
-.chat-bubble:after {
-  content: '';
-  position: absolute;
-  bottom: -8px;
-  left: 20px;
-  width: 0;
-  height: 0;
-  border: 8px solid transparent;
-  border-top-color: rgba(255, 255, 255, 0.9);
-}
-
-/* Starry Background - Full Screen Responsive */
-.starry-background {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-  background: #000;
-}
-
 /* Desktop Environment Styles */
-.desktop-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  /* Removed background to allow Three.js background to show through */
-}
-
 .desktop-window {
   position: absolute;
   background: white;
@@ -251,7 +106,7 @@
 }
 
 .window-control.close {
-  background: #ff5f57;
+  background: #ff3025;
 }
 
 .window-control.minimize {
@@ -266,24 +121,6 @@
   padding: 16px;
   height: calc(100% - 40px);
   overflow: auto;
-}
-
-.desktop-taskbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 48px;
-  /* Use unified glass system */
-  background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border-top: 1px solid var(--glass-border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 16px;
-  z-index: 1000;
 }
 
 /* Page Layout Styles */
@@ -346,86 +183,6 @@ html, body {
   pointer-events: auto; /* re-enable interactions for inner content */
 }
 
-/* Chat Styles */
-.chat-container {
-  display: flex;
-  height: calc(100vh - 30px);
-  position: fixed;
-  top: 30px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  transition: top 0.3s ease-in-out, height 0.3s ease-in-out;
-}
-
-.chat-container.navbar-hidden {
-  top: 0;
-  height: 100vh;
-}
-
-.chat-sidebar {
-  width: 240px;
-  background: #2f3136;
-  position: relative;
-  flex-shrink: 0;
-}
-
-.chat-main {
-  flex: 1;
-  background: #36393f;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-header {
-  height: 48px;
-  background: #36393f;
-  border-bottom: 1px solid #202225;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  color: white;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.message {
-  padding: 8px 16px;
-  margin-bottom: 4px;
-  border-radius: 4px;
-}
-
-.message-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.message-author {
-  font-weight: 600;
-  margin-right: 8px;
-}
-
-.message-timestamp {
-  font-size: 12px;
-  color: #72767d;
-}
-
-.message-content {
-  color: #dcddde;
-  line-height: 1.375;
-}
-
-.chat-input {
-  padding: 16px;
-  background: #40444b;
-}
-
 /* Shop Styles */
 .product-grid {
   display: grid;
@@ -471,26 +228,8 @@ html, body {
   color: #10b981;
 }
 
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-  .stars, .stars2, .stars3 {
-    transform: scale(0.8);
-  }
-  
-  .chat-container {
-    flex-direction: column;
-  }
-  
-  .chat-container.navbar-hidden {
-    top: 0;
-    height: 100vh;
-  }
-  
-  .chat-sidebar {
-    width: 100%;
-    height: 200px;
-  }
-  
+/* Responsive adjustments */
+@media (max-width: 768px) {
   .product-grid {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 16px;
@@ -502,21 +241,9 @@ html, body {
     left: 5% !important;
     top: 15% !important;
   }
+}
 
-  /* Shooting star */
-  .shooting-star {
-  position: absolute;
-  top: -10px;
-  left: -100px;
-  width: 2px;
-  height: 100px;
-  background: linear-gradient(45deg, white, transparent);
-  transform: rotate(45deg);
-  opacity: 0;
-  animation: shoot 3s linear infinite;
-  }
-
-  @keyframes shoot {
+@keyframes shoot {
   0% {
     transform: translate(0, 0) rotate(45deg);
     opacity: 0;
@@ -528,7 +255,6 @@ html, body {
     transform: translate(1200px, 600px) rotate(45deg);
     opacity: 0;
   }
- }
 }
 
 /* File Manager Styles */
@@ -699,15 +425,6 @@ html, body {
 }
 
 /* Desktop Environment Styles */
-.desktop-container {
-  position: fixed;
-  top: 30px; /* Account for navbar */
-  left: 0;
-  right: 0;
-  bottom: 48px; /* Account for taskbar */
-  overflow: hidden;
-}
-
 .desktop-window {
   position: absolute;
   background: #1f2937;
@@ -846,10 +563,10 @@ html, body {
 
 /* Dynamic Glass Theme System */
 :root {
-  --glass-bg: rgba(0, 0, 0, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(17, 24, 39, 0.199);
+  --glass-border: rgba(255, 234, 141, 0.123);
   --glass-blur: 15px;
-  --glass-saturation: 120%;
+  --glass-saturation: 130%;
 }
 
 .glass-panel {
@@ -858,70 +575,70 @@ html, body {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border: 1px solid var(--glass-border);
   box-shadow: 
-    0 8px 32px 0 rgba(31, 38, 135, 0.37),
+    0 8px 32px 0 rgba(33, 129, 255, 0.37),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .glass-dark {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.15);
   -webkit-backdrop-filter: blur(15px) saturate(120%);
   backdrop-filter: blur(15px) saturate(120%);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .glass-blue {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.15);
   -webkit-backdrop-filter: blur(12px) saturate(130%);
   backdrop-filter: blur(12px) saturate(130%);
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .glass-purple {
-  background: rgba(147, 51, 234, 0.2);
+  background: rgba(124, 16, 224, 0.15);
   -webkit-backdrop-filter: blur(12px) saturate(130%);
   backdrop-filter: blur(12px) saturate(130%);
-  border: 1px solid rgba(147, 51, 234, 0.3);
+  border: 1px solid rgba(127, 17, 230, 0.3);
 }
 
 .glass-green {
-  background: rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.15);
   -webkit-backdrop-filter: blur(12px) saturate(130%);
   backdrop-filter: blur(12px) saturate(130%);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  border: 1px solid rgba(1, 206, 35, 0.3);
 }
 
 .glass-red {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.15);
   -webkit-backdrop-filter: blur(12px) saturate(130%);
   backdrop-filter: blur(12px) saturate(130%);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(218, 4, 4, 0.644);
 }
 
 .glass-amber {
-  background: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.15);
   -webkit-backdrop-filter: blur(12px) saturate(130%);
   backdrop-filter: blur(12px) saturate(130%);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid rgba(252, 235, 3, 0.3);
 }
 
 .glass-teal {
-  background: rgba(20, 184, 166, 0.2);
+  background: rgba(20, 184, 166, 0.15);
   -webkit-backdrop-filter: blur(12px) saturate(130%);
   backdrop-filter: blur(12px) saturate(130%);
-  border: 1px solid rgba(20, 184, 166, 0.3);
+  border: 1px solid rgba(7, 238, 238, 0.226);
 }
 
 /* Frosted Glass Button Styles */
 .glass-button {
-  background: rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  backdrop-filter: blur(10px) saturate(120%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
+  background: rgba(111, 10, 243, 0.55);
+  -webkit-backdrop-filter: blur(15px) saturate(120%);
+  backdrop-filter: blur(15px) saturate(120%);
+  border: 1px solid rgba(151, 151, 151, 0.13);
+  transition: all 0.1s ease;
 }
 
 .glass-button:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(3, 135, 243, 0.863);
   border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-1px);
 }
@@ -932,7 +649,8 @@ html, body {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border: 1px solid var(--glass-border);
-  box-shadow: 
-    0 8px 32px 0 rgba(31, 38, 135, 0.37),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  /* Further reduced outer glow: halve blur and opacity again for even subtler effect */
+  box-shadow:
+    0 2px 4px 0 rgba(82, 82, 82, 0.082),
+    inset 0 1px 0 rgba(0, 0, 0, 0.123);
 }

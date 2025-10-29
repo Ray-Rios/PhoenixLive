@@ -47,20 +47,20 @@ defmodule PhoenixAppWeb.AdminLive.Files do
   def render(assigns) do
     ~H"""
     <div class="min-h-screen">
-      <div class="flex relative z-10">
+      <div class="flex relative z-10 pt-[30px]">
         <!-- Admin Sidebar -->
-        <div class={"bg-gray-900 min-h-screen transition-all duration-300 " <> if @sidebar_collapsed, do: "w-16", else: "w-64"}>
+        <div class={"bg-gray-900 transition-all duration-300 fixed left-0 top-[30px] h-[calc(100vh-30px)] " <> if @sidebar_collapsed, do: "w-16", else: "w-64"}>
           <div class="p-4">
-            <div class="flex items-center justify-between mb-6">
-              <h2 class={"text-xl font-bold text-white transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0", else: "opacity-100"}>
+            <div class={"flex items-center mb-6 " <> if @sidebar_collapsed, do: "justify-center", else: "justify-between"}>
+              <h2 class={"text-xl font-bold text-white transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
                 Admin Panel
               </h2>
               <button
                 phx-click="toggle_sidebar"
-                class="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800"
+                class={"text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800 " <> if @sidebar_collapsed, do: "transform rotate-180", else: ""}}
               >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={if @sidebar_collapsed, do: "M9 5l7 7-7 7", else: "M15 19l-7-7 7-7"}></path>
+                <svg class="w-6 h-6 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                 </svg>
               </button>
             </div>
@@ -95,7 +95,7 @@ defmodule PhoenixAppWeb.AdminLive.Files do
         </div>
 
         <!-- Main Content -->
-        <div class="flex-1 p-8">
+        <div class={"flex-1 p-8 transition-all duration-300 " <> if @sidebar_collapsed, do: "ml-16", else: "ml-64"}>
           <div class="max-w-7xl mx-auto">
             <h1 class="text-3xl font-bold text-white mb-8">Media Library</h1>
             

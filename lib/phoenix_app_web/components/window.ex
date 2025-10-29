@@ -10,6 +10,7 @@ defmodule PhoenixAppWeb.Components.Window do
   """
   attr :window, :map, required: true
   attr :current_user, :map, default: nil
+  attr :target, :any, default: nil
   slot :inner_block, required: true
 
   def desktop_window(assigns) do
@@ -20,10 +21,11 @@ defmodule PhoenixAppWeb.Components.Window do
          id={"window-#{@window.id}"}
          phx-hook="DesktopWindow"
          phx-click="focus_window" 
+         phx-target={@target}
          phx-value-window_id={@window.id}>
       
       <!-- Window Header -->
-      <div class="window-header bg-gray-800 border-b border-gray-600 px-4 py-2 flex justify-between items-center cursor-move">
+      <div class="window-header auth-glass-panel border-b border-gray-600 px-4 py-2 flex justify-between items-center cursor-move">
         <div class="flex items-center space-x-3">
           <span class="text-lg"><%= get_app_icon(@window.app) %></span>
           <span class="text-white font-medium"><%= @window.title %></span>
@@ -33,6 +35,7 @@ defmodule PhoenixAppWeb.Components.Window do
           <button 
             phx-click="minimize_window" 
             phx-value-window_id={@window.id}
+            phx-target={@target}
             class="w-6 h-6 bg-yellow-500 hover:bg-yellow-600 rounded-full flex items-center justify-center transition-colors"
             title="Minimize"
           >
@@ -42,6 +45,7 @@ defmodule PhoenixAppWeb.Components.Window do
           <button 
             phx-click={if @window.maximized, do: "restore_window", else: "maximize_window"}
             phx-value-window_id={@window.id}
+            phx-target={@target}
             class="w-6 h-6 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors"
             title={if @window.maximized, do: "Restore", else: "Maximize"}
           >
@@ -51,6 +55,7 @@ defmodule PhoenixAppWeb.Components.Window do
           <button 
             phx-click="close_window" 
             phx-value-window_id={@window.id}
+            phx-target={@target}
             class="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
             title="Close"
           >
@@ -60,7 +65,7 @@ defmodule PhoenixAppWeb.Components.Window do
       </div>
       
       <!-- Window Content -->
-      <div class="window-content bg-gray-900 text-white flex-1 overflow-hidden">
+      <div class="window-content auth-glass-panel text-white flex-1 overflow-hidden">
         <%= render_slot(@inner_block) %>
       </div>
       
@@ -100,29 +105,45 @@ defmodule PhoenixAppWeb.Components.Window do
         <div class="flex items-center justify-between gap-4">
           <!-- Navigation -->
           <div class="flex items-center space-x-2">
-            <button class="p-2 hover:bg-gray-700 rounded">
+            <button 
+              phx-click="navigate_back"
+              phx-value-window_id={@window.id}
+              disabled={@window.current_path == "/"}
+              class={["p-2 rounded", if(@window.current_path == "/", do: "opacity-50 cursor-not-allowed", else: "hover:bg-gray-700")]}
+            >
               ← Back
             </button>
-            <button class="p-2 hover:bg-gray-700 rounded">
-              → Forward
-            </button>
-            <button class="p-2 hover:bg-gray-700 rounded">
-              ↑ Up
+            <button 
+              phx-click="navigate_to"
+              phx-value-window_id={@window.id}
+              phx-value-path="/"
+              class="p-2 hover:bg-gray-700 rounded"
+            >
+              🏠 Home
             </button>
           </div>
           
-          <!-- Search -->
-          <div class="flex-1 max-w-md">
-            <form phx-submit="file_search" phx-target={"#window-#{@window.id}"}>
-              <input
-                type="text"
-                name="query"
-                value={@search_query}
-                placeholder="Search files..."
-                class="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                phx-debounce="300"
-              />
-            </form>
+          <!-- Breadcrumb Navigation -->
+          <div class="flex-1 flex items-center space-x-1 text-sm overflow-x-auto">
+            <button 
+              phx-click="navigate_to"
+              phx-value-window_id={@window.id}
+              phx-value-path="/"
+              class="text-blue-400 hover:text-blue-300"
+            >
+              Root
+            </button>
+            <%= for breadcrumb <- @window.breadcrumbs do %>
+              <span class="text-gray-500">/</span>
+              <button 
+                phx-click="navigate_to"
+                phx-value-window_id={@window.id}
+                phx-value-path={breadcrumb.path}
+                class="text-blue-400 hover:text-blue-300 whitespace-nowrap"
+              >
+                <%= breadcrumb.label %>
+              </button>
+            <% end %>
           </div>
           
           <!-- View Options -->
@@ -131,7 +152,7 @@ defmodule PhoenixAppWeb.Components.Window do
               phx-click="change_view_mode" 
               phx-value-mode="grid" 
               phx-value-window_id={@window.id}
-              class={["p-2 rounded", if(@view_mode == "grid", do: "bg-blue-600", else: "hover:bg-gray-700")]}
+              class={["p-2 rounded", if(@window.view_mode == "grid", do: "bg-blue-600", else: "hover:bg-gray-700")]}
             >
               ⊞
             </button>
@@ -139,112 +160,87 @@ defmodule PhoenixAppWeb.Components.Window do
               phx-click="change_view_mode" 
               phx-value-mode="list" 
               phx-value-window_id={@window.id}
-              class={["p-2 rounded", if(@view_mode == "list", do: "bg-blue-600", else: "hover:bg-gray-700")]}
+              class={["p-2 rounded", if(@window.view_mode == "list", do: "bg-blue-600", else: "hover:bg-gray-700")]}
             >
               ☰
             </button>
           </div>
         </div>
-        
-        <!-- Filters -->
-        <div class="flex items-center space-x-2 mt-2">
-          <%= for {label, type} <- [{"All", "all"}, {"Images", "image"}, {"Videos", "video"}, {"Documents", "document"}] do %>
-            <button
-              phx-click="filter_files"
-              phx-value-type={type}
-              phx-value-window_id={@window.id}
-              class={["px-3 py-1 rounded text-sm", if(@filter == type, do: "bg-blue-600 text-white", else: "bg-gray-700 text-gray-300 hover:bg-gray-600")]}
-            >
-              <%= label %>
-            </button>
-          <% end %>
-        </div>
       </div>
       
-      <!-- File Area -->
-      <div class="flex-1 overflow-auto p-4">
-        <%= if @view_mode == "grid" do %>
-          <!-- Grid View -->
-          <div class="grid grid-cols-4 gap-4">
-            <%= for upload <- paginated_uploads(@filtered_uploads, @current_page, @page_size) do %>
-              <div class="bg-gray-800 rounded-lg p-3 hover:bg-gray-700 transition-colors cursor-pointer group">
+      <!-- File/Drive Area -->
+      <div class="flex-1 overflow-auto p-4 bg-gray-900">
+        <%= if @window.current_path == "/" do %>
+          <!-- Drive Selection View -->
+          <div class="grid grid-cols-2 gap-6 max-w-2xl mx-auto mt-8">
+            <%= for drive <- @window.current_items do %>
+              <div 
+                phx-click="navigate_to"
+                phx-value-window_id={@window.id}
+                phx-value-path={drive.path}
+                class="bg-gray-800 rounded-xl p-8 transition-all cursor-pointer hover:bg-gray-700 hover:scale-105 border-2 border-blue-500/30 hover:border-blue-500/60"
+              >
                 <div class="text-center">
-                  <div class="text-3xl mb-2">
-                    <%= if upload.file_type == "image" && upload.url do %>
-                      <img src={upload.url} alt={upload.original_filename} class="w-12 h-12 mx-auto object-cover rounded" />
-                    <% else %>
-                      <span><%= file_type_icon(upload.file_type) %></span>
-                    <% end %>
-                  </div>
-                  <div class="text-white text-xs truncate"><%= upload.original_filename %></div>
-                  <div class="text-gray-400 text-xs"><%= format_bytes(upload.file_size) %></div>
-                  
-                  <!-- Quick Actions -->
-                  <div class="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div class="flex justify-center space-x-1">
-                      <%= if @is_admin do %>
-                        <button 
-                          phx-click="toggle_public" 
-                          phx-value-id={upload.id}
-                          class={["text-xs px-2 py-1 rounded", if(upload.is_public, do: "bg-green-600", else: "bg-gray-600")]}
-                        >
-                          <%= if upload.is_public, do: "🌐", else: "🔒" %>
-                        </button>
-                      <% end %>
-                      <button 
-                        phx-click="delete_upload" 
-                        phx-value-id={upload.id}
-                        class="text-xs px-2 py-1 rounded bg-red-600 hover:bg-red-700"
-                        data-confirm="Delete this file?"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
+                  <div class="text-6xl mb-4"><%= drive.icon %></div>
+                  <div class="text-white text-lg font-bold mb-2"><%= drive.name %></div>
+                  <div class="text-gray-400 text-sm"><%= drive.description %></div>
                 </div>
               </div>
             <% end %>
           </div>
         <% else %>
-          <!-- List View -->
-          <div class="space-y-1">
-            <%= for upload <- paginated_uploads(@filtered_uploads, @current_page, @page_size) do %>
-              <div class="flex items-center justify-between p-2 hover:bg-gray-800 rounded transition-colors">
-                <div class="flex items-center space-x-3 flex-1 min-w-0">
-                  <div class="text-lg">
-                    <%= if upload.file_type == "image" && upload.url do %>
-                      <img src={upload.url} alt={upload.original_filename} class="w-6 h-6 object-cover rounded" />
-                    <% else %>
-                      <span><%= file_type_icon(upload.file_type) %></span>
+          <!-- File/Folder View -->
+          <%= if @window.view_mode == "grid" do %>
+            <div class="grid grid-cols-5 gap-4">
+              <%= for item <- @window.current_items do %>
+                <div 
+                  phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: nil}
+                  phx-value-window_id={@window.id}
+                  phx-value-path={item.path}
+                  class="bg-gray-800 rounded-lg p-4 transition-colors cursor-pointer hover:bg-gray-700 group"
+                >
+                  <div class="text-center">
+                    <div class="text-4xl mb-2"><%= item.icon %></div>
+                    <div class="text-white text-sm truncate" title={item.name}><%= item.name %></div>
+                    <%= if item.size do %>
+                      <div class="text-gray-400 text-xs mt-1"><%= format_bytes(item.size) %></div>
                     <% end %>
                   </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-white text-sm truncate"><%= upload.original_filename %></div>
-                    <div class="text-gray-400 text-xs"><%= format_bytes(upload.file_size) %></div>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <!-- List View -->
+            <div class="space-y-1">
+              <%= for item <- @window.current_items do %>
+                <div 
+                  phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: nil}
+                  phx-value-window_id={@window.id}
+                  phx-value-path={item.path}
+                  class="flex items-center justify-between p-3 hover:bg-gray-800 rounded transition-colors cursor-pointer"
+                >
+                  <div class="flex items-center space-x-3 flex-1 min-w-0">
+                    <div class="text-2xl"><%= item.icon %></div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-white text-sm truncate"><%= item.name %></div>
+                      <%= if item.size do %>
+                        <div class="text-gray-400 text-xs"><%= format_bytes(item.size) %></div>
+                      <% end %>
+                    </div>
+                  </div>
+                  <div class="text-gray-500 text-xs">
+                    <%= item.type %>
                   </div>
                 </div>
-                
-                <div class="flex items-center space-x-2">
-                  <%= if @is_admin do %>
-                    <button 
-                      phx-click="toggle_public" 
-                      phx-value-id={upload.id}
-                      class={["text-xs px-2 py-1 rounded", if(upload.is_public, do: "bg-green-600 text-white", else: "bg-gray-600 text-gray-300")]}
-                    >
-                      <%= if upload.is_public, do: "Public", else: "Private" %>
-                    </button>
-                  <% end %>
-                  <button 
-                    phx-click="delete_upload" 
-                    phx-value-id={upload.id}
-                    class="text-xs px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white"
-                    data-confirm="Delete this file?"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            <% end %>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+        
+        <%= if @window.current_items == [] do %>
+          <div class="text-center text-gray-500 mt-20">
+            <div class="text-6xl mb-4">📂</div>
+            <div class="text-lg">This folder is empty</div>
           </div>
         <% end %>
       </div>
@@ -253,34 +249,11 @@ defmodule PhoenixAppWeb.Components.Window do
       <div class="bg-gray-800 border-t border-gray-600 px-4 py-2 text-sm text-gray-300">
         <div class="flex justify-between items-center">
           <div>
-            <%= length(@filtered_uploads) %> items
-            <%= if @stats[:total_size] do %>
-              • <%= format_bytes(@stats.total_size) %> total
+            <%= length(@window.current_items) %> items
+            <%= if @window.current_path != "/" do %>
+              • <%= @window.current_path %>
             <% end %>
           </div>
-          <%= if length(@filtered_uploads) > @page_size do %>
-            <div class="flex items-center space-x-2">
-              <button 
-                :if={@current_page > 1}
-                phx-click="change_page" 
-                phx-value-page={@current_page - 1}
-                phx-value-window_id={@window.id}
-                class="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600"
-              >
-                ← Prev
-              </button>
-              <span>Page <%= @current_page %></span>
-              <button 
-                :if={@current_page * @page_size < length(@filtered_uploads)}
-                phx-click="change_page" 
-                phx-value-page={@current_page + 1}
-                phx-value-window_id={@window.id}
-                class="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600"
-              >
-                Next →
-              </button>
-            </div>
-          <% end %>
         </div>
       </div>
     </div>
@@ -303,13 +276,6 @@ defmodule PhoenixAppWeb.Components.Window do
     end
   end
 
-  defp file_type_icon("image"), do: "🖼️"
-  defp file_type_icon("video"), do: "🎥"
-  defp file_type_icon("audio"), do: "🎵"
-  defp file_type_icon("3d"), do: "🎲"
-  defp file_type_icon("document"), do: "📄"
-  defp file_type_icon(_), do: "📁"
-
   defp format_bytes(bytes) do
     cond do
       bytes >= 1_000_000_000 -> "#{Float.round(bytes / 1_000_000_000, 1)} GB"
@@ -317,10 +283,5 @@ defmodule PhoenixAppWeb.Components.Window do
       bytes >= 1_000 -> "#{Float.round(bytes / 1_000, 1)} KB"
       true -> "#{bytes} B"
     end
-  end
-
-  defp paginated_uploads(uploads, current_page, page_size) do
-    start_index = (current_page - 1) * page_size
-    Enum.slice(uploads, start_index, page_size)
   end
 end

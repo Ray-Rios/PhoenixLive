@@ -63,6 +63,38 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
+  def handle_event("save_draft_button", _params, socket) do
+    # Get data from the form's current changeset
+    changeset = socket.assigns.form.source
+    post_data = Ecto.Changeset.apply_changes(changeset)
+    
+    # Convert to params map
+    post_params = post_data
+    |> Map.from_struct()
+    |> Map.drop([:__meta__, :user, :inserted_at, :updated_at, :id])
+    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+    |> Enum.into(%{})
+    
+    # Call save with draft action
+    handle_event("save", %{"post" => post_params, "action_type" => "draft"}, socket)
+  end
+
+  def handle_event("save_publish_button", _params, socket) do
+    # Get data from the form's current changeset
+    changeset = socket.assigns.form.source
+    post_data = Ecto.Changeset.apply_changes(changeset)
+    
+    # Convert to params map
+    post_params = post_data
+    |> Map.from_struct()
+    |> Map.drop([:__meta__, :user, :inserted_at, :updated_at, :id])
+    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+    |> Enum.into(%{})
+    
+    # Call save with publish action
+    handle_event("save", %{"post" => post_params, "action_type" => "publish"}, socket)
+  end
+
   def handle_event("autosave_draft", %{"post" => post_params}, socket) do
     # Save as draft, but do not publish
     draft_params = Map.put(post_params, "is_published", false)
@@ -86,84 +118,16 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     end
   end
 
-  def handle_event("save", %{"post" => post_params}, socket) do
-    # Process uploads first
-    uploaded_files = consume_uploaded_entries(socket, :featured_image, fn %{path: path}, entry ->
-      # Create uploads directory for user
-      user_id = socket.assigns.current_user.id
-      dest_dir = Path.join(["uploads", "users", user_id, "blog", "images"])
-      File.mkdir_p!(dest_dir)
-      
-      # Generate unique filename
-      ext = Path.extname(entry.client_name)
-      filename = "#{:crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)}#{ext}"
-      dest_path = Path.join(dest_dir, filename)
-      
-      # Copy file
-      File.cp!(path, dest_path)
-      
-      # Create media record
-      {:ok, media} = Media.create_media(socket.assigns.current_user, %{
-        "filename" => filename,
-        "original_filename" => entry.client_name,
-        "file_type" => "image",
-        "mime_type" => entry.client_type,
-        "file_size" => entry.client_size,
-        "file_path" => dest_path,
-        "url" => "/#{dest_path}",
-        "usage_context" => "blog_featured"
-      })
-      
-      {:ok, media.url}
-    end)
+  def handle_event("save", %{"post" => post_params, "action_type" => action_type}, socket) do
+    # Determine if we should publish based on the action_type
+    should_publish = action_type == "publish"
     
-    # Add featured image URL to post params if uploaded
-    processed_params = 
-      post_params
-      |> process_post_params()
-      |> maybe_add_featured_image(uploaded_files)
-    
-    case socket.assigns.editing_post do
-      nil ->
-        # Create new post
-        case Content.create_post(socket.assigns.current_user, processed_params) do
-          {:ok, _post} ->
-            posts = Content.list_posts()
-            {:noreply, assign(socket,
-              posts: posts,
-              show_form: false,
-              form: to_form(Post.changeset(%Post{}, %{}))
-            ) |> put_flash(:info, "Post created successfully!")}
-          
-          {:error, changeset} ->
-            {:noreply, assign(socket, form: to_form(changeset))}
-        end
-      
-      post ->
-        # Update existing post
-        case Content.update_post(post, processed_params) do
-          {:ok, _post} ->
-            posts = Content.list_posts()
-            {:noreply, assign(socket,
-              posts: posts,
-              show_form: false,
-              editing_post: nil,
-              form: to_form(Post.changeset(%Post{}, %{}))
-            ) |> put_flash(:info, "Post updated successfully!")}
-          
-          {:error, changeset} ->
-            {:noreply, assign(socket, form: to_form(changeset))}
-        end
-    end
-  end
-
-  def handle_event("publish_now", %{"post" => post_params}, socket) do
-    # Validate that we have the minimum required fields
-    if is_nil(post_params["title"]) or String.trim(post_params["title"]) == "" or 
-       is_nil(post_params["content"]) or String.trim(post_params["content"]) == "" do
+    # Validate required fields if publishing
+    if should_publish and (is_nil(post_params["title"]) or String.trim(post_params["title"]) == "" or 
+       is_nil(post_params["content"]) or String.trim(post_params["content"]) == "") do
       {:noreply, put_flash(socket, :error, "Cannot publish: Post must have a title and content")}
     else
-      # Process uploads first (same as save)
+      # Process uploads first
       uploaded_files = consume_uploaded_entries(socket, :featured_image, fn %{path: path}, entry ->
         user_id = socket.assigns.current_user.id
         dest_dir = Path.join(["uploads", "users", user_id, "blog", "images"])
@@ -189,51 +153,62 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
         {:ok, media.url}
       end)
       
-      # Force publish status to true
+      # Process params and set publication status
       processed_params = 
         post_params
         |> process_post_params()
         |> maybe_add_featured_image(uploaded_files)
-        |> Map.put("is_published", true)
-    
-    case socket.assigns.editing_post do
-      nil ->
-        # Create new published post
-        case Content.create_post(socket.assigns.current_user, processed_params) do
-          {:ok, _post} ->
-            posts = Content.list_posts()
-            {:noreply, assign(socket,
-              posts: posts,
-              show_form: false,
-              form: to_form(Post.changeset(%Post{}, %{}))
-            ) |> put_flash(:info, "Post published successfully!")}
-          
-          {:error, changeset} ->
-            {:noreply, assign(socket, form: to_form(changeset))}
-        end
+        |> Map.put("is_published", should_publish)
       
-      post ->
-        # Update and publish existing post
-        case Content.update_post(post, processed_params) do
-          {:ok, _post} ->
-            posts = Content.list_posts()
-            {:noreply, assign(socket,
-              posts: posts,
-              show_form: false,
-              editing_post: nil,
-              form: to_form(Post.changeset(%Post{}, %{}))
-            ) |> put_flash(:info, "Post updated and published successfully!")}
-          
-          {:error, changeset} ->
-            {:noreply, assign(socket, form: to_form(changeset))}
-        end
-    end
+      # Set published_at if publishing
+      processed_params = if should_publish do
+        Map.put_new(processed_params, "published_at", DateTime.utc_now())
+      else
+        processed_params
+      end
+      
+      case socket.assigns.editing_post do
+        nil ->
+          # Create new post
+          case Content.create_post(socket.assigns.current_user, processed_params) do
+            {:ok, _post} ->
+              posts = Content.list_posts()
+              success_msg = if should_publish, do: "Post published successfully!", else: "Draft saved successfully!"
+              {:noreply, assign(socket,
+                posts: posts,
+                show_form: false,
+                editing_post: nil,
+                form: to_form(Post.changeset(%Post{}, %{}))
+              ) |> put_flash(:info, success_msg)}
+            
+            {:error, changeset} ->
+              {:noreply, assign(socket, form: to_form(changeset))}
+          end
+        
+        post ->
+          # Update existing post
+          case Content.update_post(post, processed_params) do
+            {:ok, _post} ->
+              posts = Content.list_posts()
+              success_msg = if should_publish, do: "Post updated and published successfully!", else: "Draft updated successfully!"
+              {:noreply, assign(socket,
+                posts: posts,
+                show_form: false,
+                editing_post: nil,
+                form: to_form(Post.changeset(%Post{}, %{}))
+              ) |> put_flash(:info, success_msg)}
+            
+            {:error, changeset} ->
+              {:noreply, assign(socket, form: to_form(changeset))}
+          end
+      end
     end
   end
 
-  # Fallback for publish_now without form data
-  def handle_event("publish_now", _params, socket) do
-    {:noreply, put_flash(socket, :error, "Cannot publish: Form data is missing. Please fill out all required fields.")}
+  # Fallback for old save handler (in case action_type is missing)
+  def handle_event("save", %{"post" => post_params}, socket) do
+    # Default to draft if no action_type specified
+    handle_event("save", %{"post" => post_params, "action_type" => "draft"}, socket)
   end
 
   def handle_event("delete_post", %{"id" => id}, socket) do
@@ -475,10 +450,14 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
 
                 <div class="mt-6">
                   <div class="flex space-x-4">
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
+                    <button 
+                      phx-click="save_draft_button"
+                      class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
                       <%= if @editing_post, do: "Save Changes", else: "Save Draft" %>
                     </button>
-                    <button type="button" phx-click="publish_now" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
+                    <button 
+                      phx-click="save_publish_button"
+                      class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
                       <%= if @editing_post, do: "Update & Publish", else: "Publish Now" %>
                     </button>
                     <button type="button" phx-click="cancel_form" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">

@@ -1,25 +1,30 @@
 export const GlassTheme = {
   mounted(this: any) {
-    console.log('GlassTheme hook mounted');
+    console.log('✅ GlassTheme hook mounted');
     
     // Listen for glass theme updates from LiveView
     this.handleEvent("update_glass_theme", (data: any) => {
-      console.log('Updating glass theme:', data);
+      console.log('🎨 GlassTheme: Received update_glass_theme from LiveView:', data);
       this.applyGlassTheme(data);
       
       // If this is a global update, dispatch a window event for all components
       if (data.global) {
         window.dispatchEvent(new CustomEvent('glass-theme-update', { detail: data }));
+        console.log('📢 GlassTheme: Dispatched glass-theme-update window event');
       }
     });
     
     // Listen for global glass theme updates from other components
     window.addEventListener('glass-theme-update', (event: any) => {
+      console.log('👂 GlassTheme: Received glass-theme-update window event:', event.detail);
       this.applyGlassTheme(event.detail);
     });
+    
+    console.log('👂 GlassTheme: Now listening for update_glass_theme and glass-theme-update events');
   },
 
   applyGlassTheme(data: any) {
+    console.log('🎨 Applying glass theme:', data);
     const root = document.documentElement;
     
     // Convert theme to CSS values - base colors with placeholder for opacity

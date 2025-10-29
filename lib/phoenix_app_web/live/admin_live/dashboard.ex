@@ -51,29 +51,23 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
   def render(assigns) do
     ~H"""
     <div class="min-h-screen">
-      <div class="flex relative z-10">
+      <div class="flex relative z-10 pt-[30px]">
         <!-- Admin Sidebar -->
-        <div class={"auth-glass-panel min-h-screen transition-all duration-300 " <> if @sidebar_collapsed, do: "w-16", else: "w-64"}>
+        <div class={"auth-glass-panel transition-all duration-300 fixed left-0 top-[30px] h-[calc(100vh-30px)] " <> if @sidebar_collapsed, do: "w-16", else: "w-64"}>
           <div class="p-4">
             <!-- Sidebar Header with Toggle -->
-            <div class="flex items-center justify-between mb-6">
-              <h2 class={"text-xl font-bold text-white transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0", else: "opacity-100"}>
+            <div class={"flex items-center mb-6 " <> if @sidebar_collapsed, do: "justify-center", else: "justify-between"}>
+              <h2 class={"text-xl font-bold text-white transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
                 Admin Panel
               </h2>
               <button
                 phx-click="toggle_sidebar"
-                class="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800"
+                class={"text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800 " <> if @sidebar_collapsed, do: "transform rotate-180", else: ""}}
                 title={if @sidebar_collapsed, do: "Expand sidebar", else: "Collapse sidebar"}
               >
-                <%= if @sidebar_collapsed do %>
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                  </svg>
-                <% else %>
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                  </svg>
-                <% end %>
+                <svg class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
               </button>
             </div>
 
@@ -169,7 +163,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
         </div>
 
         <!-- Main Content -->
-        <div class="flex-1 p-8">
+        <div class={"flex-1 p-8 transition-all duration-300 " <> if @sidebar_collapsed, do: "ml-16", else: "ml-64"}>
           <div class="auth-glass-panel p-8 rounded-xl">
           <h1 class="text-3xl font-bold text-white mb-8">Dashboard</h1>
           

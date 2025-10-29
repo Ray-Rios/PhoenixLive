@@ -528,11 +528,10 @@ defmodule PhoenixAppWeb.AuthLive do
   # ----------------
   def render(assigns) do
     ~H"""
-      <.flash_group flash={@flash} />
       
       <!-- Auth Form -->
       <div class="relative z-10 flex items-center justify-center min-h-screen py-12 px-4">
-        <div class="auth-glass-panel p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div class="glass-dark p-8 rounded-xl shadow-2xl w-full max-w-md">
           
           <%= if @action == :verify_code do %>
             <!-- Email Verification Form -->

@@ -53,11 +53,8 @@ defmodule PhoenixAppWeb.AvatarLive do
 
   defp generate_avatar_shapes do
     [
-      "circle", "square", "triangle", "diamond", "hexagon", "star", "heart", "pentagon",
-      "octagon", "cross", "plus", "minus", "arrow-up", "arrow-down", "arrow-left", "arrow-right",
-      "chevron-up", "chevron-down", "chevron-left", "chevron-right", "check", "x", "dot",
-      "ring", "oval", "rectangle", "parallelogram", "trapezoid", "rhombus", "kite"
-    ] ++ Enum.map(1..70, fn i -> "shape-#{i}" end)
+      "circle", "square", "rounded"
+    ]
   end
 
   defp generate_avatar_colors do
@@ -157,10 +154,6 @@ defmodule PhoenixAppWeb.AvatarLive do
 
   defp get_shape_class("circle"), do: "rounded-full"
   defp get_shape_class("square"), do: "rounded-none"
-  defp get_shape_class("triangle"), do: "triangle"
-  defp get_shape_class("diamond"), do: "diamond"
-  defp get_shape_class("hexagon"), do: "hexagon"
-  defp get_shape_class("star"), do: "star"
-  defp get_shape_class("heart"), do: "heart"
+  defp get_shape_class("rounded"), do: "rounded-lg"
   defp get_shape_class(_), do: "rounded-lg"
 end

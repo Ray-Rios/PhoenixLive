@@ -83,7 +83,20 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
   def render(assigns) do
     ~H"""
     <div class="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 relative z-10">
-      <div class="max-w-md w-full space-y-8">
+      <div class="auth-glass-panel max-w-md w-full space-y-8">
+        <!-- Back to Home Link -->
+        <div class="text-left">
+          <.link 
+            navigate={~p"/"} 
+            class="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors text-sm"
+          >
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to Home
+          </.link>
+        </div>
+        
         <div class="text-center">
           <h2 class="mt-6 text-3xl font-extrabold text-white">
             Forgot your password?
@@ -106,7 +119,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
             </p>
           </div>
         <% else %>
-          <div class="auth-glass-panel rounded-xl shadow-2xl p-8">
+          <div class="rounded-xl shadow-2xl p-8">
           <.form 
             for={@form} 
             phx-submit="submit" 

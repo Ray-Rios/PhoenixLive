@@ -23,6 +23,10 @@ import { RichEditor } from "./rich_editor";
 import { BlogAutosave } from "./blog_autosave_hook";
 import { DeviceFingerprintHook } from "./device_fingerprint";
 import { GlassTheme } from "./glass_theme";
+import { BackgroundUpdater } from "./background_updater";
+import { GlobalHooks } from "./global_hooks";
+import { ProfileSettings } from "./profile_settings";
+import { ColorPicker } from "./color_picker";
 
 // Import Desktop hooks
 import "./desktop";
@@ -61,7 +65,9 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 const AutoDismissFlash = {
   mounted(this: { el: HTMLElement }) {
     const el = this.el;
-    const delay = parseInt(el.dataset.autoDismiss || '8000');
+    const delay = parseInt(el.dataset.autoDismiss || '3000');
+    
+    console.log('🔔 AutoDismissFlash mounted, will dismiss in', delay, 'ms');
     
     // Clear any existing timeout
     if (el.dataset.dismissTimeout) {
@@ -70,8 +76,8 @@ const AutoDismissFlash = {
     
     // Set new timeout
     const timeoutId = setTimeout(() => {
-      // Trigger the same dismiss animation as clicking
-      el.style.transform = 'translateX(100%)';
+      console.log('🔔 AutoDismissFlash: Dismissing flash notification');
+      // Fade out
       el.style.opacity = '0';
       setTimeout(() => {
         // Remove from DOM
@@ -85,7 +91,7 @@ const AutoDismissFlash = {
   updated(this: { el: HTMLElement }) {
     // Reset timeout when flash content changes
     const el = this.el;
-    const delay = parseInt(el.dataset.autoDismiss || '8000');
+    const delay = parseInt(el.dataset.autoDismiss || '3000');
     
     // Clear any existing timeout
     if (el.dataset.dismissTimeout) {
@@ -95,7 +101,7 @@ const AutoDismissFlash = {
     // Set new timeout
     const timeoutId = setTimeout(() => {
       // Trigger the same dismiss animation as clicking
-      el.style.transform = 'translateX(100%)';
+      el.style.transform = 'translateX(120%)';
       el.style.opacity = '0';
       setTimeout(() => {
         // Remove from DOM
@@ -134,6 +140,25 @@ const DesktopWindow = {
   destroyed() {}
 };
 
+// ChatInput Hook - Handle Enter key to submit, Shift+Enter for newline
+const ChatInput = {
+  mounted(this: any) {
+    this.el.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        // Find the parent form and submit it
+        const form = this.el.closest('form');
+        if (form) {
+          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+          form.dispatchEvent(submitEvent);
+        }
+      }
+    });
+  },
+  updated() {},
+  destroyed() {}
+};
+
 // Reload Page Hook - Used for applying background changes
 const ReloadPage = {
   mounted(this: any) {
@@ -152,6 +177,8 @@ const Hooks = {
   AutoDismissFlash,           // Flash notification auto-dismiss
   DeviceFingerprint: DeviceFingerprintHook,
   GlassTheme,                 // Glass theme customization
+  BackgroundUpdater,          // Background customization
+  ColorPicker,                // Color input handler for LiveView
   // Background Scenes
   HomeGalaxyScene,            // Default galaxy background
   NebulaScene,                // Colorful nebula with gas clouds
@@ -166,9 +193,12 @@ const Hooks = {
   BlogAutosave,
   // Chat
   MessageReactions,
+  ChatInput,
   // Desktop
   DesktopWindow: (window as any).DesktopWindow,
   ResizeHandle: (window as any).ResizeHandle,
+  GlobalHooks,
+  ProfileSettings,
   // Utility
   ReloadPage
 };

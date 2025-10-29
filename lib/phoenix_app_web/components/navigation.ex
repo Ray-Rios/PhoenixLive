@@ -122,7 +122,6 @@ defmodule PhoenixAppWeb.Components.Navigation do
         const taskbar = document.getElementById('taskbar');
         const icon = document.getElementById('nav-toggle-icon');
         const pageContent = document.querySelector('.page-content');
-        const chatContainer = document.querySelector('.chat-container');
         
         if (navbar.style.transform === 'translateY(-100%)') {
           // Show navbar and taskbar
@@ -130,14 +129,12 @@ defmodule PhoenixAppWeb.Components.Navigation do
           if (taskbar) taskbar.style.transform = 'translateY(0)';
           icon.style.transform = 'rotate(0deg)';
           if (pageContent) pageContent.classList.remove('navbar-hidden');
-          if (chatContainer) chatContainer.classList.remove('navbar-hidden');
         } else {
           // Hide navbar and taskbar
           navbar.style.transform = 'translateY(-100%)';
           if (taskbar) taskbar.style.transform = 'translateY(100%)';
           icon.style.transform = 'rotate(180deg)';
           if (pageContent) pageContent.classList.add('navbar-hidden');
-          if (chatContainer) chatContainer.classList.add('navbar-hidden');
         }
       }
       
@@ -146,8 +143,6 @@ defmodule PhoenixAppWeb.Components.Navigation do
         // Ensure content has proper spacing for navbar
         const pageContent = document.querySelector('.page-content');
         if (pageContent) pageContent.classList.remove('navbar-hidden');
-        const chatContainer = document.querySelector('.chat-container');
-        if (chatContainer) chatContainer.classList.remove('navbar-hidden');
       });
     </script>
     """

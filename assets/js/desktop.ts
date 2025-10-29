@@ -9,6 +9,8 @@ const DesktopWindow: any = {
   mounted(this: HookContext) {
     this.isDragging = false;
     this.dragOffset = { x: 0, y: 0 };
+    this.dragStartPos = { x: 0, y: 0 };
+    this.minDragDistance = 5; // Minimum pixels to move before starting drag
 
     const header = this.el.querySelector('.window-header') as HTMLElement | null;
     if (!header) return;
@@ -17,33 +19,47 @@ const DesktopWindow: any = {
     const onMouseDown = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('button')) return; // Don't drag when clicking buttons
 
-      this.isDragging = true;
+      this.isDragging = false; // Don't start dragging yet
       const rect = this.el.getBoundingClientRect();
       this.dragOffset = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
       };
+      this.dragStartPos = { x: e.clientX, y: e.clientY };
 
       e.preventDefault();
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      if (!this.isDragging) return;
-      const container = document.querySelector('.desktop-container') as HTMLElement | null;
-      const containerRect = container ? container.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight } as DOMRect;
+      if (this.isDragging) {
+        // Already dragging, update position
+        const container = document.querySelector('.desktop-container') as HTMLElement | null;
+        const containerRect = container ? container.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight } as DOMRect;
 
-      let newX = e.clientX - containerRect.left - this.dragOffset.x;
-      let newY = e.clientY - containerRect.top - this.dragOffset.y;
+        let newX = e.clientX - containerRect.left - this.dragOffset.x;
+        let newY = e.clientY - containerRect.top - this.dragOffset.y;
 
-      // Keep window within bounds
-      newX = Math.max(0, Math.min(newX, (containerRect.width || window.innerWidth) - this.el.offsetWidth));
-      newY = Math.max(0, Math.min(newY, (containerRect.height || window.innerHeight) - this.el.offsetHeight));
+        // Keep window within bounds
+        newX = Math.max(0, Math.min(newX, (containerRect.width || window.innerWidth) - this.el.offsetWidth));
+        newY = Math.max(0, Math.min(newY, (containerRect.height || window.innerHeight) - this.el.offsetHeight));
 
-      this.el.style.left = newX + 'px';
-      this.el.style.top = newY + 'px';
+        this.el.style.left = newX + 'px';
+        this.el.style.top = newY + 'px';
+      } else if (this.dragStartPos.x !== 0) {
+        // Check if we've moved enough to start dragging
+        const deltaX = Math.abs(e.clientX - this.dragStartPos.x);
+        const deltaY = Math.abs(e.clientY - this.dragStartPos.y);
+        
+        if (deltaX > this.minDragDistance || deltaY > this.minDragDistance) {
+          this.isDragging = true;
+        }
+      }
     };
 
-    const onMouseUp = () => { this.isDragging = false; };
+    const onMouseUp = () => { 
+      this.isDragging = false;
+      this.dragStartPos = { x: 0, y: 0 };
+    };
 
     header.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);

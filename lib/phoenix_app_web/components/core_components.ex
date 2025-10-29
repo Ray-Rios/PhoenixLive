@@ -85,9 +85,11 @@ defmodule PhoenixAppWeb.CoreComponents do
     
     assigns = assign(assigns, :flash_id, flash_id)
     
-    # Calculate top position based on stack index (33px base + 30px per additional flash)
+    # Calculate top position based on stack index (33px base + 110px per additional flash for spacing)
+    # Stack index 0 = newest (top), higher index = older (pushed down)
     base_top = 33
-    top_position = base_top + (assigns.stack_index * 30)
+    spacing = 110
+    top_position = base_top + (assigns.stack_index * spacing)
     
     assigns = assign(assigns, :top_position, top_position)
     
@@ -95,16 +97,16 @@ defmodule PhoenixAppWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@flash_id}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> JS.transition("translate-x-full opacity-0", time: 300)}
-      phx-mounted={JS.transition("translate-x-0 opacity-100", time: 300, to: "##{@flash_id}")}
-      phx-remove={JS.transition("translate-x-full opacity-0", time: 300)}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> JS.transition("translate-x-[calc(100%+40px)] opacity-0", time: 300)}
+      phx-mounted={JS.transition("translate-x-0 opacity-100", time: 300)}
+      phx-remove={JS.transition("translate-x-[calc(100%+40px)] opacity-0", time: 300)}
       phx-hook="AutoDismissFlash"
-      data-auto-dismiss="8000"
+      data-auto-dismiss="3000"
       role="alert"
-      style={"position: fixed; top: #{@top_position}px; right: -50px; z-index: #{10000 - assigns.stack_index};"}
+      style={"position: fixed; top: #{@top_position}px; right: 20px; z-index: #{10000 + assigns.stack_index}; transform: translateX(calc(100% + 40px));"}
       class={[
         "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer shadow-xl",
-        "transform translate-x-full opacity-90 transition-all duration-300 ease-in-out",
+        "opacity-0 transition-all duration-300 ease-out",
         @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
         @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
       ]}

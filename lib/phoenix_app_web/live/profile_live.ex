@@ -113,11 +113,6 @@ defmodule PhoenixAppWeb.ProfileLive do
   end
 
   @impl true
-  def handle_event("select_background", %{"background" => bg_id}, socket) do
-    {:noreply, assign(socket, selected_background: bg_id)}
-  end
-
-  @impl true
   def handle_event("upload_avatar", _params, socket) do
     uploaded_files =
       consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry ->
@@ -172,37 +167,100 @@ defmodule PhoenixAppWeb.ProfileLive do
   end
 
   @impl true
-  def handle_event("update_custom_setting", %{"_target" => [field]} = params, socket) do
-    custom_data = socket.assigns.custom_data || %{}
-    updated_data = Map.put(custom_data, field, params[field])
-    {:noreply, assign(socket, custom_data: updated_data)}
+  def handle_event("select_background", %{"background" => background}, socket) do
+    # Save the background preference immediately
+    case Accounts.update_user(socket.assigns.user, %{
+      background_preference: background,
+      background_custom_data: socket.assigns.custom_data
+    }) do
+      {:ok, updated_user} ->
+        socket = assign(socket, user: updated_user, selected_background: background)
+        
+        # Push real-time background update via client hook
+        {:noreply, push_event(socket, "background_update", %{
+          background: background,
+          custom_data: socket.assigns.custom_data,
+          global: true
+        })}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update background")}
+    end
   end
 
   @impl true
   def handle_event("update_custom_setting", params, socket) do
-    custom_data = socket.assigns.custom_data || %{}
+    # Handle both _target format and direct field updates
+    {field, value} = case params do
+      %{"_target" => [field]} -> {field, params[field]}
+      %{"gradient_start" => value} -> {"gradient_start", value}
+      %{"gradient_end" => value} -> {"gradient_end", value}
+      %{"solid_color" => value} -> {"solid_color", value}
+      _ -> {nil, nil}
+    end
     
-    # Preserve glass theme settings when updating background settings
-    current_user_data = socket.assigns.user.background_custom_data || %{}
-    glass_settings = %{
-      "glass_theme" => Map.get(current_user_data, "glass_theme"),
-      "glass_opacity" => Map.get(current_user_data, "glass_opacity"),
-      "glass_blur" => Map.get(current_user_data, "glass_blur"),
-      "glass_custom_color" => Map.get(current_user_data, "glass_custom_color")
-    }
+    if field && value do
+      custom_data = socket.assigns.custom_data || %{}
+      updated_data = Map.put(custom_data, field, value)
+      
+      # Save immediately to user preferences
+      case Accounts.update_user(socket.assigns.user, %{
+        background_custom_data: updated_data
+      }) do
+        {:ok, updated_user} ->
+          socket = assign(socket, user: updated_user, custom_data: updated_data)
+          
+          # Push real-time background update for custom settings via client hook
+          {:noreply, push_event(socket, "background_update", %{
+            background: socket.assigns.selected_background,
+            custom_data: updated_data,
+            global: true
+          })}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to update background")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("update_glass_setting", params, socket) do
+    # Handle both _target format and direct field updates
+    {field, value} = case params do
+      %{"_target" => [field]} -> {field, params[field]}
+      %{"glass_opacity" => value} -> {"glass_opacity", value}
+      %{"glass_blur" => value} -> {"glass_blur", value}
+      _ -> {nil, nil}
+    end
     
-    # Handle background customization settings
-    updated_data = 
-      params
-      |> Map.drop(["_target"])
-      |> Enum.reduce(custom_data, fn {key, value}, acc ->
-        Map.put(acc, key, value)
-      end)
-    
-    # Merge with glass settings to preserve them
-    final_data = Map.merge(updated_data, glass_settings)
-    
-    {:noreply, assign(socket, custom_data: final_data)}
+    if field && value do
+      custom_data = socket.assigns.custom_data || %{}
+      updated_data = Map.put(custom_data, field, value)
+      
+      # Save immediately to user preferences
+      case Accounts.update_user(socket.assigns.user, %{
+        background_custom_data: updated_data
+      }) do
+        {:ok, updated_user} ->
+          socket = assign(socket, user: updated_user, custom_data: updated_data)
+          
+          # Push real-time update to glass theme system via client hook
+          {:noreply, push_event(socket, "glass_theme_update", %{
+            theme: Map.get(updated_data, "glass_theme", "dark"),
+            opacity: Map.get(updated_data, "glass_opacity", "0.3"),
+            blur: Map.get(updated_data, "glass_blur", "15"),
+            custom_color: Map.get(updated_data, "glass_custom_color"),
+            global: true
+          })}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to save glass setting")}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -220,11 +278,12 @@ defmodule PhoenixAppWeb.ProfileLive do
           |> assign(user: updated_user, custom_data: updated_data)
           |> put_flash(:info, "Glass theme updated!")
         
-        # Push theme update to global glass theme system via window event
-        {:noreply, push_event(socket, "update_glass_theme", %{
+        # Push theme update to global glass theme system via client hook
+        {:noreply, push_event(socket, "glass_theme_update", %{
           theme: theme,
           opacity: Map.get(updated_data, "glass_opacity", "0.3"),
           blur: Map.get(updated_data, "glass_blur", "15"),
+          custom_color: Map.get(updated_data, "glass_custom_color"),
           global: true
         })}
 
@@ -234,136 +293,107 @@ defmodule PhoenixAppWeb.ProfileLive do
   end
 
   @impl true
-  def handle_event("update_glass_settings", params, socket) do
+  def handle_event("update_glass_custom_color", %{"color" => color}, socket) do
     custom_data = socket.assigns.custom_data || %{}
-    
-    # Handle immediate glass panel updates
-    updated_data = 
-      params
-      |> Map.drop(["_target"])
-      |> Enum.reduce(custom_data, fn {key, value}, acc ->
-        Map.put(acc, key, value)
-      end)
-    
-    # Save immediately to user preferences for glass settings
-    case Accounts.update_user(socket.assigns.user, %{
-      background_custom_data: updated_data
-    }) do
-      {:ok, updated_user} ->
-        {:noreply,
-         socket
-         |> assign(user: updated_user, custom_data: updated_data)
-         |> push_event("update_glass_theme", %{
-           theme: Map.get(updated_data, "glass_theme", "dark"),
-           opacity: Map.get(updated_data, "glass_opacity", "0.3"),
-           blur: Map.get(updated_data, "glass_blur", "15"),
-           custom_color: Map.get(updated_data, "glass_custom_color"),
-           global: true
-         })}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to save glass settings")}
-    end
-  end
-
-  @impl true
-  def handle_event("set_glass_theme", %{"theme" => theme}, socket) do
-    custom_data = socket.assigns.custom_data || %{}
-    updated_data = Map.put(custom_data, "glass_theme", theme)
+    updated_data = Map.put(custom_data, "glass_custom_color", color)
     
     # Save immediately to user preferences
     case Accounts.update_user(socket.assigns.user, %{
       background_custom_data: updated_data
     }) do
       {:ok, updated_user} ->
-        {:noreply,
-         socket
-         |> assign(user: updated_user, custom_data: updated_data)
-         |> push_event("update_glass_theme", %{
-           theme: theme,
-           opacity: Map.get(updated_data, "glass_opacity", "0.3"),
-           blur: Map.get(updated_data, "glass_blur", "15"),
-           global: true
-         })}
+        socket = assign(socket, user: updated_user, custom_data: updated_data)
+        
+        # Push real-time update to glass theme system via client hook
+        {:noreply, push_event(socket, "glass_theme_update", %{
+          theme: Map.get(updated_data, "glass_theme", "dark"),
+          opacity: Map.get(updated_data, "glass_opacity", "0.3"),
+          blur: Map.get(updated_data, "glass_blur", "15"),
+          custom_color: color,
+          global: true
+        })}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to save glass theme")}
+        {:noreply, put_flash(socket, :error, "Failed to save custom color")}
     end
   end
 
   @impl true
-  def handle_event("save_background", _params, socket) do
-    # Preserve glass theme settings when saving background
-    current_user_data = socket.assigns.user.background_custom_data || %{}
-    glass_settings = %{
-      "glass_theme" => Map.get(current_user_data, "glass_theme"),
-      "glass_opacity" => Map.get(current_user_data, "glass_opacity"),
-      "glass_blur" => Map.get(current_user_data, "glass_blur"),
-      "glass_custom_color" => Map.get(current_user_data, "glass_custom_color")
-    }
+  def handle_event("update_gradient_start", %{"color" => color}, socket) do
+    custom_data = socket.assigns.custom_data || %{}
+    updated_data = Map.put(custom_data, "gradient_start", color)
     
-    # Merge background custom data with preserved glass settings
-    updated_custom_data = Map.merge(socket.assigns.custom_data, glass_settings)
-    
+    # Save immediately to user preferences
     case Accounts.update_user(socket.assigns.user, %{
-      background_preference: socket.assigns.selected_background,
-      background_custom_data: updated_custom_data
+      background_custom_data: updated_data
     }) do
       {:ok, updated_user} ->
-        {:noreply,
-         socket
-         |> assign(user: updated_user, custom_data: updated_custom_data)
-         |> put_flash(:info, "Background updated! The page will refresh to apply changes.")
-         |> push_event("reload_page", %{delay: 1500})}
+        socket = assign(socket, user: updated_user, custom_data: updated_data)
+        
+        # Push real-time background update
+        {:noreply, push_event(socket, "background_update", %{
+          background: socket.assigns.selected_background,
+          custom_data: updated_data,
+          global: true
+        })}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to save background preference")}
+        {:noreply, put_flash(socket, :error, "Failed to update gradient start color")}
     end
   end
 
   @impl true
-  def handle_info({:save_background_preference, bg_type, custom_data}, socket) do
-    # Preserve glass theme settings when saving background
-    current_user_data = socket.assigns.user.background_custom_data || %{}
-    glass_settings = %{
-      "glass_theme" => Map.get(current_user_data, "glass_theme"),
-      "glass_opacity" => Map.get(current_user_data, "glass_opacity"),
-      "glass_blur" => Map.get(current_user_data, "glass_blur"),
-      "glass_custom_color" => Map.get(current_user_data, "glass_custom_color")
-    }
+  def handle_event("update_gradient_end", %{"color" => color}, socket) do
+    custom_data = socket.assigns.custom_data || %{}
+    updated_data = Map.put(custom_data, "gradient_end", color)
     
-    # Merge background custom data with preserved glass settings
-    updated_custom_data = Map.merge(custom_data, glass_settings)
-    
+    # Save immediately to user preferences
     case Accounts.update_user(socket.assigns.user, %{
-           background_preference: bg_type,
-           background_custom_data: updated_custom_data
-         }) do
+      background_custom_data: updated_data
+    }) do
       {:ok, updated_user} ->
-        {:noreply,
-         socket
-         |> assign(user: updated_user, selected_background: bg_type, custom_data: updated_custom_data)
-         |> put_flash(:info, "Background updated! Applying changes...")
-         |> push_event("reload_page", %{delay: 800})}
+        socket = assign(socket, user: updated_user, custom_data: updated_data)
+        
+        # Push real-time background update
+        {:noreply, push_event(socket, "background_update", %{
+          background: socket.assigns.selected_background,
+          custom_data: updated_data,
+          global: true
+        })}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to save background preference")}
+        {:noreply, put_flash(socket, :error, "Failed to update gradient end color")}
     end
   end
 
   @impl true
-  def handle_info(:cancel_background_selection, socket) do
-    {:noreply,
-     assign(socket,
-       selected_background: socket.assigns.user.background_preference || "galaxy",
-       custom_data: socket.assigns.user.background_custom_data || %{}
-     )}
+  def handle_event("update_solid_color", %{"color" => color}, socket) do
+    custom_data = socket.assigns.custom_data || %{}
+    updated_data = Map.put(custom_data, "solid_color", color)
+    
+    # Save immediately to user preferences
+    case Accounts.update_user(socket.assigns.user, %{
+      background_custom_data: updated_data
+    }) do
+      {:ok, updated_user} ->
+        socket = assign(socket, user: updated_user, custom_data: updated_data)
+        
+        # Push real-time background update
+        {:noreply, push_event(socket, "background_update", %{
+          background: socket.assigns.selected_background,
+          custom_data: updated_data,
+          global: true
+        })}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update solid color")}
+    end
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen pointer-events-none" phx-hook="ReloadPage,GlassTheme" id="profile-container">
+    <div class="min-h-screen pointer-events-none" phx-hook="ProfileSettings" id="profile-container">
       <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 pointer-events-auto">
         <div class="auth-glass-panel p-8 rounded-xl">
         <div class="max-w-4xl mx-auto">
@@ -692,9 +722,10 @@ defmodule PhoenixAppWeb.ProfileLive do
                               <label class="block text-sm text-gray-400 mb-2">Start Color</label>
                               <input
                                 type="color"
-                                phx-change="update_custom_setting"
-                                name="gradient_start"
+                                id="gradient-start-color"
                                 value={get_in(@custom_data, ["gradient_start"]) || "#3B82F6"}
+                                phx-hook="ColorPicker"
+                                data-event="update_gradient_start"
                                 class="w-full h-12 rounded cursor-pointer"
                               />
                             </div>
@@ -702,9 +733,10 @@ defmodule PhoenixAppWeb.ProfileLive do
                               <label class="block text-sm text-gray-400 mb-2">End Color</label>
                               <input
                                 type="color"
-                                phx-change="update_custom_setting"
-                                name="gradient_end"
+                                id="gradient-end-color"
                                 value={get_in(@custom_data, ["gradient_end"]) || "#9333EA"}
+                                phx-hook="ColorPicker"
+                                data-event="update_gradient_end"
                                 class="w-full h-12 rounded cursor-pointer"
                               />
                             </div>
@@ -714,27 +746,16 @@ defmodule PhoenixAppWeb.ProfileLive do
                             <label class="block text-sm text-gray-400 mb-2">Background Color</label>
                             <input
                               type="color"
-                              phx-change="update_custom_setting"
-                              name="solid_color"
+                              id="solid-color"
                               value={get_in(@custom_data, ["solid_color"]) || "#1F2937"}
+                              phx-hook="ColorPicker"
+                              data-event="update_solid_color"
                               class="w-full h-12 rounded cursor-pointer"
                             />
                           </div>
                         <% end %>
                       </div>
                     <% end %>
-
-                    <div class="pt-4">
-                      <button
-                        phx-click="save_background"
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
-                      >
-                        Save Background
-                      </button>
-                      <p class="text-sm text-gray-400 mt-2">
-                        The page will refresh automatically to apply your new background.
-                      </p>
-                    </div>
                   </div>
                 </div>
               <% end %>
@@ -764,7 +785,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                         ] do %>
                           <button
                             type="button"
-                            phx-click="set_glass_theme"
+                            phx-click="update_glass_theme"
                             phx-value-theme={theme}
                             class={"w-full h-16 rounded-lg border-2 transition-all #{if get_in(@custom_data, ["glass_theme"]) == theme, do: "border-white ring-2 ring-blue-500", else: "border-gray-600 hover:border-gray-400"} glass-#{theme} flex items-center justify-center"}
                           >
@@ -775,7 +796,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                     </div>
 
                     <!-- Glass Settings Form - Real-time updates -->
-                    <form phx-change="update_glass_settings" class="space-y-6">
+                    <form phx-change="update_glass_setting" class="space-y-6">
                       <div>
                         <label class="block text-sm text-gray-400 mb-3">Glass Opacity</label>
                         <input
@@ -818,8 +839,10 @@ defmodule PhoenixAppWeb.ProfileLive do
                         <div class="flex items-center space-x-4">
                           <input
                             type="color"
-                            name="glass_custom_color"
+                            id="glass-custom-color-picker"
                             value={get_in(@custom_data, ["glass_custom_color"]) || "#000000"}
+                            phx-hook="ColorPicker"
+                            data-event="update_glass_custom_color"
                             class="w-20 h-16 rounded-lg cursor-pointer border border-gray-600"
                           />
                           <div class="flex-1">

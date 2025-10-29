@@ -107,6 +107,17 @@ config :phoenix_app, :enable_redis,
 # Swoosh / Mailer (dynamic runtime config)
 # If SMTP_HOST is provided, use authenticated SMTP (recommended for prod).
 # Otherwise, fall back to Local adapter (preview emails without sending).
+#
+# For Namecheap Private Email, use these settings:
+#   SMTP_HOST=mail.privateemail.com
+#   SMTP_PORT=587 (for STARTTLS) or 465 (for SSL/TLS)
+#   SMTP_USER=your-email@yourdomain.com (full email address)
+#   SMTP_PASS=your-password
+#   FROM_EMAIL=your-email@yourdomain.com (same as SMTP_USER)
+#   FROM_NAME=PhxLive (or your preferred sender name)
+#
+# Note: Namecheap requires authentication and the FROM_EMAIL must match
+# an email address configured in your Namecheap Private Email account.
 # -------------------------------------------------
 smtp_host = System.get_env("SMTP_HOST") || ""
 smtp_port = System.get_env("SMTP_PORT")

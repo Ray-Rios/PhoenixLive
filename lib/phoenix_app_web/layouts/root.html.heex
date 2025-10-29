@@ -11,7 +11,7 @@
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
     </script>
   </head>
-  <body class="bg-black antialiased" phx-hook="GlassTheme" id="global-glass-theme">
+  <body class="bg-black antialiased" phx-hook="GlobalHooks" id="global-glass-theme">
     <!-- Mount Global Camera Controller separately (phx-hook accepts a single hook) -->
     <div id="global-camera-hook" phx-hook="GlobalCameraController" class="hidden" aria-hidden="true"></div>
     <!-- Global background canvas (outside LiveView-managed @inner_content to avoid being patched) -->
@@ -28,8 +28,12 @@
             glass_opacity: get_in(custom, ["glass_opacity"]) || "0.15", 
             glass_blur: get_in(custom, ["glass_blur"]) || "15"
           })) %>
-    <% else %>
-      {"glass_theme": "dark", "glass_opacity": "0.15", "glass_blur": "15"}
+        <% else %>
+          <%= Phoenix.HTML.raw(Jason.encode!(%{
+            glass_theme: "dark",
+            glass_opacity: "0.15",
+            glass_blur: "15"
+          })) %>
         <% end %>;        
         const root = document.documentElement;
         
@@ -45,7 +49,7 @@
         };
         
         const theme = themeColors[user.glass_theme] || themeColors.dark;
-        const opacity = user.glass_opacity || "0.15";
+        const opacity = user.glass_opacity || "0.05";
         const blur = user.glass_blur || "15";
         
         // Set CSS custom properties globally with proper opacity
