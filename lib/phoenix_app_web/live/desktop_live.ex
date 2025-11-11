@@ -54,7 +54,7 @@ defmodule PhoenixAppWeb.DesktopLive do
 
       <!-- Context Menu (if needed) -->
       <%= if @context_menu do %>
-        <div class="fixed bg-gray-800 border border-gray-600 rounded shadow-lg z-50"
+        <div class="fixed glass-dark border border-gray-600 rounded shadow-lg z-50"
              style={"left: #{@context_menu.x}px; top: #{@context_menu.y}px;"}>
           <div class="py-1">
             <button class="w-full text-left px-4 py-2 hover:bg-gray-700 text-white">

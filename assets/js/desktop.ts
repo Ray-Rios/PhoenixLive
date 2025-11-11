@@ -11,6 +11,7 @@ const DesktopWindow: any = {
     this.dragOffset = { x: 0, y: 0 };
     this.dragStartPos = { x: 0, y: 0 };
     this.minDragDistance = 5; // Minimum pixels to move before starting drag
+    this.windowId = this.el.getAttribute('phx-value-window_id') || (this.el.id?.replace('window-',''));
 
     const header = this.el.querySelector('.window-header') as HTMLElement | null;
     if (!header) return;
@@ -57,6 +58,22 @@ const DesktopWindow: any = {
     };
 
     const onMouseUp = () => { 
+      // If we were dragging, persist the final position to LiveView
+      if (this.isDragging) {
+        const left = parseInt(this.el.style.left || '0', 10) || 0;
+        const top = parseInt(this.el.style.top || '0', 10) || 0;
+        try {
+          if ((this as any).pushEvent && this.windowId) {
+            (this as any).pushEvent('update_window_position', {
+              window_id: this.windowId,
+              x: left,
+              y: top
+            });
+          }
+        } catch (e) {
+          console.error('Failed to push window position update', e);
+        }
+      }
       this.isDragging = false;
       this.dragStartPos = { x: 0, y: 0 };
     };
@@ -84,10 +101,13 @@ const ResizeHandle: any = {
     this.direction = this.el.dataset.direction || '';
     this.startSize = {} as any;
     this.startPos = {} as any;
+    this.window = null as any;
+    this.windowId = null as any;
 
     const onMouseDown = (e: MouseEvent) => {
       this.isResizing = true;
       this.window = this.el.closest('.desktop-window') as HTMLElement;
+      this.windowId = this.window?.getAttribute('phx-value-window_id') || (this.window?.id?.replace('window-',''));
 
       const rect = this.window.getBoundingClientRect();
       this.startSize = { width: rect.width, height: rect.height };
@@ -134,7 +154,33 @@ const ResizeHandle: any = {
       this.window.style.top = (newTop - this.startPos.y + curTop) + 'px';
     };
 
-    const onMouseUp = () => { this.isResizing = false; };
+    const onMouseUp = () => { 
+      if (this.isResizing && this.window) {
+        const rect = this.window.getBoundingClientRect();
+        const width = Math.round(rect.width);
+        const height = Math.round(rect.height);
+        const left = parseInt(this.window.style.left || '0', 10) || 0;
+        const top = parseInt(this.window.style.top || '0', 10) || 0;
+        try {
+          if ((this as any).pushEvent && this.windowId) {
+            (this as any).pushEvent('update_window_size', {
+              window_id: this.windowId,
+              width,
+              height
+            });
+            // Also persist the final position when resizing from N/W edges
+            (this as any).pushEvent('update_window_position', {
+              window_id: this.windowId,
+              x: left,
+              y: top
+            });
+          }
+        } catch (e) {
+          console.error('Failed to push window size/position update', e);
+        }
+      }
+      this.isResizing = false; 
+    };
 
     this.el.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);

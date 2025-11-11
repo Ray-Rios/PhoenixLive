@@ -52,7 +52,7 @@ defmodule PhoenixAppWeb.MediaPickerComponent do
 
         <!-- Modal panel -->
         <div 
-          class="inline-block w-full max-w-5xl overflow-hidden text-left align-middle transition-all transform bg-gray-800 shadow-xl rounded-2xl"
+          class="inline-block w-full max-w-5xl overflow-hidden text-left align-middle transition-all transform glass-dark shadow-xl rounded-2xl"
           phx-click-away="close_picker"
           phx-target={@myself}
           onclick="event.stopPropagation()"

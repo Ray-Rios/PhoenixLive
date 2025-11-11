@@ -388,7 +388,7 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
                   "px-4 py-2 rounded-lg text-sm font-medium transition-all",
                   if(@selected_category == value,
                     do: "bg-blue-600 text-white shadow-lg shadow-blue-500/50",
-                    else: "bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700"
+                    else: "glass-dark text-gray-300 hover:bg-gray-700 border border-gray-700"
                   )
                 ]}
               >
@@ -400,7 +400,7 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
           <!-- API Actions Grid -->
           <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <%= for action <- filter_actions(@api_actions, @selected_category) do %>
-              <div class="bg-gray-800/90 backdrop-blur border border-gray-700 rounded-xl shadow-2xl overflow-hidden hover:border-gray-600 transition-all">
+              <div class="glass-dark/90 backdrop-blur border border-gray-700 rounded-xl shadow-2xl overflow-hidden hover:border-gray-600 transition-all">
                 <!-- Action Header -->
                 <div class="bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-4 border-b border-gray-700">
                   <div class="flex items-start justify-between gap-4">

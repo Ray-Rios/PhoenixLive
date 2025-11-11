@@ -11,7 +11,7 @@ defmodule PhoenixApp.Auth.Guardian do
   # Tell Guardian how to turn the subject back into a resource
   @impl true
   def resource_from_claims(%{"sub" => id}) do
-    case PhoenixApp.Accounts.get_user!(id) do
+    case PhoenixApp.Accounts.get_user(id) do
       nil -> {:error, :not_found}
       user -> {:ok, user}
     end

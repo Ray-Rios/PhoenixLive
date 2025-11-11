@@ -197,7 +197,7 @@ defmodule PhoenixAppWeb.UserManagementLive do
           <h1 class="text-3xl font-bold text-white mb-8">User Management</h1>
           
           <!-- Default Role Setting -->
-          <div class="bg-gray-800 rounded-lg p-6 mb-6">
+          <div class="glass-dark rounded-lg p-6 mb-6">
             <h2 class="text-lg font-semibold text-white mb-4">Default Role Settings</h2>
             <form phx-submit="change_default_role" class="flex items-center space-x-4">
               <label class="text-sm font-medium text-gray-300">Default role for new users:</label>
@@ -217,7 +217,7 @@ defmodule PhoenixAppWeb.UserManagementLive do
             </form>
           </div>
           
-          <div class="bg-gray-800 rounded-lg shadow-lg">
+          <div class="glass-dark rounded-lg shadow-lg">
             <div class="p-6 border-b border-gray-700">
               <h2 class="text-lg font-semibold text-white">Users (<%= length(@users) %>)</h2>
             </div>

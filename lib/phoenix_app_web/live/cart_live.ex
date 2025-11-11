@@ -87,7 +87,7 @@ defmodule PhoenixAppWeb.CartLive do
           <div :if={@cart.cart_items != []} class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Cart Items -->
             <div class="lg:col-span-2">
-              <div class="bg-gray-800 rounded-lg p-6">
+              <div class="glass-dark rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-white mb-6">Cart Items</h2>
                 
                 <div class="space-y-4">
@@ -133,7 +133,7 @@ defmodule PhoenixAppWeb.CartLive do
 
             <!-- Order Summary -->
             <div class="lg:col-span-1">
-              <div class="bg-gray-800 rounded-lg p-6 sticky top-4">
+              <div class="glass-dark rounded-lg p-6 sticky top-4">
                 <h2 class="text-xl font-semibold text-white mb-6">Order Summary</h2>
                 
                 <div class="space-y-3 mb-6">

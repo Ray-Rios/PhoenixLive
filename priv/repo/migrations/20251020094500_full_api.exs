@@ -67,11 +67,18 @@ defmodule PhoenixApp.Repo.Migrations.FullApiConsolidated do
 
     # Add self-referencing foreign key for approved_by_id with SET NULL on delete
     execute """
-    ALTER TABLE users 
-    ADD CONSTRAINT users_approved_by_id_fkey 
-    FOREIGN KEY (approved_by_id) 
-    REFERENCES users(id) 
-    ON DELETE SET NULL
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'users_approved_by_id_fkey'
+      ) THEN
+        ALTER TABLE users 
+        ADD CONSTRAINT users_approved_by_id_fkey 
+        FOREIGN KEY (approved_by_id) 
+        REFERENCES users(id) 
+        ON DELETE SET NULL;
+      END IF;
+    END $$;
     """
 
     create_if_not_exists unique_index(:users, [:email])
@@ -429,9 +436,18 @@ defmodule PhoenixApp.Repo.Migrations.FullApiConsolidated do
     create_if_not_exists index(:chat_messages, [:inserted_at])
 
     # Add parent_message_id to chat_threads (circular reference handled after messages table exists)
-    alter table(:chat_threads) do
-      add_if_not_exists :parent_message_id, references(:chat_messages, type: :binary_id, on_delete: :delete_all), null: false
-    end
+    execute """
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'chat_threads' AND column_name = 'parent_message_id'
+      ) THEN
+        ALTER TABLE chat_threads 
+        ADD COLUMN parent_message_id uuid REFERENCES chat_messages(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
+    """, ""
 
     create_if_not_exists index(:chat_threads, [:parent_message_id])
 

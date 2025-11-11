@@ -569,7 +569,7 @@ defmodule PhoenixAppWeb.AuthLive do
                     type="email" 
                     name="verification[email]" 
                     required
-                    class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                     placeholder="Enter your email address"
                   />
                 </div>
@@ -583,7 +583,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   maxlength="6"
                   pattern="[0-9]{6}"
                   required
-                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 text-center text-2xl tracking-widest"
+                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 text-center text-2xl tracking-widest"
                   placeholder="000000"
                 />
               </div>
@@ -660,7 +660,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   name="user[email]" 
                   id="user_email"
                   required
-                  class="w-full px-4 py-3 glass-dark text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
+                  class="w-full px-4 py-3 glass-dark text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
                   placeholder={if @action == :login, do: "Enter your email or username", else: "Enter your email"}
                 />
               </div>
@@ -671,7 +671,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   type="text" 
                   name="user[name]" 
                   id="user_name"
-                  class="w-full px-4 py-3 glass-dark text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
+                  class="w-full px-4 py-3 glass-dark text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
                   placeholder="Enter your name"
                 />
               </div>
@@ -683,7 +683,7 @@ defmodule PhoenixAppWeb.AuthLive do
                   name="user[password]" 
                   id="user_password"
                   required
-                  class="w-full px-4 py-3 glass-dark text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
+                  class="w-full px-4 py-3 glass-dark text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 rounded-lg"
                   placeholder="Enter your password"
                 />
               </div>

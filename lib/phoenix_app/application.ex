@@ -5,8 +5,11 @@ defmodule PhoenixApp.Application do
 
   @impl true
   def start(_type, _args) do
-    # Create ETS table for user sessions
+    # Create ETS tables for sessions and rate limiting
     :ets.new(:user_sessions, [:set, :public, :named_table])
+    :ets.new(:rate_limit_table, [:set, :public, :named_table, {:read_concurrency, true}])
+    :ets.new(:blocked_ips, [:set, :public, :named_table])
+    :ets.new(:honeypot_tracker, [:set, :public, :named_table])
     
     children = [
       PhoenixApp.Repo,

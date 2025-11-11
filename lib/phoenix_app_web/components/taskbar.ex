@@ -27,7 +27,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
           
           <!-- Start Menu -->
           <div :if={@show_start_menu} 
-               class="absolute bottom-full left-0 mb-2 w-80 bg-gray-800 rounded-lg shadow-2xl border border-gray-600 overflow-hidden">
+               class="absolute bottom-full left-0 mb-2 w-80 glass-dark rounded-lg shadow-2xl border border-gray-600 overflow-hidden">
             <div class="p-4 border-b border-gray-600">
               <div class="flex items-center space-x-3">
                 <%= if @current_user do %>
@@ -53,6 +53,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
             <div class="p-4">
               <div class="grid grid-cols-3 gap-3">
                 <button 
+                  type="button"
                   phx-click="open_app" 
                   phx-value-app="file_manager"
                   phx-target={@target}
@@ -63,6 +64,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 </button>
                 
                 <button 
+                  type="button"
                   phx-click="open_app" 
                   phx-value-app="terminal"
                   phx-target={@target}
@@ -73,6 +75,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 </button>
                 
                 <button 
+                  type="button"
                   phx-click="open_app" 
                   phx-value-app="calculator"
                   phx-target={@target}
@@ -83,6 +86,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 </button>
                 
                 <button 
+                  type="button"
                   phx-click="open_app" 
                   phx-value-app="notepad"
                   phx-target={@target}
@@ -93,6 +97,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 </button>
                 
                 <button 
+                  type="button"
                   phx-click="open_app" 
                   phx-value-app="media_player"
                   phx-target={@target}
@@ -103,6 +108,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                 </button>
                 
                 <button 
+                  type="button"
                   phx-click="open_app" 
                   phx-value-app="settings"
                   phx-target={@target}
@@ -146,7 +152,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                     <span class="text-sm">Login</span>
                   </.link>
                 <% end %>
-                <button class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors">
+                <button type="button" class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors">
                   <span>🔄</span>
                   <span class="text-sm">Restart</span>
                 </button>
@@ -158,8 +164,10 @@ defmodule PhoenixAppWeb.Components.Taskbar do
         <!-- Pinned Items -->
         <div class="flex items-center space-x-1 px-2">
           <button 
+            type="button"
             phx-click="open_app" 
             phx-value-app="file_manager"
+            phx-target={@target}
             class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors group"
             title="File Explorer"
           >
@@ -174,6 +182,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
             <button 
               phx-click="focus_window" 
               phx-value-window_id={window.id}
+              phx-target={@target}
               class={[
                 "flex items-center space-x-2 px-3 py-2 rounded text-sm font-medium transition-colors duration-200 max-w-48",
                 if(window.z_index == max_z_index, do: "bg-blue-600 text-white", else: "bg-gray-700 text-gray-300 hover:bg-gray-600")
@@ -206,7 +215,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
           </button>
           
           <!-- Clock -->
-          <div id="taskbar-clock" class="text-white text-sm font-medium px-3 py-2 bg-gray-800 rounded">
+          <div id="taskbar-clock" class="text-white text-sm font-medium px-3 py-2 glass-dark rounded">
             <div class="text-center">
               <div class="time">--:--</div>
               <div class="text-xs text-gray-400 date">--/--</div>

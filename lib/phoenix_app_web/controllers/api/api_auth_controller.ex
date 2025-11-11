@@ -48,6 +48,15 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
           errors: errors
         })
 
+      {:error, :email_taken, message} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          success: false,
+          message: message || "An account with this email already exists. Please try logging in instead.",
+          redirect_to: "login"
+        })
+
       {:error, :email_already_exists_verified} ->
         conn
         |> put_status(:conflict)

@@ -251,7 +251,7 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
           </div>
           
           <!-- Navigation Tabs -->
-          <div class="bg-gray-800 rounded-lg mb-6">
+          <div class="glass-dark rounded-lg mb-6">
             <div class="border-b border-gray-700">
               <nav class="flex space-x-8 px-6">
                 <button phx-click="change_tab" phx-value-tab="console"
@@ -392,7 +392,7 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
                               <h4 class="font-medium text-gray-300 mb-3">Indexes</h4>
                               <div class="space-y-2">
                                 <%= for index <- @table_info.indexes do %>
-                                  <div class="bg-gray-800 p-3 rounded">
+                                  <div class="glass-dark p-3 rounded">
                                     <div class="font-mono text-sm text-blue-400"><%= index.name %></div>
                                     <div class="text-xs text-gray-400 mt-1"><%= index.definition %></div>
                                   </div>
@@ -433,13 +433,13 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
                         <div class="mb-4">
                           <label class="block text-sm font-medium text-gray-300 mb-2">Query Name</label>
                           <input type="text" name="name" required
-                                 class="w-full bg-gray-800 text-white p-3 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                                 class="w-full glass-dark text-white p-3 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
                                  placeholder="My useful query">
                         </div>
                         <div class="mb-4">
                           <label class="block text-sm font-medium text-gray-300 mb-2">SQL Query</label>
                           <textarea name="query" rows="4" required
-                                    class="w-full bg-gray-800 text-white font-mono text-sm p-3 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                                    class="w-full glass-dark text-white font-mono text-sm p-3 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
                                     value={@query}></textarea>
                         </div>
                         <button type="submit" 
@@ -454,7 +454,7 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
                       <h3 class="text-lg font-semibold text-gray-300 mb-4">Saved Queries</h3>
                       <div class="space-y-3 max-h-96 overflow-y-auto">
                         <%= for query <- @saved_queries do %>
-                          <div class="bg-gray-800 rounded p-3">
+                          <div class="glass-dark rounded p-3">
                             <div class="flex items-center justify-between mb-2">
                               <h4 class="font-medium text-gray-300"><%= query.name %></h4>
                               <button phx-click="load_query" phx-value-query={query.query}
@@ -490,7 +490,7 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
           <% end %>
 
           <%= if @results do %>
-            <div class="bg-gray-800 rounded-lg p-6 mb-6">
+            <div class="glass-dark rounded-lg p-6 mb-6">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-gray-300">Query Results</h3>
                 <div class="text-sm text-gray-400">
@@ -538,7 +538,7 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
 
           <!-- Query History -->
           <%= if length(@history) > 0 do %>
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <h3 class="text-lg font-semibold text-gray-300 mb-4">Recent Queries</h3>
               <div class="space-y-3 max-h-64 overflow-y-auto">
                 <%= for {query_item, _index} <- Enum.with_index(@history) do %>

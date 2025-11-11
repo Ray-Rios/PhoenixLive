@@ -91,7 +91,7 @@ defmodule PhoenixAppWeb.CheckoutLive do
             <!-- Checkout Form -->
             <div class="space-y-6">
               <!-- Billing Address -->
-              <div class="bg-gray-800 rounded-lg p-6">
+              <div class="glass-dark rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-white mb-4">Billing Address</h2>
                 <form phx-change="update_billing">
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -116,7 +116,7 @@ defmodule PhoenixAppWeb.CheckoutLive do
               </div>
 
               <!-- Shipping Address -->
-              <div class="bg-gray-800 rounded-lg p-6">
+              <div class="glass-dark rounded-lg p-6">
                 <div class="flex items-center justify-between mb-4">
                   <h2 class="text-xl font-semibold text-white">Shipping Address</h2>
                   <label class="flex items-center text-gray-300">
@@ -151,7 +151,7 @@ defmodule PhoenixAppWeb.CheckoutLive do
               </div>
 
               <!-- Payment Method -->
-              <div class="bg-gray-800 rounded-lg p-6">
+              <div class="glass-dark rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-white mb-4">Payment Method</h2>
                 <div class="text-gray-300">
                   <p>Payment processing will be integrated with Stripe.</p>
@@ -162,7 +162,7 @@ defmodule PhoenixAppWeb.CheckoutLive do
 
             <!-- Order Summary -->
             <div>
-              <div class="bg-gray-800 rounded-lg p-6 sticky top-4">
+              <div class="glass-dark rounded-lg p-6 sticky top-4">
                 <h2 class="text-xl font-semibold text-white mb-6">Order Summary</h2>
 
                 <!-- Order Items -->

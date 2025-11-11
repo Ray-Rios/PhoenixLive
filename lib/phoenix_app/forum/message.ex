@@ -25,7 +25,7 @@ defmodule PhoenixApp.Forum.Message do
 
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:content, :message_type, :is_pinned, :reply_to_id, :thread_id])
+    |> cast(attrs, [:content, :message_type, :is_pinned, :reply_to_id, :thread_id, :channel_id, :user_id])
     |> validate_required([:content])
     |> validate_length(:content, min: 1, max: 2000)
     |> validate_inclusion(:message_type, ["text", "image", "file", "system"])

@@ -32,6 +32,13 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     window_id = Ecto.UUID.generate()
     user = socket.assigns.current_user
     
+    # Load saved layout if available
+    saved_layout = if user do
+      PhoenixApp.Desktop.get_window_layout(user.id, app)
+    else
+      nil
+    end
+    
     new_window = case app do
       "file_manager" ->
         # Load file manager with drive view
@@ -44,10 +51,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "File Manager",
           app: "file_manager",
-          x: 150,
-          y: 150,
-          width: 800,
-          height: 600,
+          x: (saved_layout && saved_layout.x) || 150,
+          y: (saved_layout && saved_layout.y) || 150,
+          width: (saved_layout && saved_layout.width) || 800,
+          height: (saved_layout && saved_layout.height) || 600,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -68,10 +75,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Text Editor",
           app: "text_editor",
-          x: 200,
-          y: 200,
-          width: 700,
-          height: 500,
+          x: (saved_layout && saved_layout.x) || 200,
+          y: (saved_layout && saved_layout.y) || 200,
+          width: (saved_layout && saved_layout.width) || 700,
+          height: (saved_layout && saved_layout.height) || 500,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -83,10 +90,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Terminal",
           app: "terminal",
-          x: 250,
-          y: 250,
-          width: 800,
-          height: 500,
+          x: (saved_layout && saved_layout.x) || 250,
+          y: (saved_layout && saved_layout.y) || 250,
+          width: (saved_layout && saved_layout.width) || 800,
+          height: (saved_layout && saved_layout.height) || 500,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -99,10 +106,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Calculator",
           app: "calculator",
-          x: 300,
-          y: 300,
-          width: 350,
-          height: 450,
+          x: (saved_layout && saved_layout.x) || 300,
+          y: (saved_layout && saved_layout.y) || 300,
+          width: (saved_layout && saved_layout.width) || 350,
+          height: (saved_layout && saved_layout.height) || 450,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -115,10 +122,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Notepad",
           app: "notepad",
-          x: 350,
-          y: 150,
-          width: 600,
-          height: 400,
+          x: (saved_layout && saved_layout.x) || 350,
+          y: (saved_layout && saved_layout.y) || 150,
+          width: (saved_layout && saved_layout.width) || 600,
+          height: (saved_layout && saved_layout.height) || 400,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -130,10 +137,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Media Player",
           app: "media_player",
-          x: 400,
-          y: 200,
-          width: 600,
-          height: 400,
+          x: (saved_layout && saved_layout.x) || 400,
+          y: (saved_layout && saved_layout.y) || 200,
+          width: (saved_layout && saved_layout.width) || 600,
+          height: (saved_layout && saved_layout.height) || 400,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -146,10 +153,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Settings",
           app: "settings",
-          x: 450,
-          y: 250,
-          width: 700,
-          height: 500,
+          x: (saved_layout && saved_layout.x) || 450,
+          y: (saved_layout && saved_layout.y) || 250,
+          width: (saved_layout && saved_layout.width) || 700,
+          height: (saved_layout && saved_layout.height) || 500,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index
@@ -177,12 +184,17 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
      |> assign(:show_start_menu, false)}
   end
 
-  def handle_event("close_window", %{"id" => id}, socket) do
-    windows = Enum.reject(socket.assigns.windows, &(&1.id == id))
-    {:noreply, assign(socket, :windows, windows)}
+  def handle_event("close_window", params, socket) do
+    with id when not is_nil(id) <- get_window_id(params) do
+      windows = Enum.reject(socket.assigns.windows, &(&1.id == id))
+      {:noreply, assign(socket, :windows, windows)}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
-  def handle_event("focus_window", %{"id" => id}, socket) do
+  def handle_event("focus_window", params, socket) do
+    with id when not is_nil(id) <- get_window_id(params) do
     windows = 
       Enum.map(socket.assigns.windows, fn window ->
         if window.id == id do
@@ -196,9 +208,13 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
      socket
      |> assign(:windows, windows)
      |> assign(:next_z_index, socket.assigns.next_z_index + 1)}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
-  def handle_event("minimize_window", %{"id" => id}, socket) do
+  def handle_event("minimize_window", params, socket) do
+    with id when not is_nil(id) <- get_window_id(params) do
     windows = 
       Enum.map(socket.assigns.windows, fn window ->
         if window.id == id do
@@ -208,10 +224,14 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         end
       end)
     
-    {:noreply, assign(socket, :windows, windows)}
+      {:noreply, assign(socket, :windows, windows)}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
-  def handle_event("maximize_window", %{"id" => id}, socket) do
+  def handle_event(event, params, socket) when event in ["toggle_maximize", "maximize_window", "restore_window"] do
+    with id when not is_nil(id) <- get_window_id(params) do
     windows = 
       Enum.map(socket.assigns.windows, fn window ->
         if window.id == id do
@@ -221,33 +241,70 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         end
       end)
     
-    {:noreply, assign(socket, :windows, windows)}
+      {:noreply, assign(socket, :windows, windows)}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
-  def handle_event("update_window_position", %{"id" => id, "x" => x, "y" => y}, socket) do
-    windows = 
-      Enum.map(socket.assigns.windows, fn window ->
-        if window.id == id do
-          %{window | x: x, y: y}
-        else
-          window
-        end
-      end)
-    
-    {:noreply, assign(socket, :windows, windows)}
+  def handle_event("update_window_position", params, socket) do
+    with id when not is_nil(id) <- get_window_id(params) do
+      windows = 
+        Enum.map(socket.assigns.windows, fn window ->
+          if window.id == id do
+            updated_window = %{window | x: params["x"], y: params["y"]}
+            
+            # Persist to database if user is authenticated
+            if socket.assigns.current_user do
+              Task.start(fn ->
+                PhoenixApp.Desktop.save_window_layout(
+                  socket.assigns.current_user.id,
+                  window.app,
+                  %{x: params["x"], y: params["y"], width: window.width, height: window.height}
+                )
+              end)
+            end
+            
+            updated_window
+          else
+            window
+          end
+        end)
+      
+      {:noreply, assign(socket, :windows, windows)}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
-  def handle_event("update_window_size", %{"id" => id, "width" => width, "height" => height}, socket) do
-    windows = 
-      Enum.map(socket.assigns.windows, fn window ->
-        if window.id == id do
-          %{window | width: width, height: height}
-        else
-          window
-        end
-      end)
-    
-    {:noreply, assign(socket, :windows, windows)}
+  def handle_event("update_window_size", params, socket) do
+    with id when not is_nil(id) <- get_window_id(params) do
+      windows = 
+        Enum.map(socket.assigns.windows, fn window ->
+          if window.id == id do
+            updated_window = %{window | width: params["width"], height: params["height"]}
+            
+            # Persist to database if user is authenticated
+            if socket.assigns.current_user do
+              Task.start(fn ->
+                PhoenixApp.Desktop.save_window_layout(
+                  socket.assigns.current_user.id,
+                  window.app,
+                  %{x: window.x, y: window.y, width: params["width"], height: params["height"]}
+                )
+              end)
+            end
+            
+            updated_window
+          else
+            window
+          end
+        end)
+      
+      {:noreply, assign(socket, :windows, windows)}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
   # ==================== FILE MANAGER HANDLERS ====================
@@ -325,6 +382,12 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       end)
     
     {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # ==================== HELPERS ====================
+
+  defp get_window_id(params) do
+    Map.get(params, "window_id") || Map.get(params, "id")
   end
 
   # ==================== HELPER FUNCTIONS ====================
@@ -419,6 +482,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         <PhoenixAppWeb.Components.Window.file_manager_content 
           window={@window}
           current_user={@current_user}
+          target={@myself}
         />
         """
       "terminal" ->
@@ -431,7 +495,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       "calculator" ->
         ~H"""
         <div class="p-4 bg-gray-900 h-full flex flex-col">
-          <div class="text-right text-2xl text-white mb-4 p-2 bg-gray-800 rounded">0</div>
+          <div class="text-right text-2xl text-white mb-4 p-2 glass-dark rounded">0</div>
           <div class="grid grid-cols-4 gap-2 flex-1">
             <button class="bg-gray-700 hover:bg-gray-600 text-white rounded p-2">7</button>
             <button class="bg-gray-700 hover:bg-gray-600 text-white rounded p-2">8</button>

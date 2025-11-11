@@ -137,6 +137,17 @@ defmodule PhoenixApp.Forum do
     |> Enum.reverse()
   end
 
+  def list_messages_by_room(room_id, limit \\ 50) do
+    from(m in Message, 
+      where: m.room_id == ^room_id,
+      order_by: [desc: m.inserted_at],
+      limit: ^limit,
+      preload: [:user, :reactions, :attachments, :thread]
+    )
+    |> Repo.all()
+    |> Enum.reverse()
+  end
+
   def get_message!(id) do
     Repo.get!(Message, id) |> Repo.preload([:user, :reactions, :attachments, :thread])
   end
@@ -151,6 +162,21 @@ defmodule PhoenixApp.Forum do
       {:ok, message} ->
         message = Repo.preload(message, [:user, :reactions, :attachments])
         Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{channel_id}", {:new_message, message})
+        {:ok, message}
+      error -> error
+    end
+  end
+
+  @doc """
+  Creates a message with attributes directly (for Social Hubs with room_id)
+  """
+  def create_message(attrs) when is_map(attrs) do
+    %Message{}
+    |> Message.changeset(attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, message} ->
+        message = Repo.preload(message, [:user, :reactions, :attachments])
         {:ok, message}
       error -> error
     end
@@ -237,5 +263,224 @@ defmodule PhoenixApp.Forum do
   def count_messages_in_channel(channel_id) do
     from(m in Message, where: m.channel_id == ^channel_id, select: count())
     |> Repo.one()
+  end
+
+  # ============================================
+  # User-Created Channels
+  # ============================================
+
+  def list_user_owned_channels(user_id) do
+    from(c in Channel,
+      where: c.owner_id == ^user_id and c.is_user_created == true,
+      order_by: [desc: c.inserted_at],
+      preload: [:owner, :members]
+    )
+    |> Repo.all()
+  end
+
+  def list_user_member_channels(user_id) do
+    from(m in PhoenixApp.Forum.ChannelMember,
+      where: m.user_id == ^user_id,
+      join: c in assoc(m, :channel),
+      where: c.is_user_created == true,
+      preload: [channel: [:owner, :members]],
+      order_by: [desc: m.joined_at]
+    )
+    |> Repo.all()
+    |> Enum.map(& &1.channel)
+  end
+
+  def list_public_user_channels do
+    from(c in Channel,
+      where: c.is_public == true and c.is_user_created == true,
+      order_by: [desc: c.inserted_at],
+      preload: [:owner, :members]
+    )
+    |> Repo.all()
+  end
+
+  def create_user_channel(attrs \\ %{}) do
+    # Auto-set is_user_created flag
+    attrs = Map.put(attrs, :is_user_created, true)
+    
+    Repo.transaction(fn ->
+      # Create the channel
+      channel = case create_channel(attrs) do
+        {:ok, channel} -> channel
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+
+      # Auto-create owner membership
+      owner_attrs = %{
+        channel_id: channel.id,
+        user_id: attrs.owner_id || attrs["owner_id"],
+        role: "owner",
+        joined_at: DateTime.utc_now()
+      }
+
+      case create_channel_member(owner_attrs) do
+        {:ok, _member} -> channel
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  # ============================================
+  # Channel Members
+  # ============================================
+
+  alias PhoenixApp.Forum.ChannelMember
+
+  def is_channel_member?(channel_id, user_id) do
+    Repo.exists?(from m in ChannelMember, where: m.channel_id == ^channel_id and m.user_id == ^user_id)
+  end
+
+  def get_channel_member(channel_id, user_id) do
+    Repo.get_by(ChannelMember, channel_id: channel_id, user_id: user_id)
+  end
+
+  def create_channel_member(attrs \\ %{}) do
+    %ChannelMember{}
+    |> ChannelMember.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_channel_member(%ChannelMember{} = member, attrs) do
+    member
+    |> ChannelMember.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def remove_channel_member(channel_id, user_id) do
+    case get_channel_member(channel_id, user_id) do
+      nil -> {:error, :not_found}
+      member -> Repo.delete(member)
+    end
+  end
+
+  def list_channel_members(channel_id) do
+    from(m in ChannelMember,
+      where: m.channel_id == ^channel_id,
+      preload: [:user],
+      order_by: [asc: m.joined_at]
+    )
+    |> Repo.all()
+  end
+
+  # ============================================
+  # Channel Invites
+  # ============================================
+
+  alias PhoenixApp.Forum.ChannelInvite
+
+  def create_channel_invite(attrs \\ %{}) do
+    %ChannelInvite{}
+    |> ChannelInvite.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def get_invite_by_code(code) do
+    Repo.get_by(ChannelInvite, code: code)
+    |> Repo.preload([:channel, :inviter])
+  end
+
+  def use_channel_invite(code, user_id) do
+    case get_invite_by_code(code) do
+      nil ->
+        {:error, :invalid_invite}
+      
+      invite ->
+        if ChannelInvite.is_valid?(invite) do
+          # Check if already a member
+          if is_channel_member?(invite.channel_id, user_id) do
+            {:error, :already_member}
+          else
+            Repo.transaction(fn ->
+              # Add user as member
+              case create_channel_member(%{
+                channel_id: invite.channel_id,
+                user_id: user_id,
+                role: "member"
+              }) do
+                {:ok, member} ->
+                  # Increment invite usage
+                  invite
+                  |> Ecto.Changeset.change(uses: invite.uses + 1)
+                  |> Repo.update!()
+                  
+                  member
+                
+                {:error, changeset} ->
+                  Repo.rollback(changeset)
+              end
+            end)
+          end
+        else
+          {:error, :invite_expired}
+        end
+    end
+  end
+
+  # ============================================
+  # Streaming Sessions
+  # ============================================
+
+  alias PhoenixApp.Forum.StreamingSession
+
+  def start_stream(attrs \\ %{}) do
+    %StreamingSession{}
+    |> StreamingSession.changeset(attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, session} ->
+        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{session.channel_id}", {:stream_started, session})
+        {:ok, session}
+      error -> error
+    end
+  end
+
+  def end_stream(session_id) do
+    case Repo.get(StreamingSession, session_id) do
+      nil -> {:error, :not_found}
+      session ->
+        session
+        |> StreamingSession.changeset(%{is_active: false, ended_at: DateTime.utc_now()})
+        |> Repo.update()
+        |> case do
+          {:ok, updated_session} ->
+            Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{session.channel_id}", :stream_ended)
+            {:ok, updated_session}
+          error -> error
+        end
+    end
+  end
+
+  def get_active_stream(channel_id) do
+    from(s in StreamingSession,
+      where: s.channel_id == ^channel_id and s.is_active == true,
+      preload: [:streamer],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  def update_stream_viewer_count(session_id, count) do
+    case Repo.get(StreamingSession, session_id) do
+      nil -> {:error, :not_found}
+      session ->
+        session
+        |> StreamingSession.changeset(%{viewer_count: count})
+        |> Repo.update()
+    end
+  end
+
+  def list_channel_streams(channel_id, limit \\ 10) do
+    from(s in StreamingSession,
+      where: s.channel_id == ^channel_id,
+      order_by: [desc: s.started_at],
+      limit: ^limit,
+      preload: [:streamer]
+    )
+    |> Repo.all()
   end
 end

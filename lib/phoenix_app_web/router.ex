@@ -3,6 +3,8 @@ defmodule PhoenixAppWeb.Router do
   import Phoenix.LiveView.Router
 
   pipeline :browser do
+    plug PhoenixAppWeb.Plugs.IpBlockerPlug
+    plug PhoenixAppWeb.Plugs.HoneypotPlug
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
@@ -65,6 +67,7 @@ defmodule PhoenixAppWeb.Router do
     # Public blog/shop/chat/etc.
     live "/blog", BlogLive, :index
     live "/blog/:slug", BlogLive, :show
+    live "/pages/:slug", PageLive, :show
     live "/shop", ShopLive, :index
     live "/shop/category/:slug", ShopLive, :category
     live "/shop/product/:id", ShopLive, :product
@@ -108,6 +111,7 @@ defmodule PhoenixAppWeb.Router do
 
       live "/", AdminLive.Dashboard, :index
       live "/blog-management", AdminLive.BlogManagement, :index
+  live "/pages", AdminLive.Pages, :index
       live "/user-management", UserManagementLive, :index
       live "/files", AdminLive.Files, :index
       live "/sql", AdminLive.SQL, :index

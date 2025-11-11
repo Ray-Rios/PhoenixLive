@@ -96,7 +96,7 @@ defmodule PhoenixAppWeb.AdminLive.ServicesLive do
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <%= for service <- @services do %>
-              <div class={"bg-gray-800 rounded-lg p-6 border-l-4 #{status_border_color(service.status)}"}>
+              <div class={"glass-dark rounded-lg p-6 border-l-4 #{status_border_color(service.status)}"}>
                 <div class="flex items-center justify-between mb-4">
                   <div class="flex items-center space-x-3">
                     <div class={"#{service_icon_bg(service.type)} p-2 rounded-lg text-white text-2xl"}>
@@ -149,7 +149,7 @@ defmodule PhoenixAppWeb.AdminLive.ServicesLive do
           </div>
 
           <!-- Quick Actions -->
-          <div class="mt-8 bg-gray-800 rounded-lg p-6">
+          <div class="mt-8 glass-dark rounded-lg p-6">
             <h2 class="text-xl font-bold text-white mb-4">Quick Actions</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">

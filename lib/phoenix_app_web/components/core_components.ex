@@ -97,18 +97,18 @@ defmodule PhoenixAppWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@flash_id}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> JS.transition("translate-x-[calc(100%+40px)] opacity-0", time: 300)}
-      phx-mounted={JS.transition("translate-x-0 opacity-100", time: 300)}
-      phx-remove={JS.transition("translate-x-[calc(100%+40px)] opacity-0", time: 300)}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> JS.hide(to: "##{@flash_id}", transition: {"transition-all duration-300", "opacity-100 translate-x-0", "opacity-0 translate-x-full"})}
+      phx-mounted={JS.show(to: "##{@flash_id}", transition: {"transition-all duration-300", "opacity-0 translate-x-full", "opacity-100 translate-x-0"})}
+      phx-remove={JS.hide(to: "##{@flash_id}", transition: {"transition-all duration-300", "opacity-100 translate-x-0", "opacity-0 translate-x-full"})}
       phx-hook="AutoDismissFlash"
       data-auto-dismiss="3000"
       role="alert"
-      style={"position: fixed; top: #{@top_position}px; right: 20px; z-index: #{10000 + assigns.stack_index}; transform: translateX(calc(100% + 40px));"}
+      style={"position: fixed; top: #{@top_position}px; right: 20px; z-index: 99999;"}
       class={[
-        "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer shadow-xl",
-        "opacity-0 transition-all duration-300 ease-out",
-        @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
-        @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
+        "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer shadow-2xl backdrop-blur-sm",
+        "hidden transition-all duration-300 ease-out pointer-events-auto",
+        @kind == :info && "bg-emerald-100 text-emerald-900 ring-emerald-600 fill-cyan-900 border-2 border-emerald-500",
+        @kind == :error && "bg-rose-100 text-rose-950 ring-rose-600 fill-rose-900 border-2 border-rose-500"
       ]}
       {@rest}
     >

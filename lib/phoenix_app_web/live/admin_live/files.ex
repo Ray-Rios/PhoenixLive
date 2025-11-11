@@ -57,7 +57,7 @@ defmodule PhoenixAppWeb.AdminLive.Files do
               </h2>
               <button
                 phx-click="toggle_sidebar"
-                class={"text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800 " <> if @sidebar_collapsed, do: "transform rotate-180", else: ""}}
+                class={"text-gray-400 hover:text-white transition-colors p-1 rounded hover:glass-dark " <> if @sidebar_collapsed, do: "transform rotate-180", else: ""}}
               >
                 <svg class="w-6 h-6 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -66,27 +66,27 @@ defmodule PhoenixAppWeb.AdminLive.Files do
             </div>
             
             <nav class="space-y-2">
-              <.link navigate={~p"/admin"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+              <.link navigate={~p"/admin"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:glass-dark hover:text-white transition-colors">
                 <span class="text-xl">📊</span>
                 <span class={if @sidebar_collapsed, do: "hidden", else: ""}>Dashboard</span>
               </.link>
-              <.link navigate={~p"/admin/user-management"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+              <.link navigate={~p"/admin/user-management"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:glass-dark hover:text-white transition-colors">
                 <span class="text-xl">👥</span>
                 <span class={if @sidebar_collapsed, do: "hidden", else: ""}>Users</span>
               </.link>
-              <.link navigate={~p"/admin/blog-management"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+              <.link navigate={~p"/admin/blog-management"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:glass-dark hover:text-white transition-colors">
                 <span class="text-xl">📝</span>
                 <span class={if @sidebar_collapsed, do: "hidden", else: ""}>Blog</span>
               </.link>
-              <.link navigate={~p"/admin/files"} class="flex items-center space-x-3 px-3 py-2 rounded bg-gray-800 text-white transition-colors">
+              <.link navigate={~p"/admin/files"} class="flex items-center space-x-3 px-3 py-2 rounded glass-dark text-white transition-colors">
                 <span class="text-xl">📁</span>
                 <span class={if @sidebar_collapsed, do: "hidden", else: ""}>Media Library</span>
               </.link>
-              <.link navigate={~p"/admin/sql"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+              <.link navigate={~p"/admin/sql"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:glass-dark hover:text-white transition-colors">
                 <span class="text-xl">💾</span>
                 <span class={if @sidebar_collapsed, do: "hidden", else: ""}>SQL Console</span>
               </.link>
-              <.link navigate={~p"/admin/security"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+              <.link navigate={~p"/admin/security"} class="flex items-center space-x-3 px-3 py-2 rounded text-gray-300 hover:glass-dark hover:text-white transition-colors">
                 <span class="text-xl">🔒</span>
                 <span class={if @sidebar_collapsed, do: "hidden", else: ""}>Security</span>
               </.link>
@@ -102,7 +102,7 @@ defmodule PhoenixAppWeb.AdminLive.Files do
             <!-- Files Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               <%= for file <- @files do %>
-                <div class="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
+                <div class="glass-dark rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
                   <!-- File Preview -->
                   <div class="aspect-square bg-gray-900 flex items-center justify-center p-4">
                     <%= if file.content_type && String.starts_with?(file.content_type, "image/") do %>
@@ -165,7 +165,7 @@ defmodule PhoenixAppWeb.AdminLive.Files do
       <!-- File Preview Modal -->
       <%= if @selected_file do %>
         <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4" phx-click="close_preview">
-          <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" phx-click-away="close_preview">
+          <div class="glass-dark rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" phx-click-away="close_preview">
             <div class="p-6">
               <div class="flex justify-between items-start mb-4">
                 <h2 class="text-2xl font-bold text-white"><%= @selected_file.original_filename %></h2>

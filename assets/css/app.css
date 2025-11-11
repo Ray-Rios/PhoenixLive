@@ -243,6 +243,17 @@ html, body {
   }
 }
 
+/* Global width relaxation for narrow viewports: ensure main content can expand to 99% */
+@media (max-width: 900px) {
+  /* Override common arbitrary max-width utility classes used across pages */
+  .max-w-\[80\%\],
+  .max-w-\[85\%\],
+  .max-w-\[90\%\],
+  .max-w-\[95\%\] {
+    max-width: 99% !important;
+  }
+}
+
 @keyframes shoot {
   0% {
     transform: translate(0, 0) rotate(45deg);
@@ -265,7 +276,7 @@ html, body {
 }
 
 .file-item {
-  @apply bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer relative;
+  @apply glass-dark rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer relative;
 }
 
 .file-item.selected {
@@ -295,7 +306,7 @@ html, body {
 
 /* File Upload Progress */
 .upload-progress {
-  @apply fixed top-4 right-4 bg-gray-800 text-white p-4 rounded-lg shadow-lg z-50;
+  @apply fixed top-4 right-4 glass-dark text-white p-4 rounded-lg shadow-lg z-50;
 }
 
 /* File Preview Modal */
@@ -362,7 +373,7 @@ html, body {
 
 /* Stats Cards */
 .stats-card {
-  @apply bg-gray-800 rounded-lg p-4 text-center hover:bg-gray-700 transition-colors;
+  @apply glass-dark rounded-lg p-4 text-center hover:bg-gray-700 transition-colors;
 }
 
 .stats-number {
@@ -653,4 +664,38 @@ html, body {
   box-shadow:
     0 2px 4px 0 rgba(82, 82, 82, 0.082),
     inset 0 1px 0 rgba(0, 0, 0, 0.123);
+}
+
+/* ==================== SOCIAL HUBS STYLES ==================== */
+
+.hub-icon-btn {
+  @apply relative cursor-pointer transition-all duration-200 ease-in-out;
+}
+
+.hub-icon-btn:hover {
+  transform: translateX(4px);
+}
+
+.hub-icon {
+  @apply w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center transition-all duration-200;
+}
+
+.hub-icon:hover {
+  @apply rounded-2xl;
+}
+
+.tooltip-container {
+  @apply relative;
+}
+
+.tooltip {
+  @apply absolute left-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-200 z-50;
+}
+
+.tooltip-container:hover .tooltip {
+  @apply opacity-100;
+}
+
+.glass-dark {
+  @apply bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700;
 }

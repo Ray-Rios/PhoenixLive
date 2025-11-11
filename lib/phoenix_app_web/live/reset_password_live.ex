@@ -228,7 +228,7 @@ defmodule PhoenixAppWeb.ResetPasswordLive do
               </div>
             <% end %>
 
-            <div class="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl shadow-2xl p-8 border border-gray-700">
+            <div class="glass-dark bg-opacity-50 backdrop-blur-lg rounded-xl shadow-2xl p-8 border border-gray-700">
               <.form 
                 for={@form} 
                 phx-submit="submit" 
@@ -245,7 +245,7 @@ defmodule PhoenixAppWeb.ResetPasswordLive do
                     id="reset_password_password"
                     value={@form_data["password"] || ""}
                     required
-                    class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    class="w-full px-4 py-3 glass-dark border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                     placeholder="Enter your new password"
                   />
                 </div>
@@ -260,7 +260,7 @@ defmodule PhoenixAppWeb.ResetPasswordLive do
                     id="reset_password_password_confirmation"
                     value={@form_data["password_confirmation"] || ""}
                     required
-                    class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    class="w-full px-4 py-3 glass-dark border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                     placeholder="Confirm your new password"
                   />
                 </div>

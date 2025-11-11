@@ -62,7 +62,7 @@ defmodule PhoenixAppWeb.BlogLive do
         <div :if={@recent_posts != []} class="mb-12">
             <h2 class="text-2xl font-bold text-white mb-6">Featured Posts</h2>
 
-            <div class="relative bg-gray-800 rounded-lg overflow-hidden">
+            <div class="relative glass-dark rounded-lg overflow-hidden">
               <div class="relative h-96 overflow-hidden">
                 <%= for {post, index} <- Enum.with_index(@recent_posts) do %>
                   <div
@@ -135,7 +135,7 @@ defmodule PhoenixAppWeb.BlogLive do
             <h2 class="text-2xl font-bold text-white mb-6">All Posts</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <%= for post <- @posts do %>
-                <article class="bg-gray-800 rounded-lg overflow-hidden hover:transform hover:scale-105 transition-all duration-300">
+                <article class="glass-dark rounded-lg overflow-hidden hover:transform hover:scale-105 transition-all duration-300">
                   <.link navigate={"/blog/#{post.slug}"}>
                     <img src={PhoenixApp.PostImage.url({post.featured_image, post}, :thumb) || "/images/default_post.png"}
                          alt={post.title} class="w-full h-48 object-cover" />
@@ -179,6 +179,51 @@ defmodule PhoenixAppWeb.BlogLive do
               <% end %>
             </div>
         </div>
+        </div>
+      </div>
+
+      <!-- Blog Post Detail View -->
+      <div :if={@view == :post_detail} class="w-full">
+        <div class="auth-glass-panel rounded-xl p-8 mb-6">
+          <!-- Back button -->
+          <.link navigate={~p"/blog"} class="text-blue-400 hover:text-blue-300 mb-6 inline-block">
+            ← Back to Blog
+          </.link>
+
+          <!-- Featured Image -->
+          <div :if={@post.featured_image} class="mb-8 rounded-lg overflow-hidden">
+            <img src={PhoenixApp.PostImage.url({@post.featured_image, @post}, :large) || "/images/default_post.png"}
+                 alt={@post.title} class="w-full h-96 object-cover" />
+          </div>
+
+          <!-- Post Header -->
+          <article class="prose prose-invert max-w-none">
+            <h1 class="text-4xl font-bold text-white mb-4"><%= @post.title %></h1>
+
+            <div class="flex items-center text-gray-400 text-sm mb-8">
+              <div class="w-8 h-8 rounded-full mr-3" style={"background-color: #{@post.user.avatar_color};"}>
+                <span class="text-sm text-white flex items-center justify-center h-full">
+                  <%= String.first(@post.user.name || @post.user.email) %>
+                </span>
+              </div>
+              <span class="mr-4"><%= @post.user.name || @post.user.email %></span>
+              <span><%= Calendar.strftime(@post.published_at, "%B %d, %Y") %></span>
+            </div>
+
+            <!-- Tags -->
+            <div :if={@post.tags != []} class="flex flex-wrap gap-2 mb-8">
+              <%= for tag <- @post.tags do %>
+                <span class="bg-gray-700 text-gray-300 px-3 py-1 rounded-full text-sm">
+                  #<%= tag %>
+                </span>
+              <% end %>
+            </div>
+
+            <!-- Post Content -->
+            <div class="text-gray-200 leading-relaxed text-lg">
+              <%= PhoenixAppWeb.Markdown.render(@post.content) %>
+            </div>
+          </article>
         </div>
       </div>
     </div>

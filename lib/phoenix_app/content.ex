@@ -65,6 +65,10 @@ defmodule PhoenixApp.Content do
   end
 
   def get_page!(id), do: Repo.get!(Page, id)
+  
+  def get_page_by_slug(slug) do
+    Repo.get_by(Page, slug: slug)
+  end
 
   def create_page(attrs \\ %{}) do
     %Page{}

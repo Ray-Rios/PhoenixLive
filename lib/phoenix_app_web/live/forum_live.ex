@@ -8,20 +8,32 @@ defmodule PhoenixAppWeb.ForumLive do
     user = socket.assigns.current_user
 
     if user do
-      channels = Forum.list_channels()
+      # Get system channels (non-user-created)
+      system_channels = Forum.list_channels()
       
       # Ensure we have at least a default channel
-      default_channel = if Enum.empty?(channels) do
+      default_channel = if Enum.empty?(system_channels) do
         Forum.get_or_create_default_channel()
       else
-        List.first(channels)
+        List.first(system_channels)
       end
+
+      # Get user-created channels
+      user_owned_channels = Forum.list_user_owned_channels(user.id)
+      user_member_channels = Forum.list_user_member_channels(user.id)
+      public_user_channels = Forum.list_public_user_channels()
 
       # Subscribe to channel updates
       Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "chat:channels")
 
       socket = assign(socket,
-        channels: if(Enum.empty?(channels), do: [default_channel], else: channels),
+        system_channels: if(Enum.empty?(system_channels), do: [default_channel], else: system_channels),
+        user_owned_channels: user_owned_channels,
+        user_member_channels: user_member_channels,
+        public_user_channels: public_user_channels,
+        # Add missing assigns expected by template
+        public_channels: public_user_channels,
+        user_channels: user_owned_channels ++ user_member_channels,
         current_channel: default_channel,
         messages: Forum.list_messages(default_channel.id),
         current_message: "",
@@ -30,12 +42,12 @@ defmodule PhoenixAppWeb.ForumLive do
         show_create_channel: false,
         channel_form: Forum.change_channel(%Forum.Channel{}),
         page_title: "Forum - #{default_channel.name}",
-        user_channels: Forum.list_user_channels(user.id),
-        public_channels: Forum.list_public_channels(),
         show_channel_modal: false,
         editing_channel: nil,
         message_attachments: [],
-        show_attachments: false
+        show_attachments: false,
+        active_stream: nil,
+        can_create_more_channels: length(user_owned_channels) < 5
       )
       |> allow_upload(:forum_attachment,
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .mp3 .wav .zip),
@@ -55,6 +67,7 @@ defmodule PhoenixAppWeb.ForumLive do
   def handle_params(%{"channel_id" => channel_id}, _uri, socket) do
     channel = Forum.get_channel!(channel_id)
     messages = Forum.list_messages(channel_id)
+    active_stream = Forum.get_active_stream(channel_id)
     
     # Unsubscribe from previous channel
     if socket.assigns[:current_channel] do
@@ -67,6 +80,7 @@ defmodule PhoenixAppWeb.ForumLive do
     {:noreply, assign(socket,
       current_channel: channel,
       messages: messages,
+      active_stream: active_stream,
       page_title: "Chat - #{channel.name}"
     )}
   end
@@ -227,16 +241,14 @@ defmodule PhoenixAppWeb.ForumLive do
     
     # Check if user has permission to create channels
     if user && (user.is_admin || user.role in ["admin", "gm", "editor"]) do
-      case Forum.create_user_channel(user, channel_params) do
+      case Forum.create_channel(channel_params) do
         {:ok, channel} ->
-          channels = Forum.list_channels()
-          user_channels = Forum.list_user_channels(user.id)
-          public_channels = Forum.list_public_channels()
+          system_channels = Forum.list_channels()
 
           {:noreply,
            socket
            |> assign(show_create_channel: false, channel_form: Forum.change_channel(%Forum.Channel{}))
-           |> assign(channels: channels, user_channels: user_channels, public_channels: public_channels)
+           |> assign(system_channels: system_channels)
            |> put_flash(:info, "Channel '#{channel.name}' created successfully!")}
 
         {:error, changeset} ->
@@ -269,6 +281,102 @@ defmodule PhoenixAppWeb.ForumLive do
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "Failed to delete channel")}
       end
+    end
+  end
+
+  # User-Created Channel Events
+  def handle_event("show_create_user_channel", _params, socket) do
+    if socket.assigns.can_create_more_channels do
+      {:noreply, assign(socket, show_create_channel: true, creating_user_channel: true)}
+    else
+      {:noreply, put_flash(socket, :error, "You've reached the maximum of 5 channels")}
+    end
+  end
+
+  def handle_event("create_user_channel", %{"channel" => channel_params}, socket) do
+    user = socket.assigns.current_user
+    
+    # Add owner_id and user_created flag
+    channel_params = Map.merge(channel_params, %{
+      "owner_id" => user.id,
+      "is_user_created" => true
+    })
+    
+    case Forum.create_user_channel(channel_params) do
+      {:ok, channel} ->
+        user_owned_channels = Forum.list_user_owned_channels(user.id)
+        
+        {:noreply,
+         socket
+         |> assign(
+           show_create_channel: false,
+           creating_user_channel: false,
+           user_owned_channels: user_owned_channels,
+           can_create_more_channels: length(user_owned_channels) < 5
+         )
+         |> put_flash(:info, "Channel '#{channel.name}' created!")
+         |> push_navigate(to: ~p"/forum/#{channel.id}")}
+      
+      {:error, %Ecto.Changeset{} = changeset} ->
+        error_msg = if changeset.errors[:owner_id] do
+          "You can only create up to 5 channels"
+        else
+          "Failed to create channel"
+        end
+        
+        {:noreply, put_flash(socket, :error, error_msg)}
+    end
+  end
+
+  def handle_event("join_channel_with_invite", %{"code" => code}, socket) do
+    user = socket.assigns.current_user
+    
+    case Forum.use_channel_invite(code, user.id) do
+      {:ok, _member} ->
+        user_member_channels = Forum.list_user_member_channels(user.id)
+        
+        {:noreply,
+         socket
+         |> assign(user_member_channels: user_member_channels)
+         |> put_flash(:info, "Successfully joined channel!")}
+      
+      {:error, reason} ->
+        message = case reason do
+          :invalid_invite -> "Invalid invite code"
+          :invite_expired -> "This invite has expired"
+          :already_member -> "You're already a member"
+          _ -> "Failed to join channel"
+        end
+        {:noreply, put_flash(socket, :error, message)}
+    end
+  end
+
+  # Streaming Events
+  def handle_event("start_stream", %{"type" => stream_type}, socket) do
+    user = socket.assigns.current_user
+    channel = socket.assigns.current_channel
+    
+    case Forum.start_stream(%{
+      channel_id: channel.id,
+      streamer_id: user.id,
+      stream_type: stream_type,
+      title: "#{user.name || user.email}'s Stream"
+    }) do
+      {:ok, session} ->
+        {:noreply, assign(socket, active_stream: session)}
+      
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to start stream")}
+    end
+  end
+
+  def handle_event("end_stream", %{"session_id" => session_id}, socket) do
+    case Forum.end_stream(session_id) do
+      {:ok, _} ->
+        {:noreply, assign(socket, active_stream: nil)}
+      
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to end stream")}
     end
   end
 
@@ -352,18 +460,27 @@ defmodule PhoenixAppWeb.ForumLive do
 
   def handle_info({:channel_deleted, channel_id}, socket) do
     user = socket.assigns.current_user
-    user_channels = Forum.list_user_channels(user.id)
-    public_channels = Forum.list_public_channels()
+    user_owned_channels = Forum.list_user_owned_channels(user.id)
+    user_member_channels = Forum.list_user_member_channels(user.id)
+    public_user_channels = Forum.list_public_user_channels()
 
     # If current channel was deleted, redirect to general
     if socket.assigns.current_channel.id == channel_id do
       general_channel = Forum.get_or_create_default_channel()
       {:noreply, socket
-               |> assign(user_channels: user_channels, public_channels: public_channels, current_channel: general_channel)
+               |> assign(user_owned_channels: user_owned_channels, user_member_channels: user_member_channels, public_user_channels: public_user_channels, current_channel: general_channel)
                |> push_navigate(to: ~p"/forum/#{general_channel.id}")}
     else
-      {:noreply, assign(socket, user_channels: user_channels, public_channels: public_channels)}
+      {:noreply, assign(socket, user_owned_channels: user_owned_channels, user_member_channels: user_member_channels, public_user_channels: public_user_channels)}
     end
+  end
+
+  def handle_info({:stream_started, session}, socket) do
+    {:noreply, assign(socket, active_stream: session)}
+  end
+
+  def handle_info(:stream_ended, socket) do
+    {:noreply, assign(socket, active_stream: nil)}
   end
 
 
@@ -393,7 +510,7 @@ defmodule PhoenixAppWeb.ForumLive do
 
           <!-- Create Channel Modal -->
           <div :if={@show_create_channel} class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
+            <div class="glass-dark rounded-lg p-6 w-96 max-w-md mx-4">
               <h3 class="text-white text-lg font-semibold mb-4">Create Channel</h3>
 
               <.form for={@channel_form} phx-submit="create_channel" phx-change="validate_channel">
@@ -439,7 +556,7 @@ defmodule PhoenixAppWeb.ForumLive do
           <div class="grid grid-cols-12 gap-6">
             <!-- Sidebar -->
             <div class="col-span-3">
-              <div class="bg-gray-800 rounded-lg p-4">
+              <div class="glass-dark rounded-lg p-4">
                 <h3 class="text-white font-semibold mb-4">Channels</h3>
 
                 <!-- Public Channels -->
@@ -489,7 +606,7 @@ defmodule PhoenixAppWeb.ForumLive do
             <div class="col-span-9">
               <%= if @current_channel do %>
                 <!-- Channel Detail View -->
-                <div class="bg-gray-800 rounded-lg overflow-hidden">
+                <div class="glass-dark rounded-lg overflow-hidden">
                   <!-- Channel Header -->
                   <div class="p-4 border-b border-gray-700">
                     <div class="flex items-center justify-between">

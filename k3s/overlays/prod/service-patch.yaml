@@ -4,6 +4,10 @@ metadata:
   name: phoenix-web
 spec:
   type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800 # 3 hours
   selector:
     app: phoenix-web
   ports:

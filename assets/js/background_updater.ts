@@ -3,7 +3,7 @@ export const BackgroundUpdater = {
     console.log('BackgroundUpdater hook mounted');
 
     // Listen for background updates from LiveView
-    this.handleEvent("update_background", (data: any) => {
+    const handleBackgroundUpdate = (data: any) => {
       console.log('Updating background:', data);
       this.updateBackground(data);
 
@@ -11,7 +11,10 @@ export const BackgroundUpdater = {
       if (data.global) {
         window.dispatchEvent(new CustomEvent('background-update', { detail: data }));
       }
-    });
+    };
+
+    this.handleEvent("update_background", handleBackgroundUpdate);
+    this.handleEvent("background_update", handleBackgroundUpdate);
 
     // Listen for global background updates from other components
     window.addEventListener('background-update', (event: any) => {
@@ -23,10 +26,12 @@ export const BackgroundUpdater = {
     const backgroundType = data.background;
     const customData = data.custom_data || {};
 
+    console.log('🖼️ Updating background:', { type: backgroundType, customData });
+
     // Find the global background canvas
     const canvas = document.getElementById('global-background-canvas');
     if (!canvas) {
-      console.warn('Global background canvas not found');
+      console.warn('⚠️ Global background canvas not found');
       return;
     }
 
@@ -37,14 +42,17 @@ export const BackgroundUpdater = {
       // Apply gradient background
       const startColor = customData.gradient_start || '#3B82F6';
       const endColor = customData.gradient_end || '#9333EA';
-      canvas.style.background = `linear-gradient(135deg, ${startColor}, ${endColor})`;
+      const gradient = `linear-gradient(135deg, ${startColor}, ${endColor})`;
+      canvas.style.background = gradient;
       canvas.removeAttribute('data-static-scene');
       canvas.setAttribute('data-bg-type', 'gradient');
-
-  // Disable pointer events on the main background canvas for non-3D backgrounds
-  // and ensure there's a hidden camera control canvas so other UI doesn't break.
-  canvas.style.pointerEvents = 'none';
-  this.ensureCameraControlCanvas();
+      canvas.style.pointerEvents = 'none';
+      
+      // Force reflow
+      void canvas.offsetHeight;
+      
+      this.ensureCameraControlCanvas();
+      console.log('✅ Gradient applied:', { startColor, endColor });
 
     } else if (backgroundType === 'solid') {
       // Apply solid color background
@@ -52,10 +60,13 @@ export const BackgroundUpdater = {
       canvas.style.background = color;
       canvas.removeAttribute('data-static-scene');
       canvas.setAttribute('data-bg-type', 'solid');
-
-  // Disable pointer events on the main background canvas for non-3D backgrounds
-  canvas.style.pointerEvents = 'none';
-  this.ensureCameraControlCanvas();
+      canvas.style.pointerEvents = 'none';
+      
+      // Force reflow
+      void canvas.offsetHeight;
+      
+      this.ensureCameraControlCanvas();
+      console.log('✅ Solid color applied:', color);
 
     } else {
       // Apply 3D scene background
@@ -63,19 +74,12 @@ export const BackgroundUpdater = {
       canvas.setAttribute('data-static-scene', hookName);
       canvas.style.background = ''; // Clear any CSS background
       canvas.setAttribute('data-bg-type', '3d');
-
-  // Enable pointer events on the main background canvas so GlobalCameraController
-  // and the Three.js scene can receive pointer input for camera controls.
-  canvas.style.pointerEvents = 'auto';
-
-  // Remove the auxiliary camera control canvas (not needed for 3D)
-  this.removeCameraControlCanvas();
-
-      // Initialize the 3D scene
+      canvas.style.pointerEvents = 'auto';
+      
+      this.removeCameraControlCanvas();
       this.initialize3DScene(canvas, hookName);
+      console.log('✅ 3D scene applied:', hookName);
     }
-
-    console.log('Background updated:', { type: backgroundType, customData });
   },
 
   cleanup3DScene(canvas: HTMLElement) {

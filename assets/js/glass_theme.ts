@@ -3,7 +3,7 @@ export const GlassTheme = {
     console.log('✅ GlassTheme hook mounted');
     
     // Listen for glass theme updates from LiveView
-    this.handleEvent("update_glass_theme", (data: any) => {
+    const handleGlassUpdate = (data: any) => {
       console.log('🎨 GlassTheme: Received update_glass_theme from LiveView:', data);
       this.applyGlassTheme(data);
       
@@ -12,7 +12,10 @@ export const GlassTheme = {
         window.dispatchEvent(new CustomEvent('glass-theme-update', { detail: data }));
         console.log('📢 GlassTheme: Dispatched glass-theme-update window event');
       }
-    });
+    };
+
+    this.handleEvent("update_glass_theme", handleGlassUpdate);
+    this.handleEvent("glass_theme_update", handleGlassUpdate);
     
     // Listen for global glass theme updates from other components
     window.addEventListener('glass-theme-update', (event: any) => {
@@ -36,11 +39,12 @@ export const GlassTheme = {
       'red': { bg: 'rgba(239, 68, 68, OPACITY)', border: 'rgba(239, 68, 68, 0.3)' },
       'amber': { bg: 'rgba(245, 158, 11, OPACITY)', border: 'rgba(245, 158, 11, 0.3)' },
       'teal': { bg: 'rgba(20, 184, 166, OPACITY)', border: 'rgba(20, 184, 166, 0.3)' },
+      'light': { bg: 'rgba(249, 250, 251, OPACITY)', border: 'rgba(0, 0, 0, 0.15)' },
     };
 
     let bgColor, borderColor;
-    const opacity = data.opacity || 0.15;
-    const blur = data.blur || 15;
+    const opacity = parseFloat(data.opacity?.toString() || '0.15');
+    const blur = parseInt(data.blur?.toString() || '15', 10);
 
     // Check if custom color is provided
     if (data.custom_color && data.custom_color !== '') {
@@ -51,7 +55,7 @@ export const GlassTheme = {
       const b = parseInt(hex.substr(4, 2), 16);
       
       bgColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-      borderColor = `rgba(${r}, ${g}, ${b}, ${Math.min(1, parseFloat(opacity.toString()) + 0.2)})`;
+      borderColor = `rgba(${r}, ${g}, ${b}, ${Math.min(1, opacity + 0.2)})`;
     } else {
       // Use predefined theme colors with dynamic opacity
       const theme = themeColors[data.theme as keyof typeof themeColors] || themeColors.dark;
@@ -59,16 +63,20 @@ export const GlassTheme = {
       borderColor = theme.border;
     }
 
-    // Update CSS custom properties globally
+    // Update CSS custom properties globally - FORCE update
     root.style.setProperty('--glass-bg', bgColor);
     root.style.setProperty('--glass-border', borderColor);
     root.style.setProperty('--glass-blur', `${blur}px`);
     root.style.setProperty('--glass-saturation', '120%');
 
-    console.log('Glass theme applied globally:', {
-      bg: root.style.getPropertyValue('--glass-bg'),
-      border: root.style.getPropertyValue('--glass-border'),
-      blur: root.style.getPropertyValue('--glass-blur'),
+    // Force reflow to apply changes immediately
+    void root.offsetHeight;
+
+    console.log('✅ Glass theme applied globally:', {
+      bg: bgColor,
+      border: borderColor,
+      blur: `${blur}px`,
+      theme: data.theme,
       custom_color: data.custom_color
     });
   }

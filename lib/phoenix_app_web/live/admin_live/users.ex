@@ -59,7 +59,7 @@ defmodule PhoenixAppWeb.AdminLive.Users do
         <div class="flex-1 p-8">
           <h1 class="text-3xl font-bold text-white mb-8">User Management</h1>
           
-          <div class="bg-gray-800 rounded-lg overflow-hidden">
+          <div class="glass-dark rounded-lg overflow-hidden">
             <table class="w-full">
               <thead class="bg-gray-700">
                 <tr>
@@ -117,7 +117,7 @@ defmodule PhoenixAppWeb.AdminLive.Users do
 
     <style>
       .admin-nav-link {
-        @apply block w-full text-left px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded transition-colors;
+        @apply block w-full text-left px-4 py-2 text-gray-300 hover:glass-dark hover:text-white rounded transition-colors;
       }
       .admin-nav-link.active {
         @apply bg-blue-600 text-white;

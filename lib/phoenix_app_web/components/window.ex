@@ -33,6 +33,7 @@ defmodule PhoenixAppWeb.Components.Window do
         
         <div class="flex items-center space-x-1">
           <button 
+            type="button"
             phx-click="minimize_window" 
             phx-value-window_id={@window.id}
             phx-target={@target}
@@ -43,7 +44,8 @@ defmodule PhoenixAppWeb.Components.Window do
           </button>
           
           <button 
-            phx-click={if @window.maximized, do: "restore_window", else: "maximize_window"}
+            type="button"
+            phx-click="toggle_maximize"
             phx-value-window_id={@window.id}
             phx-target={@target}
             class="w-6 h-6 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors"
@@ -53,6 +55,7 @@ defmodule PhoenixAppWeb.Components.Window do
           </button>
           
           <button 
+            type="button"
             phx-click="close_window" 
             phx-value-window_id={@window.id}
             phx-target={@target}
@@ -96,27 +99,32 @@ defmodule PhoenixAppWeb.Components.Window do
   attr :current_page, :integer, default: 1
   attr :page_size, :integer, default: 20
   attr :is_admin, :boolean, default: false
+  attr :target, :any, default: nil
 
   def file_manager_content(assigns) do
     ~H"""
     <div class="h-full flex flex-col">
       <!-- Toolbar -->
-      <div class="bg-gray-800 border-b border-gray-600 p-3">
+      <div class="glass-dark border-b border-gray-600 p-3">
         <div class="flex items-center justify-between gap-4">
           <!-- Navigation -->
           <div class="flex items-center space-x-2">
             <button 
+              type="button"
               phx-click="navigate_back"
               phx-value-window_id={@window.id}
+              phx-target={@target}
               disabled={@window.current_path == "/"}
               class={["p-2 rounded", if(@window.current_path == "/", do: "opacity-50 cursor-not-allowed", else: "hover:bg-gray-700")]}
             >
               ← Back
             </button>
             <button 
+              type="button"
               phx-click="navigate_to"
               phx-value-window_id={@window.id}
               phx-value-path="/"
+              phx-target={@target}
               class="p-2 hover:bg-gray-700 rounded"
             >
               🏠 Home
@@ -126,9 +134,11 @@ defmodule PhoenixAppWeb.Components.Window do
           <!-- Breadcrumb Navigation -->
           <div class="flex-1 flex items-center space-x-1 text-sm overflow-x-auto">
             <button 
+              type="button"
               phx-click="navigate_to"
               phx-value-window_id={@window.id}
               phx-value-path="/"
+              phx-target={@target}
               class="text-blue-400 hover:text-blue-300"
             >
               Root
@@ -136,12 +146,14 @@ defmodule PhoenixAppWeb.Components.Window do
             <%= for breadcrumb <- @window.breadcrumbs do %>
               <span class="text-gray-500">/</span>
               <button 
+                type="button"
                 phx-click="navigate_to"
                 phx-value-window_id={@window.id}
                 phx-value-path={breadcrumb.path}
+                phx-target={@target}
                 class="text-blue-400 hover:text-blue-300 whitespace-nowrap"
               >
-                <%= breadcrumb.label %>
+                <%= breadcrumb.name %>
               </button>
             <% end %>
           </div>
@@ -149,17 +161,21 @@ defmodule PhoenixAppWeb.Components.Window do
           <!-- View Options -->
           <div class="flex items-center space-x-2">
             <button 
+              type="button"
               phx-click="change_view_mode" 
               phx-value-mode="grid" 
               phx-value-window_id={@window.id}
+              phx-target={@target}
               class={["p-2 rounded", if(@window.view_mode == "grid", do: "bg-blue-600", else: "hover:bg-gray-700")]}
             >
               ⊞
             </button>
             <button 
+              type="button"
               phx-click="change_view_mode" 
               phx-value-mode="list" 
               phx-value-window_id={@window.id}
+              phx-target={@target}
               class={["p-2 rounded", if(@window.view_mode == "list", do: "bg-blue-600", else: "hover:bg-gray-700")]}
             >
               ☰
@@ -178,7 +194,8 @@ defmodule PhoenixAppWeb.Components.Window do
                 phx-click="navigate_to"
                 phx-value-window_id={@window.id}
                 phx-value-path={drive.path}
-                class="bg-gray-800 rounded-xl p-8 transition-all cursor-pointer hover:bg-gray-700 hover:scale-105 border-2 border-blue-500/30 hover:border-blue-500/60"
+                phx-target={@target}
+                class="glass-dark rounded-xl p-8 transition-all cursor-pointer hover:bg-gray-700 hover:scale-105 border-2 border-blue-500/30 hover:border-blue-500/60"
               >
                 <div class="text-center">
                   <div class="text-6xl mb-4"><%= drive.icon %></div>
@@ -197,7 +214,8 @@ defmodule PhoenixAppWeb.Components.Window do
                   phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: nil}
                   phx-value-window_id={@window.id}
                   phx-value-path={item.path}
-                  class="bg-gray-800 rounded-lg p-4 transition-colors cursor-pointer hover:bg-gray-700 group"
+                  phx-target={@target}
+                  class="glass-dark rounded-lg p-4 transition-colors cursor-pointer hover:bg-gray-700 group"
                 >
                   <div class="text-center">
                     <div class="text-4xl mb-2"><%= item.icon %></div>
@@ -217,7 +235,8 @@ defmodule PhoenixAppWeb.Components.Window do
                   phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: nil}
                   phx-value-window_id={@window.id}
                   phx-value-path={item.path}
-                  class="flex items-center justify-between p-3 hover:bg-gray-800 rounded transition-colors cursor-pointer"
+                  phx-target={@target}
+                  class="flex items-center justify-between p-3 hover:glass-dark rounded transition-colors cursor-pointer"
                 >
                   <div class="flex items-center space-x-3 flex-1 min-w-0">
                     <div class="text-2xl"><%= item.icon %></div>
@@ -246,7 +265,7 @@ defmodule PhoenixAppWeb.Components.Window do
       </div>
       
       <!-- Status Bar -->
-      <div class="bg-gray-800 border-t border-gray-600 px-4 py-2 text-sm text-gray-300">
+      <div class="glass-dark border-t border-gray-600 px-4 py-2 text-sm text-gray-300">
         <div class="flex justify-between items-center">
           <div>
             <%= length(@window.current_items) %> items

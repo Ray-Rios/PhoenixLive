@@ -83,7 +83,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
   def render(assigns) do
     ~H"""
     <div class="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 relative z-10">
-      <div class="auth-glass-panel max-w-md w-full space-y-8">
+      <div class="auth-glass-panel rounded-xl shadow-2xl p-8 max-w-md w-full space-y-8">
         <!-- Back to Home Link -->
         <div class="text-left">
           <.link 
@@ -119,7 +119,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
             </p>
           </div>
         <% else %>
-          <div class="rounded-xl shadow-2xl p-8">
+          
           <.form 
             for={@form} 
             phx-submit="submit" 
@@ -136,7 +136,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
                 id="forgot_password_email_or_username"
                 value={@form_data["email_or_username"] || ""}
                 required
-                class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                class="w-full px-4 py-3 glass-dark border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                 placeholder="Enter your email or username"
               />
             </div>
@@ -168,7 +168,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
               </.link>
             </p>
           </div>
-        </div>
+        
         <% end %>
       </div>
     </div>

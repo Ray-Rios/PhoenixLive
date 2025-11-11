@@ -63,37 +63,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
-  def handle_event("save_draft_button", _params, socket) do
-    # Get data from the form's current changeset
-    changeset = socket.assigns.form.source
-    post_data = Ecto.Changeset.apply_changes(changeset)
-    
-    # Convert to params map
-    post_params = post_data
-    |> Map.from_struct()
-    |> Map.drop([:__meta__, :user, :inserted_at, :updated_at, :id])
-    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
-    |> Enum.into(%{})
-    
-    # Call save with draft action
-    handle_event("save", %{"post" => post_params, "action_type" => "draft"}, socket)
-  end
 
-  def handle_event("save_publish_button", _params, socket) do
-    # Get data from the form's current changeset
-    changeset = socket.assigns.form.source
-    post_data = Ecto.Changeset.apply_changes(changeset)
-    
-    # Convert to params map
-    post_params = post_data
-    |> Map.from_struct()
-    |> Map.drop([:__meta__, :user, :inserted_at, :updated_at, :id])
-    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
-    |> Enum.into(%{})
-    
-    # Call save with publish action
-    handle_event("save", %{"post" => post_params, "action_type" => "publish"}, socket)
-  end
 
   def handle_event("autosave_draft", %{"post" => post_params}, socket) do
     # Save as draft, but do not publish
@@ -228,23 +198,12 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     post = Content.get_post!(id)
     new_published_status = !post.is_published
     
-    IO.puts("=== TOGGLE PUBLISH DEBUG ===")
-    IO.inspect(post.id, label: "Post ID")
-    IO.inspect(post.title, label: "Post Title")
-    IO.inspect(post.content, label: "Post Content (first 100 chars)")
-    IO.inspect(post.is_published, label: "Current Published Status")
-    IO.inspect(new_published_status, label: "New Published Status")
-    
     # Validate post has required fields before publishing
     if new_published_status and (is_nil(post.title) or String.trim(post.title) == "" or is_nil(post.content) or String.trim(post.content) == "") do
-      IO.puts("❌ Validation failed: missing title or content")
       {:noreply, put_flash(socket, :error, "Cannot publish: Post must have a title and content")}
     else
-      IO.puts("✅ Validation passed, attempting to update...")
       case Content.update_post(post, %{is_published: new_published_status}) do
-        {:ok, updated_post} ->
-          IO.puts("✅ Post updated successfully!")
-          IO.inspect(updated_post.is_published, label: "Updated Published Status")
+        {:ok, _updated_post} ->
           posts = Content.list_posts()
           status_text = if new_published_status, do: "published", else: "unpublished"
           
@@ -254,8 +213,6 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
             |> put_flash(:info, "Post #{status_text} successfully!")}
         
         {:error, changeset} ->
-          IO.puts("❌ Update failed!")
-          IO.inspect(changeset.errors, label: "Changeset Errors")
           error_msg = changeset.errors
             |> Enum.map(fn {field, {msg, _}} -> "#{field}: #{msg}" end)
             |> Enum.join(", ")
@@ -343,7 +300,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
 
           <!-- Blog Post Form -->
           <%= if @show_form do %>
-            <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <div class="glass-dark rounded-lg p-6 mb-8">
               <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-semibold text-white">
                   <%= if @editing_post, do: "Edit Post", else: "Create New Post" %>
@@ -432,31 +389,19 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                   </div>
                 </div>
 
-                <div class="flex items-center space-x-4">
-                  <div>
-                    <.input field={@form[:is_published]} type="select" label="Status" options={[
-                      {"Draft", false},
-                      {"Published", true}
-                    ]} />
-                  </div>
-                  
-                  <div>
-                    <.input field={@form[:post_type]} type="select" label="Post Type" options={[
-                      {"Blog Post", "post"},
-                      {"Page", "page"}
-                    ]} />
-                  </div>
-                </div>
-
                 <div class="mt-6">
+                  <input type="hidden" name="action_type" value="draft" id="blog-action-type" />
+                  
                   <div class="flex space-x-4">
                     <button 
-                      phx-click="save_draft_button"
+                      type="submit"
+                      onclick="document.getElementById('blog-action-type').value='draft'"
                       class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
                       <%= if @editing_post, do: "Save Changes", else: "Save Draft" %>
                     </button>
                     <button 
-                      phx-click="save_publish_button"
+                      type="submit"
+                      onclick="document.getElementById('blog-action-type').value='publish'"
                       class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors font-medium">
                       <%= if @editing_post, do: "Update & Publish", else: "Publish Now" %>
                     </button>
@@ -464,14 +409,16 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                       Cancel
                     </button>
                   </div>
-                  <div class="mt-2 text-xs text-gray-400">Drafts are autosaved every 10 seconds. Use "Publish Now" to immediately publish the post.</div>
+                  <div class="mt-2 text-xs text-gray-400">
+                    Click "Save Draft" to save without publishing, or "Publish Now" to make the post publicly visible.
+                  </div>
                 </div>
               </.form>
             </div>
           <% end %>
 
           <!-- Posts List -->
-          <div class="bg-gray-800 rounded-lg overflow-hidden">
+          <div class="glass-dark rounded-lg overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-700">
               <h2 class="text-lg font-semibold text-white">All Posts (<%= length(@posts) %>)</h2>
             </div>
@@ -528,18 +475,18 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                       </div>
 
                       <div class="flex space-x-2 ml-4">
-                        <button phx-click="toggle_publish" phx-value-id={post.id}
+                        <button type="button" phx-click="toggle_publish" phx-value-id={post.id}
                                 class={["px-3 py-1 text-sm rounded transition-colors",
                                        if(post.is_published, do: "bg-orange-600 hover:bg-orange-700 text-white", else: "bg-green-600 hover:bg-green-700 text-white")]}>
                           <%= if post.is_published, do: "Unpublish", else: "Publish" %>
                         </button>
                         
-                        <button phx-click="edit_post" phx-value-id={post.id}
+                        <button type="button" phx-click="edit_post" phx-value-id={post.id}
                                 class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm rounded transition-colors">
                           Edit
                         </button>
                         
-                        <button phx-click="delete_post" phx-value-id={post.id}
+                        <button type="button" phx-click="delete_post" phx-value-id={post.id}
                                 data-confirm="Are you sure you want to delete this post?"
                                 class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-sm rounded transition-colors">
                           Delete

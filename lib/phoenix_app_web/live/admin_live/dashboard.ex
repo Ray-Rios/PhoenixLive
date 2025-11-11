@@ -62,7 +62,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
               </h2>
               <button
                 phx-click="toggle_sidebar"
-                class={"text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800 " <> if @sidebar_collapsed, do: "transform rotate-180", else: ""}}
+                class={"text-gray-400 hover:text-white transition-colors p-1 rounded hover:glass-dark " <> if @sidebar_collapsed, do: "transform rotate-180", else: ""}}
                 title={if @sidebar_collapsed, do: "Expand sidebar", else: "Collapse sidebar"}
               >
                 <svg class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -95,13 +95,19 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
                   Content
                 </div>
                 <.link navigate="/admin/blog-management" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
-                  <span class="text-lg">�</span>
+                  <span class="text-lg">📝</span>
                   <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
                     Blog Posts
                   </span>
                 </.link>
+                <.link navigate="/admin/pages" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
+                  <span class="text-lg">📄</span>
+                  <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
+                    Pages
+                  </span>
+                </.link>
                 <.link navigate="/admin/uploads" class={"admin-nav-link " <> if @sidebar_collapsed, do: "justify-center px-2", else: ""}>
-                  <span class="text-lg">�</span>
+                  <span class="text-lg">📤</span>
                   <span class={"ml-3 transition-opacity duration-300 " <> if @sidebar_collapsed, do: "opacity-0 hidden", else: "opacity-100"}>
                     Uploads
                   </span>
@@ -179,7 +185,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
               </div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <div class="flex items-center">
                 <div class="text-3xl text-green-400 mr-4">📦</div>
                 <div>
@@ -189,7 +195,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
               </div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <div class="flex items-center">
                 <div class="text-3xl text-purple-400 mr-4">🛍️</div>
                 <div>
@@ -199,7 +205,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
               </div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <div class="flex items-center">
                 <div class="text-3xl text-yellow-400 mr-4">📝</div>
                 <div>
@@ -212,12 +218,12 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
 
           <!-- Revenue Stats -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <h3 class="text-lg font-semibold text-white mb-4">Revenue Today</h3>
               <div class="text-3xl font-bold text-green-400">$<%= @stats.revenue_today || 0 %></div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <h3 class="text-lg font-semibold text-white mb-4">Revenue This Month</h3>
               <div class="text-3xl font-bold text-green-400">$<%= @stats.revenue_month || 0 %></div>
             </div>
@@ -226,7 +232,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
           <!-- Recent Activity -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Recent Users -->
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <h3 class="text-lg font-semibold text-white mb-4">Recent Users</h3>
               <div class="space-y-3">
                 <%= for user <- @stats.recent_users || [] do %>
@@ -250,7 +256,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
             </div>
 
             <!-- Recent Orders -->
-            <div class="bg-gray-800 rounded-lg p-6">
+            <div class="glass-dark rounded-lg p-6">
               <h3 class="text-lg font-semibold text-white mb-4">Recent Orders</h3>
               <div class="space-y-3">
                 <%= for order <- @stats.recent_orders || [] do %>
@@ -308,7 +314,7 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
 
     <style>
       .admin-nav-link {
-        @apply flex items-center w-full text-left px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded transition-all duration-300;
+        @apply flex items-center w-full text-left px-4 py-2 text-gray-300 hover:glass-dark hover:text-white rounded transition-all duration-300;
       }
       .admin-nav-link.active {
         @apply bg-blue-600 text-white;

@@ -29,7 +29,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
     ~H"""
     <div class="file-manager-window bg-gray-900 border border-gray-700 rounded-lg shadow-2xl" style={"width: #{@width}px; height: #{@height}px;"}>
       <!-- Window Header -->
-      <div class="file-manager-header bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between rounded-t-lg">
+      <div class="file-manager-header glass-dark border-b border-gray-700 px-4 py-2 flex items-center justify-between rounded-t-lg">
         <div class="flex items-center space-x-2">
           <div class="flex space-x-1">
             <button class="w-3 h-3 bg-red-500 rounded-full" phx-click="close_window" phx-target={@myself}></button>
@@ -82,7 +82,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
 
         <!-- Current Path -->
         <div class="flex-1 mx-4">
-          <div class="bg-gray-800 px-3 py-1 rounded text-sm text-gray-300 font-mono">
+          <div class="glass-dark px-3 py-1 rounded text-sm text-gray-300 font-mono">
             <%= @current_path %>
           </div>
         </div>
@@ -190,7 +190,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
             <!-- Storage Usage -->
             <div class="mt-4">
               <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Storage</div>
-              <div class="mt-2 p-2 bg-gray-800 rounded">
+              <div class="mt-2 p-2 glass-dark rounded">
                 <div class="text-xs text-gray-300">
                   <%= Files.format_file_size(@stats.total_size) %> used
                 </div>
@@ -212,7 +212,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
                 name="query"
                 value={@search_query}
                 placeholder="Search files..."
-                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-400 pr-8"
+                class="w-full glass-dark border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 pr-8"
                 phx-debounce="300"
               />
               <svg class="absolute right-2 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,7 +274,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
   # File grid item component
   defp file_grid_item(assigns) do
     ~H"""
-    <div class="file-item bg-gray-800 hover:bg-gray-750 p-3 rounded-lg cursor-pointer group">
+    <div class="file-item glass-dark hover:bg-gray-750 p-3 rounded-lg cursor-pointer group">
       <div class="text-center">
         <div class="mb-2">
           <%= if Files.is_image?(@file) do %>
@@ -328,7 +328,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
   # File list item component
   defp file_list_item(assigns) do
     ~H"""
-    <div class="file-item flex items-center p-2 hover:bg-gray-800 rounded cursor-pointer group">
+    <div class="file-item flex items-center p-2 hover:glass-dark rounded cursor-pointer group">
       <div class="flex-shrink-0 mr-3">
         <%= if Files.is_image?(@file) do %>
           <img 

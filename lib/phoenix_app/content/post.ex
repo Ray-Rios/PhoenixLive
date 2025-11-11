@@ -29,7 +29,7 @@ defmodule PhoenixApp.Content.Post do
       :title, :slug, :content, :excerpt, :is_published, :published_at, 
       :meta_description, :tags, :featured_image
     ])
-    |> validate_required([:title, :content])
+    |> validate_required_if_published()
     |> validate_length(:title, min: 1, max: 200)
     |> validate_length(:excerpt, max: 500)
     |> validate_length(:meta_description, max: 160)
@@ -37,6 +37,14 @@ defmodule PhoenixApp.Content.Post do
     |> maybe_generate_slug()
     |> maybe_set_published_at()
     |> unique_constraint(:slug)
+  end
+
+  # Only require title/content when publishing. Allow drafts to save incrementally.
+  defp validate_required_if_published(changeset) do
+    case get_field(changeset, :is_published) do
+      true -> validate_required(changeset, [:title, :content])
+      _ -> changeset
+    end
   end
 
   defp maybe_generate_slug(changeset) do

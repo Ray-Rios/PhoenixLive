@@ -91,7 +91,7 @@ defmodule PhoenixAppWeb.Components.BackgroundSelector do
             </div>
 
             <!-- Info -->
-            <div class="bg-gray-800 p-4 text-left">
+            <div class="glass-dark p-4 text-left">
               <h4 class="font-bold text-white mb-1"><%= bg.name %></h4>
               <p class="text-sm text-gray-400"><%= bg.description %></p>
             </div>
@@ -101,7 +101,7 @@ defmodule PhoenixAppWeb.Components.BackgroundSelector do
 
       <!-- Custom Settings (show when gradient or solid is selected) -->
       <%= if @selected_background in ["gradient", "solid"] do %>
-        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div class="glass-dark rounded-lg p-6 border border-gray-700">
           <h4 class="text-lg font-bold text-white mb-4">Customize Colors</h4>
           
           <%= if @selected_background == "gradient" do %>

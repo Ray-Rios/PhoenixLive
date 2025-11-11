@@ -113,7 +113,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
 
       <!-- Statistics Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -140,7 +140,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           </div>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -167,7 +167,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           </div>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -189,7 +189,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           </div>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -213,7 +213,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Rate Limiter Active Blocks -->
-      <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
+      <div class="bg-white dark:glass-dark shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
           <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
             Rate Limiter Active Blocks
@@ -266,7 +266,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       <!-- Add to Block/Allow List Forms -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <!-- Block Form -->
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div class="bg-white dark:glass-dark shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
             <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
               Block Identifier
@@ -321,7 +321,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
         </div>
 
         <!-- Allow Form -->
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div class="bg-white dark:glass-dark shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
             <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
               Add to Allowlist
@@ -377,7 +377,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Blocked Identifiers Table -->
-      <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
+      <div class="bg-white dark:glass-dark shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
           <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
             Blocked Identifiers
@@ -449,7 +449,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Allowed Identifiers Table -->
-      <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
+      <div class="bg-white dark:glass-dark shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
           <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
             Allowlist
@@ -515,7 +515,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Recent Failed Attempts -->
-      <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+      <div class="bg-white dark:glass-dark shadow rounded-lg">
         <div class="px-4 py-5 sm:p-6">
           <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
             Recent Failed Login Attempts

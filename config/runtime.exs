@@ -123,6 +123,7 @@ smtp_host = System.get_env("SMTP_HOST") || ""
 smtp_port = System.get_env("SMTP_PORT")
 smtp_user = System.get_env("SMTP_USER")
 smtp_pass = System.get_env("SMTP_PASS")
+smtp_verify = System.get_env("SMTP_VERIFY", "true") == "true"
 
 if smtp_host != "" do
   # Use SMTP relay; defaults target STARTTLS on 587. Set SMTP_PORT if different.
@@ -130,7 +131,19 @@ if smtp_host != "" do
   {ssl?, tls_mode} =
     case parsed_port do
       465 -> {true, :never}   # Implicit SSL
-      _ -> {false, :if_available} # STARTTLS if supported
+      _ -> {false, :always}   # Require STARTTLS on submission port
+    end
+
+  tls_options_base =
+    if smtp_verify do
+      [
+        verify: :verify_peer,
+        cacertfile: "/etc/ssl/certs/ca-certificates.crt",
+        server_name_indication: to_charlist(smtp_host),
+        depth: 10
+      ]
+    else
+      [verify: :verify_none]
     end
 
   config :phoenix_app, PhoenixApp.Mailer,
@@ -142,8 +155,9 @@ if smtp_host != "" do
     auth: :always,
     tls: tls_mode,
     ssl: ssl?,
-    retries: 2,
-    no_mx_lookups: false
+  retries: 2,
+  no_mx_lookups: false,
+  tls_options: tls_options_base
 else
   # No SMTP configured: use local mailbox preview (Swoosh mailbox preview route or logs)
   config :phoenix_app, PhoenixApp.Mailer,

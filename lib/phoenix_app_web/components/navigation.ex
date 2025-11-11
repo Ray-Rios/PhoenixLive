@@ -8,7 +8,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
     ~H"""
     <!-- Navigation Toggle Button -->
     <button id="nav-toggle" 
-            class="fixed top-0 right-0 z-[60] bg-gray-800 hover:bg-gray-700 text-white p-2 pr-2 shadow-lg transition-all duration-300"
+            class="fixed top-0 right-0 z-[60] glass-dark hover:bg-gray-700 text-white p-2 pr-2 shadow-lg transition-all duration-300"
             onclick="toggleNavbar()">
       <svg id="nav-toggle-icon" class="w-3 h-3 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
@@ -36,7 +36,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
                 <% end %>
               </.link>
               <.link navigate={~p"/forum"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                🎭 Forum
+                💬 Forum
               </.link>
               <.link navigate={~p"/desktop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 🖥️ Desktop
@@ -60,7 +60,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
                 module={PhoenixAppWeb.Components.Dropdown}
                 id={"#{@id_prefix}user-dropdown"}
                 trigger_class="flex items-center space-x-1 text-white hover:text-blue-400 transition-colors duration-300 min-w-0"
-                dropdown_class="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50"
+                dropdown_class="absolute right-0 mt-2 w-48 glass-dark rounded-md shadow-lg py-1 z-50"
               >
                 <:trigger>
                   <%= if get_user_avatar_url(@current_user) do %>

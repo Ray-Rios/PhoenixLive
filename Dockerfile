@@ -13,9 +13,13 @@
             postgresql-client \
             inotify-tools \
             redis-tools \
+            ca-certificates \
             nodejs \
             npm \
             && rm -rf /var/lib/apt/lists/*
+            
+            # Ensure CA certificates are up to date for TLS verification
+            RUN update-ca-certificates || true
             
         # -------------------------------
         # Set workdir & env

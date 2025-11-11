@@ -145,7 +145,7 @@ export const FileDragDrop: FileDragDropHook = {
     function showUploadProgress(files: File[]): void {
       // Create progress indicator
       const progressDiv = document.createElement('div');
-      progressDiv.className = 'fixed top-4 right-4 bg-gray-800 text-white p-4 rounded-lg shadow-lg z-50';
+      progressDiv.className = 'fixed top-4 right-4 glass-dark text-white p-4 rounded-lg shadow-lg z-50';
       progressDiv.innerHTML = `
         <div class="flex items-center space-x-2">
           <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>

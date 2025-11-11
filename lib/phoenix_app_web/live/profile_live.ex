@@ -574,7 +574,7 @@ defmodule PhoenixAppWeb.ProfileLive do
 
               <%= if @active_tab == "appearance" do %>
                 <!-- Appearance Settings -->
-                <div class="bg-gray-800 rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
+                <div class="glass-dark rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
                   <div class="space-y-6">
                     <div>
                       <h2 class="text-2xl font-bold text-white mb-2">Background Theme</h2>
@@ -722,7 +722,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                               <label class="block text-sm text-gray-400 mb-2">Start Color</label>
                               <input
                                 type="color"
-                                id="gradient-start-color"
+                                id={"gradient-start-color-#{get_in(@custom_data, ["gradient_start"]) || "default"}"}
                                 value={get_in(@custom_data, ["gradient_start"]) || "#3B82F6"}
                                 phx-hook="ColorPicker"
                                 data-event="update_gradient_start"
@@ -733,7 +733,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                               <label class="block text-sm text-gray-400 mb-2">End Color</label>
                               <input
                                 type="color"
-                                id="gradient-end-color"
+                                id={"gradient-end-color-#{get_in(@custom_data, ["gradient_end"]) || "default"}"}
                                 value={get_in(@custom_data, ["gradient_end"]) || "#9333EA"}
                                 phx-hook="ColorPicker"
                                 data-event="update_gradient_end"
@@ -746,7 +746,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                             <label class="block text-sm text-gray-400 mb-2">Background Color</label>
                             <input
                               type="color"
-                              id="solid-color"
+                              id={"solid-color-#{get_in(@custom_data, ["solid_color"]) || "default"}"}
                               value={get_in(@custom_data, ["solid_color"]) || "#1F2937"}
                               phx-hook="ColorPicker"
                               data-event="update_solid_color"
@@ -762,7 +762,7 @@ defmodule PhoenixAppWeb.ProfileLive do
 
               <%= if @active_tab == "glass_theme" do %>
                 <!-- Glass Theme Settings -->
-                <div class="bg-gray-800 rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
+                <div class="glass-dark rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
                   <div class="space-y-6">
                     <div>
                       <h2 class="text-2xl font-bold text-white mb-2">Frosted Glass Effects</h2>
@@ -797,49 +797,51 @@ defmodule PhoenixAppWeb.ProfileLive do
 
                     <!-- Glass Settings Form - Real-time updates -->
                     <form phx-change="update_glass_setting" class="space-y-6">
-                      <div>
-                        <label class="block text-sm text-gray-400 mb-3">Glass Opacity</label>
-                        <input
-                          type="range"
-                          min="0.05"
-                          max="0.9"
-                          step="0.05"
-                          name="glass_opacity"
-                          value={get_in(@custom_data, ["glass_opacity"]) || "0.4"}
-                          class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
-                        />
-                        <div class="flex justify-between text-xs text-gray-500 mt-2">
-                          <span>More Transparent</span>
-                          <span class="text-center">Current: <%= get_in(@custom_data, ["glass_opacity"]) || "0.4" %></span>
-                          <span>More Opaque</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label class="block text-sm text-gray-400 mb-3">Blur Intensity</label>
-                        <input
-                          type="range"
-                          min="5"
-                          max="25"
-                          step="5"
-                          name="glass_blur"
-                          value={get_in(@custom_data, ["glass_blur"]) || "15"}
-                          class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
-                        />
-                        <div class="flex justify-between text-xs text-gray-500 mt-2">
-                          <span>Less Blur</span>
-                          <span class="text-center">Current: <%= get_in(@custom_data, ["glass_blur"]) || "15" %>px</span>
-                          <span>More Blur</span>
-                        </div>
-                      </div>
-
-                      <!-- Custom Color Picker for Glass -->
+                <div>
+                  <label class="block text-sm text-gray-400 mb-3">Glass Opacity</label>
+                  <input
+                    type="range"
+                    min="0.05"
+                    max="0.9"
+                    step="0.05"
+                    name="glass_opacity"
+                    id={"glass-opacity-#{get_in(@custom_data, ["glass_opacity"]) || "0.4"}"}
+                    value={get_in(@custom_data, ["glass_opacity"]) || "0.4"}
+                    phx-debounce="300"
+                    class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
+                  />
+                  <div class="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>More Transparent</span>
+                    <span class="text-center">Current: <%= get_in(@custom_data, ["glass_opacity"]) || "0.4" %></span>
+                    <span>More Opaque</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <label class="block text-sm text-gray-400 mb-3">Blur Intensity</label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="25"
+                    step="5"
+                    name="glass_blur"
+                    id={"glass-blur-#{get_in(@custom_data, ["glass_blur"]) || "15"}"}
+                    value={get_in(@custom_data, ["glass_blur"]) || "15"}
+                    phx-debounce="300"
+                    class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
+                  />
+                  <div class="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>Less Blur</span>
+                    <span class="text-center">Current: <%= get_in(@custom_data, ["glass_blur"]) || "15" %>px</span>
+                    <span>More Blur</span>
+                  </div>
+                </div>                      <!-- Custom Color Picker for Glass -->
                       <div>
                         <label class="block text-sm text-gray-400 mb-3">Custom Glass Color</label>
                         <div class="flex items-center space-x-4">
                           <input
                             type="color"
-                            id="glass-custom-color-picker"
+                            id={"glass-custom-color-picker-#{get_in(@custom_data, ["glass_custom_color"]) || "default"}"}
                             value={get_in(@custom_data, ["glass_custom_color"]) || "#000000"}
                             phx-hook="ColorPicker"
                             data-event="update_glass_custom_color"
@@ -858,7 +860,7 @@ defmodule PhoenixAppWeb.ProfileLive do
 
               <%= if @active_tab == "security" do %>
                 <!-- Security Settings -->
-                <div class="bg-gray-800 rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
+                <div class="glass-dark rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
                   <h2 class="text-lg font-semibold text-white mb-6">Security Settings</h2>
 
                   <.form for={@password_form} phx-submit="change_password" phx-change="validate_password" class="space-y-6">
@@ -914,7 +916,7 @@ defmodule PhoenixAppWeb.ProfileLive do
 
               <%= if @active_tab == "email" do %>
                 <!-- Email Settings -->
-                <div class="bg-gray-800 rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
+                <div class="glass-dark rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
                   <h2 class="text-lg font-semibold text-white mb-6">Email Settings</h2>
 
                   <div class="space-y-6">
@@ -971,7 +973,7 @@ defmodule PhoenixAppWeb.ProfileLive do
               <% end %>
 
               <!-- Account Information -->
-              <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 mt-6">
+              <div class="glass-dark rounded-lg p-6 border border-gray-700 mt-6">
                 <h3 class="text-lg font-semibold text-white mb-4">Account Information</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>

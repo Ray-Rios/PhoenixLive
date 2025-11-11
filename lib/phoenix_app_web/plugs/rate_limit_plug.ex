@@ -27,9 +27,6 @@ defmodule PhoenixAppWeb.Plugs.RateLimitPlug do
     
     limits = Map.merge(@default_limits, custom_limits)
     
-    # Ensure ETS table exists
-    ensure_rate_limit_table()
-    
     %{
       endpoint: endpoint,
       limits: Map.get(limits, endpoint, @default_limits["api_general"])
@@ -37,6 +34,8 @@ defmodule PhoenixAppWeb.Plugs.RateLimitPlug do
   end
 
   def call(conn, %{endpoint: endpoint, limits: %{attempts: max_attempts, window_ms: window_ms}}) do
+    # ETS table created at application startup
+    
     ip = get_client_ip(conn)
     key = "#{endpoint}:#{ip}"
     now = System.system_time(:millisecond)
@@ -61,12 +60,6 @@ defmodule PhoenixAppWeb.Plugs.RateLimitPlug do
   end
 
   # Private functions
-
-  defp ensure_rate_limit_table do
-    unless :ets.whereis(:rate_limit_table) != :undefined do
-      :ets.new(:rate_limit_table, [:set, :public, :named_table, {:read_concurrency, true}])
-    end
-  end
 
   defp get_client_ip(conn) do
     # Check for forwarded headers first (for load balancers/proxies)
