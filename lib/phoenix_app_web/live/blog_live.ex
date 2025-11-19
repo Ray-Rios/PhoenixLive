@@ -29,7 +29,14 @@ defmodule PhoenixAppWeb.BlogLive do
      )}
   end
 
-  def handle_params(_params, _uri, socket), do: {:noreply, assign(socket, view: :post_list)}
+  def handle_params(_params, _uri, socket) do
+    # Back to blog list view
+    {:noreply,
+     assign(socket,
+       page_title: "Blog",
+       view: :post_list
+     )}
+  end
 
   def handle_event("next_slide", _params, socket) do
     recent_posts = socket.assigns.recent_posts
@@ -41,14 +48,36 @@ defmodule PhoenixAppWeb.BlogLive do
   def handle_event("prev_slide", _params, socket) do
     recent_posts = socket.assigns.recent_posts
     current = socket.assigns.current_slide
-    prev_slide = if current <= 0, do: length(recent_posts) - 1, else: current - 1
+    prev_slide = if current == 0, do: length(recent_posts) - 1, else: current - 1
     {:noreply, assign(socket, current_slide: prev_slide)}
   end
-
   def handle_event("go_to_slide", %{"slide" => slide_str}, socket) do
     slide = String.to_integer(slide_str)
     {:noreply, assign(socket, current_slide: slide)}
   end
+
+  # Helper to get featured image URL - handles both Arc files and plain URLs
+  defp get_featured_image_url(post, _version) do
+    cond do
+      # If featured_image is nil, use default
+      is_nil(post.featured_image) ->
+        "/uploads/public/images/default_avatar.jpg"
+      
+      # If featured_image starts with /, it's already a URL path
+      is_binary(post.featured_image) and String.starts_with?(post.featured_image, "/") ->
+        post.featured_image
+      
+      # If featured_image starts with http, it's an external URL
+      is_binary(post.featured_image) and String.starts_with?(post.featured_image, "http") ->
+        post.featured_image
+      
+      # Otherwise fall back to default (avoid calling Arc at compile-time)
+      true ->
+        "/uploads/public/images/default_avatar.jpg"
+    end
+  end
+
+  
 
   def render(assigns) do
     ~H"""
@@ -76,7 +105,7 @@ defmodule PhoenixAppWeb.BlogLive do
                     <div class="flex h-full">
                       <!-- Image -->
                       <div class="w-1/2 relative">
-                        <img src={PhoenixApp.PostImage.url({post.featured_image, post}, :large) || "/images/default_post.png"}
+                        <img src={get_featured_image_url(post, :large)}
                              alt={post.title} class="w-full h-full object-cover" />
                         <div class="absolute inset-0 bg-gradient-to-r from-transparent to-gray-800"></div>
                       </div>
@@ -137,7 +166,7 @@ defmodule PhoenixAppWeb.BlogLive do
               <%= for post <- @posts do %>
                 <article class="glass-dark rounded-lg overflow-hidden hover:transform hover:scale-105 transition-all duration-300">
                   <.link navigate={"/blog/#{post.slug}"}>
-                    <img src={PhoenixApp.PostImage.url({post.featured_image, post}, :thumb) || "/images/default_post.png"}
+                    <img src={get_featured_image_url(post, :thumb)}
                          alt={post.title} class="w-full h-48 object-cover" />
                   </.link>
 
@@ -183,7 +212,7 @@ defmodule PhoenixAppWeb.BlogLive do
       </div>
 
       <!-- Blog Post Detail View -->
-      <div :if={@view == :post_detail} class="w-full">
+      <div :if={@view == :post_detail} class="w-full max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px]">
         <div class="auth-glass-panel rounded-xl p-8 mb-6">
           <!-- Back button -->
           <.link navigate={~p"/blog"} class="text-blue-400 hover:text-blue-300 mb-6 inline-block">
@@ -192,7 +221,7 @@ defmodule PhoenixAppWeb.BlogLive do
 
           <!-- Featured Image -->
           <div :if={@post.featured_image} class="mb-8 rounded-lg overflow-hidden">
-            <img src={PhoenixApp.PostImage.url({@post.featured_image, @post}, :large) || "/images/default_post.png"}
+            <img src={get_featured_image_url(@post, :large)}
                  alt={@post.title} class="w-full h-96 object-cover" />
           </div>
 

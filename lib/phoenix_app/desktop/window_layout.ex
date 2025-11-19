@@ -13,6 +13,9 @@ defmodule PhoenixApp.Desktop.WindowLayout do
     field :z_index, :integer
     field :minimized, :boolean
     field :maximized, :boolean
+    field :current_path, :string
+    field :view_mode, :string
+    field :breadcrumbs, {:array, :map}, default: []
 
     belongs_to :user, PhoenixApp.Accounts.User
 
@@ -21,7 +24,7 @@ defmodule PhoenixApp.Desktop.WindowLayout do
 
   def changeset(layout, attrs) do
     layout
-    |> cast(attrs, [:app, :x, :y, :width, :height, :z_index, :minimized, :maximized])
+    |> cast(attrs, [:app, :x, :y, :width, :height, :z_index, :minimized, :maximized, :current_path, :view_mode, :breadcrumbs])
     |> validate_required([:app, :x, :y, :width, :height])
     |> validate_inclusion(:x, 0..10000)
     |> validate_inclusion(:y, 0..10000)

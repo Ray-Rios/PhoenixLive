@@ -15,6 +15,7 @@ priv/cert/
 priv/static/models/
 priv/static/maps/
 priv/static/uploads/
+uploads/
 
 # Logs
 *.log

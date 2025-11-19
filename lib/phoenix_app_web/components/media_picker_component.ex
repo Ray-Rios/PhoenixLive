@@ -45,7 +45,7 @@ defmodule PhoenixAppWeb.MediaPickerComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="fixed inset-0 z-50 overflow-y-auto" phx-click="close_picker" phx-target={@myself}>
+    <div class="fixed inset-0 z-50 overflow-y-auto pointer-events-auto" phx-click="close_picker" phx-target={@myself}>
       <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <!-- Background overlay -->
         <div class="fixed inset-0 transition-opacity bg-gray-900 bg-opacity-75"></div>

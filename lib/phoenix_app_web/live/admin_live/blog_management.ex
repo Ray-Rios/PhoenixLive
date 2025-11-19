@@ -6,6 +6,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
+  @impl true
   def mount(_params, _session, socket) do
     posts = Content.list_posts()
     
@@ -99,29 +100,30 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     else
       # Process uploads first
       uploaded_files = consume_uploaded_entries(socket, :featured_image, fn %{path: path}, entry ->
-        user_id = socket.assigns.current_user.id
-        dest_dir = Path.join(["uploads", "users", user_id, "blog", "images"])
-        File.mkdir_p!(dest_dir)
-        
-        ext = Path.extname(entry.client_name)
-        filename = "#{:crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)}#{ext}"
-        dest_path = Path.join(dest_dir, filename)
-        
-        File.cp!(path, dest_path)
-        
-        {:ok, media} = Media.create_media(socket.assigns.current_user, %{
-          "filename" => filename,
-          "original_filename" => entry.client_name,
-          "file_type" => "image",
-          "mime_type" => entry.client_type,
-          "file_size" => entry.client_size,
-          "file_path" => dest_path,
-          "url" => "/#{dest_path}",
-          "usage_context" => "blog_featured"
-        })
-        
-        {:ok, media.url}
+        user = socket.assigns.current_user
+
+        case PhoenixApp.Uploads.upload_file(user, path, entry, context: "blog") do
+          {:ok, url_path} ->
+            # Store in Media table and return the stored URL
+            case Media.create_media(user, %{
+              "filename" => Path.basename(url_path),
+              "original_filename" => entry.client_name,
+              "file_type" => "image",
+              "mime_type" => entry.client_type,
+              "file_size" => entry.client_size,
+              "file_path" => PhoenixApp.Uploads.url_to_path(url_path),
+              "url" => url_path,
+              "usage_context" => "blog_featured"
+            }) do
+              {:ok, media} -> media.url
+              {:error, _changeset} -> nil
+            end
+
+          {:error, _reason} ->
+            nil
+        end
       end)
+      |> Enum.reject(&is_nil/1)
       
       # Process params and set publication status
       processed_params = 
@@ -176,11 +178,13 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   end
 
   # Fallback for old save handler (in case action_type is missing)
+  @impl true
   def handle_event("save", %{"post" => post_params}, socket) do
     # Default to draft if no action_type specified
     handle_event("save", %{"post" => post_params, "action_type" => "draft"}, socket)
   end
 
+  @impl true
   def handle_event("delete_post", %{"id" => id}, socket) do
     post = Content.get_post!(id)
     
@@ -194,6 +198,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     end
   end
 
+  @impl true
   def handle_event("toggle_publish", %{"id" => id}, socket) do
     post = Content.get_post!(id)
     new_published_status = !post.is_published
@@ -222,14 +227,26 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     end
   end
 
+  @impl true
   def handle_event("open_media_picker", _params, socket) do
     {:noreply, assign(socket, show_media_picker: true)}
   end
 
+  # Catch-all handler for any client events we don't explicitly handle.
+  # Some frontend hooks (window position, desktop widgets, etc.) emit events
+  # that are intended for other LiveViews. If those arrive here, ignore them
+  # instead of crashing the LiveView process.
+  @impl true
+  def handle_event(_event, _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info(:close_media_picker, socket) do
     {:noreply, assign(socket, show_media_picker: false)}
   end
 
+  @impl true
   def handle_info({:media_selected, url, filename}, socket) do
     # Get current content from the form
     current_changeset = socket.assigns.form.source
@@ -285,6 +302,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   defp maybe_add_featured_image(params, []), do: params
   defp maybe_add_featured_image(params, [url | _]), do: Map.put(params, "featured_image", url)
 
+  @impl true
   def render(assigns) do
     ~H"""
     <div class="min-h-screen pointer-events-none">
@@ -366,6 +384,16 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                 <!-- Featured Image Upload -->
                 <div>
                   <label class="block text-sm font-medium text-gray-300 mb-2">Featured Image</label>
+                  
+                  <%= if @editing_post && @editing_post.featured_image && Enum.empty?(@uploads.featured_image.entries) do %>
+                    <div class="mb-4">
+                      <div class="relative inline-block">
+                        <img src={@editing_post.featured_image} alt="Current featured image" class="max-w-xs rounded border-2 border-gray-600" />
+                        <div class="text-xs text-gray-400 text-center mt-1">Current featured image</div>
+                      </div>
+                    </div>
+                  <% end %>
+                  
                   <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 hover:border-blue-500 transition-colors"
                        phx-drop-target={@uploads.featured_image.ref}>
                     <.live_file_input upload={@uploads.featured_image} class="hidden" id="featured-image-upload" />
@@ -375,7 +403,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                       </svg>
                       <label for="featured-image-upload" class="cursor-pointer text-blue-500 hover:text-blue-400 text-sm">
-                        Click to upload or drag and drop
+                        <%= if @editing_post && @editing_post.featured_image, do: "Replace image", else: "Click to upload or drag and drop" %>
                       </label>
                       <p class="text-xs text-gray-500 mt-1">PNG, JPG, GIF up to 5MB</p>
                     </div>

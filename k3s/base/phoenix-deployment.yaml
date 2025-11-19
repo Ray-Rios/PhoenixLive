@@ -26,17 +26,21 @@ spec:
             name: phoenix-secrets
         command: ["/usr/local/bin/phx-start.sh"]
         livenessProbe:
-          httpGet:
-            path: /health
-            port: 4000
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - curl -f http://127.0.0.1:4000/health || exit 1
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 10
           failureThreshold: 5
         readinessProbe:
-          httpGet:
-            path: /health
-            port: 4000
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - curl -f http://127.0.0.1:4000/health || exit 1
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5

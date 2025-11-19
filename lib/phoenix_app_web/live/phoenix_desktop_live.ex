@@ -13,6 +13,14 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       PubSub.subscribe(PhoenixApp.PubSub, "desktop:public")
     end
     
+    # TEMPORARILY DISABLED: Window persistence causing database errors
+    # Restore saved windows on mount
+    # windows = if socket.assigns[:windows] do
+    #   socket.assigns.windows
+    # else
+    #   restore_saved_windows(assigns[:current_user])
+    # end
+    
     {:ok, 
      socket
      |> assign(assigns)
@@ -29,15 +37,18 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   end
 
   def handle_event("open_app", %{"app" => app}, socket) do
+    require Logger
+    Logger.info("Opening app: #{app}")
+    
     window_id = Ecto.UUID.generate()
     user = socket.assigns.current_user
     
-    # Load saved layout if available
-    saved_layout = if user do
-      PhoenixApp.Desktop.get_window_layout(user.id, app)
-    else
-      nil
-    end
+    # TEMPORARILY DISABLED: Load saved layout if available (causing DB errors)
+    # saved_layout = if user do
+    #   PhoenixApp.Desktop.get_window_layout(user.id, app)
+    # else
+    #   nil
+    # end
     
     new_window = case app do
       "file_manager" ->
@@ -51,10 +62,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "File Manager",
           app: "file_manager",
-          x: (saved_layout && saved_layout.x) || 150,
-          y: (saved_layout && saved_layout.y) || 150,
-          width: (saved_layout && saved_layout.width) || 800,
-          height: (saved_layout && saved_layout.height) || 600,
+          x: 150,
+          y: 150,
+          width: 800,
+          height: 600,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -75,10 +86,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Text Editor",
           app: "text_editor",
-          x: (saved_layout && saved_layout.x) || 200,
-          y: (saved_layout && saved_layout.y) || 200,
-          width: (saved_layout && saved_layout.width) || 700,
-          height: (saved_layout && saved_layout.height) || 500,
+          x: 200,
+          y: 200,
+          width: 700,
+          height: 500,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -90,10 +101,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Terminal",
           app: "terminal",
-          x: (saved_layout && saved_layout.x) || 250,
-          y: (saved_layout && saved_layout.y) || 250,
-          width: (saved_layout && saved_layout.width) || 800,
-          height: (saved_layout && saved_layout.height) || 500,
+          x: 250,
+          y: 250,
+          width: 800,
+          height: 500,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -106,10 +117,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Calculator",
           app: "calculator",
-          x: (saved_layout && saved_layout.x) || 300,
-          y: (saved_layout && saved_layout.y) || 300,
-          width: (saved_layout && saved_layout.width) || 350,
-          height: (saved_layout && saved_layout.height) || 450,
+          x: 300,
+          y: 300,
+          width: 350,
+          height: 450,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -122,10 +133,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Notepad",
           app: "notepad",
-          x: (saved_layout && saved_layout.x) || 350,
-          y: (saved_layout && saved_layout.y) || 150,
-          width: (saved_layout && saved_layout.width) || 600,
-          height: (saved_layout && saved_layout.height) || 400,
+          x: 350,
+          y: 150,
+          width: 600,
+          height: 400,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -137,10 +148,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Media Player",
           app: "media_player",
-          x: (saved_layout && saved_layout.x) || 400,
-          y: (saved_layout && saved_layout.y) || 200,
-          width: (saved_layout && saved_layout.width) || 600,
-          height: (saved_layout && saved_layout.height) || 400,
+          x: 400,
+          y: 200,
+          width: 600,
+          height: 400,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
@@ -153,10 +164,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           id: window_id,
           title: "Settings",
           app: "settings",
-          x: (saved_layout && saved_layout.x) || 450,
-          y: (saved_layout && saved_layout.y) || 250,
-          width: (saved_layout && saved_layout.width) || 700,
-          height: (saved_layout && saved_layout.height) || 500,
+          x: 450,
+          y: 250,
+          width: 700,
+          height: 500,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index
@@ -186,6 +197,12 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
 
   def handle_event("close_window", params, socket) do
     with id when not is_nil(id) <- get_window_id(params) do
+      # TEMPORARILY DISABLED: Save window state before closing
+      # window_to_close = Enum.find(socket.assigns.windows, &(&1.id == id))
+      # if window_to_close && socket.assigns.current_user do
+      #   save_window_state(socket.assigns.current_user.id, window_to_close)
+      # end
+      
       windows = Enum.reject(socket.assigns.windows, &(&1.id == id))
       {:noreply, assign(socket, :windows, windows)}
     else
@@ -218,7 +235,14 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     windows = 
       Enum.map(socket.assigns.windows, fn window ->
         if window.id == id do
-          %{window | minimized: !window.minimized}
+          updated_window = %{window | minimized: !window.minimized}
+          
+          # Save state
+          if socket.assigns.current_user do
+            # TEMP DISABLED: save_window_state(socket.assigns.current_user.id, updated_window)
+          end
+          
+          updated_window
         else
           window
         end
@@ -235,7 +259,14 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     windows = 
       Enum.map(socket.assigns.windows, fn window ->
         if window.id == id do
-          %{window | maximized: !window.maximized}
+          updated_window = %{window | maximized: !window.maximized}
+          
+          # Save state
+          if socket.assigns.current_user do
+            # TEMP DISABLED: save_window_state(socket.assigns.current_user.id, updated_window)
+          end
+          
+          updated_window
         else
           window
         end
@@ -254,16 +285,16 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           if window.id == id do
             updated_window = %{window | x: params["x"], y: params["y"]}
             
-            # Persist to database if user is authenticated
-            if socket.assigns.current_user do
-              Task.start(fn ->
-                PhoenixApp.Desktop.save_window_layout(
-                  socket.assigns.current_user.id,
-                  window.app,
-                  %{x: params["x"], y: params["y"], width: window.width, height: window.height}
-                )
-              end)
-            end
+            # TEMP DISABLED: Persist to database if user is authenticated
+            # if socket.assigns.current_user do
+            #   Task.start(fn ->
+            #     PhoenixApp.Desktop.save_window_layout(
+            #       socket.assigns.current_user.id,
+            #       window.app,
+            #       %{x: params["x"], y: params["y"], width: window.width, height: window.height}
+            #     )
+            #   end)
+            # end
             
             updated_window
           else
@@ -284,16 +315,16 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           if window.id == id do
             updated_window = %{window | width: params["width"], height: params["height"]}
             
-            # Persist to database if user is authenticated
-            if socket.assigns.current_user do
-              Task.start(fn ->
-                PhoenixApp.Desktop.save_window_layout(
-                  socket.assigns.current_user.id,
-                  window.app,
-                  %{x: window.x, y: window.y, width: params["width"], height: params["height"]}
-                )
-              end)
-            end
+            # TEMP DISABLED: Persist to database if user is authenticated
+            # if socket.assigns.current_user do
+            #   Task.start(fn ->
+            #     PhoenixApp.Desktop.save_window_layout(
+            #       socket.assigns.current_user.id,
+            #       window.app,
+            #       %{x: window.x, y: window.y, width: params["width"], height: params["height"]}
+            #     )
+            #   end)
+            # end
             
             updated_window
           else
@@ -308,6 +339,26 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   end
 
   # ==================== FILE MANAGER HANDLERS ====================
+
+  def handle_event("change_view_mode", %{"mode" => mode, "window_id" => window_id}, socket) do
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          updated_window = %{window | view_mode: mode}
+          
+          # Save view mode preference
+          if socket.assigns.current_user do
+            # TEMP DISABLED: save_window_state(socket.assigns.current_user.id, updated_window)
+          end
+          
+          updated_window
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
 
   def handle_event("navigate_to", %{"path" => path, "window_id" => window_id}, socket) do
     user = socket.assigns.current_user
@@ -332,12 +383,19 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           
           breadcrumbs = build_breadcrumbs(path)
           
-          %{window | 
+          updated_window = %{window | 
             current_path: path, 
             current_items: items,
             breadcrumbs: breadcrumbs,
             current_page: 1
           }
+          
+          # Save navigation state
+          if socket.assigns.current_user do
+            # TEMP DISABLED: save_window_state(socket.assigns.current_user.id, updated_window)
+          end
+          
+          updated_window
         else
           window
         end
@@ -410,7 +468,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       drives ++ [
         %{
           id: "user_#{user.id}",
-          name: "#{user.username || user.email}'s Drive",
+          name: "#{user.name || user.email}'s Drive",
           description: "Personal storage space",
           type: :drive,
           icon: "💾",
@@ -545,4 +603,28 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     </div>
     """
   end
+
+  # ==================== PRIVATE HELPERS ====================
+
+  # TEMPORARILY DISABLED - Window persistence functions
+  # defp restore_saved_windows(nil), do: []
+  # 
+  # defp restore_saved_windows(user) do
+  #   PhoenixApp.Desktop.list_user_layouts(user.id)
+  #   |> Enum.map(fn layout ->
+  #     ...window reconstruction logic...
+  #   end)
+  # end
+
+  # defp save_window_state(user_id, window) do
+  #   attrs = %{...}
+  #   PhoenixApp.Desktop.save_window_layout(user_id, window.app, attrs)
+  # end
+
+  # defp app_title("file_manager"), do: "File Manager"
+  # defp app_title("text_editor"), do: "Text Editor"
+  # defp app_title("terminal"), do: "Terminal"
+  # defp app_title("calculator"), do: "Calculator"
+  # defp app_title("settings"), do: "Settings"
+  # defp app_title(_), do: "Application"
 end

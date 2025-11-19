@@ -18,6 +18,15 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
     raise("LIVE_VIEW_SIGNING_SALT is missing"))],
   cache_static_manifest: "priv/static/cache_manifest.json"
 
+# ----------------------------
+# Arc (file storage) - local storage for production
+# Files will be stored in the local filesystem under priv/static/uploads
+# Arc will write to priv/static/{storage_dir} and generate URLs as /{storage_dir}
+# Make sure your k8s deployment has a PVC or hostPath for /app/priv/static/uploads
+config :arc,
+  storage: Arc.Storage.Local,
+  storage_dir: "priv/static"
+
 # CORS origins for production
 config :cors_plug,
   origin: [
@@ -58,3 +67,11 @@ config :phoenix_app, PhoenixApp.Mailer,
 #   password: System.get_env("SMTP_PASS"),
 #   tls: :if_available,
 #   retries: 3
+
+# ----------------------------
+# Logger - ensure we see errors in production
+# ----------------------------
+config :logger, level: :info
+config :logger, :console,
+  format: "$time $metadata[$level] $message\n",
+  metadata: [:request_id, :user_id]

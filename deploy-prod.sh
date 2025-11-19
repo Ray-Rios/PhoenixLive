@@ -1,6 +1,46 @@
 #!/bin/bash
 set -e
 
+# Usage help
+if [[ "$*" == *"--help"* ]] || [[ "$*" == *"-h"* ]]; then
+    cat << EOF
+🚀 Phoenix LiveView Production Deployment Script
+
+Usage: $0 [OPTIONS]
+
+OPTIONS:
+    --fresh     Fresh install mode: Delete database PVC and restore from backup
+                (Default: Preserve existing database between deployments)
+    --help, -h  Show this help message
+
+EXAMPLES:
+    $0              # Normal deployment - preserves database
+    $0 --fresh      # Fresh install - wipes database and restores from backup
+
+BEHAVIOR:
+    Normal Mode (default):
+        - Backs up database before deployment
+        - Preserves postgres PVC across namespace deletion
+        - Existing database data is kept intact
+        - Only imports backup if database is empty
+    
+    Fresh Install Mode (--fresh):
+        - Backs up database before deployment
+        - Deletes database PVC (wipes all data)
+        - Restores from most recent backup after deployment
+        - Use this for clean slate deployments
+
+EOF
+    exit 0
+fi
+
+# Check for --fresh flag
+FRESH_INSTALL=false
+if [[ "$*" == *"--fresh"* ]]; then
+    FRESH_INSTALL=true
+    echo "🆕 FRESH INSTALL MODE: Database will be completely wiped and restored from backup"
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -114,8 +154,79 @@ fi
 
 echo "🧹 Cleaning up old deployment..."
 
+# Check if namespace exists and preserve PVCs if it does (unless --fresh flag is used)
+if kubectl get namespace phoenixapp &> /dev/null; then
+    if [ "$FRESH_INSTALL" = false ]; then
+        echo "💾 Preserving PVCs before namespace deletion..."
+        
+        # Preserve postgres PVC (dynamic storage)
+        if kubectl get pvc postgres-pvc -n phoenixapp &> /dev/null; then
+            kubectl get pvc postgres-pvc -n phoenixapp -o yaml > "$BACKUP_DIR/postgres-pvc-backup.yaml"
+            
+            # Get the PV name
+            PV_NAME=$(kubectl get pvc postgres-pvc -n phoenixapp -o jsonpath='{.spec.volumeName}')
+            
+            if [ -n "$PV_NAME" ]; then
+                # Change the PV reclaim policy to Retain so it won't be deleted
+                kubectl patch pv "$PV_NAME" -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+                print_status "Database PV $PV_NAME set to Retain policy"
+            fi
+        fi
+        
+        # Preserve phoenix-uploads PV (manual storage - just needs reclaim policy)
+        if kubectl get pv phoenix-uploads-local-pv &> /dev/null; then
+            kubectl patch pv phoenix-uploads-local-pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+            print_status "Phoenix uploads PV set to Retain policy"
+        fi
+    else
+        echo "🗑️  Fresh install: PVCs will NOT be preserved"
+        # Remove backup file if it exists
+        rm -f "$BACKUP_DIR/postgres-pvc-backup.yaml"
+    fi
+fi
+
 # Try to delete namespace, but continue even if it fails (e.g. EOF, doesn't exist, etc.)
 kubectl delete namespace phoenixapp --ignore-not-found=true || echo "Namespace phoenixapp doesn't exist or couldn't be deleted - continuing anyway"
+
+# Wait for namespace to be fully deleted
+echo "⏳ Waiting for namespace to be fully deleted..."
+while kubectl get namespace phoenixapp &> /dev/null; do
+    echo -n "."
+    sleep 2
+done
+echo ""
+print_status "Namespace deleted"
+
+# Reclaim retained PVs
+echo "♻️  Reclaiming retained PVs..."
+
+# Reclaim postgres PV (dynamic storage)
+if [ -f "$BACKUP_DIR/postgres-pvc-backup.yaml" ]; then
+    PV_NAME=$(grep "volumeName:" "$BACKUP_DIR/postgres-pvc-backup.yaml" | awk '{print $2}')
+    
+    if [ -n "$PV_NAME" ] && kubectl get pv "$PV_NAME" &> /dev/null; then
+        PV_STATUS=$(kubectl get pv "$PV_NAME" -o jsonpath='{.status.phase}')
+        
+        if [ "$PV_STATUS" = "Released" ]; then
+            # Remove claimRef to make it Available again
+            kubectl patch pv "$PV_NAME" --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]'
+            print_status "Database PV $PV_NAME reclaimed"
+        fi
+    fi
+fi
+
+# Reclaim phoenix-uploads PV (manual storage)
+if kubectl get pv phoenix-uploads-local-pv &> /dev/null; then
+    PV_STATUS=$(kubectl get pv phoenix-uploads-local-pv -o jsonpath='{.status.phase}')
+    
+    if [ "$PV_STATUS" = "Released" ]; then
+        # For manual storage class, we need to delete and recreate both PV and PVC
+        echo "🔄 Recreating phoenix-uploads PV (manual storage class)..."
+        kubectl delete pv phoenix-uploads-local-pv
+        # PV will be recreated by kustomize
+        print_status "Phoenix uploads PV will be recreated"
+    fi
+fi
 echo "🐦‍🔥 Deploying Production"
 echo "======================================"
 
@@ -231,8 +342,84 @@ fi
 
 # Deploy the application (after restoring cert data)
 echo "🚀 Deploying Phoenix application..."
-kubectl apply -k k3s/overlays/prod/
+
+# If we have a preserved database PVC, restore it BEFORE deploying
+if [ -f "$BACKUP_DIR/postgres-pvc-backup.yaml" ]; then
+    PV_NAME=$(grep "volumeName:" "$BACKUP_DIR/postgres-pvc-backup.yaml" | awk '{print $2}')
+    
+    if [ -n "$PV_NAME" ] && kubectl get pv "$PV_NAME" &> /dev/null; then
+        echo "🔄 Restoring preserved database PVC..."
+        
+        # Create a clean PVC manifest that will bind to the existing PV
+        STORAGE_CLASS=$(kubectl get pv "$PV_NAME" -o jsonpath='{.spec.storageClassName}')
+        STORAGE_SIZE=$(kubectl get pv "$PV_NAME" -o jsonpath='{.spec.capacity.storage}')
+        
+        cat > "$BACKUP_DIR/postgres-pvc-clean.yaml" <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: phoenixapp
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${STORAGE_SIZE}
+  storageClassName: ${STORAGE_CLASS}
+  volumeName: ${PV_NAME}
+EOF
+        
+        # Apply the cleaned PVC - it will bind to the existing PV
+        kubectl apply -f "$BACKUP_DIR/postgres-pvc-clean.yaml"
+        
+        # Wait for it to bind
+        echo "⏳ Waiting for PVC to bind to preserved PV..."
+        for i in {1..30}; do
+            PVC_STATUS=$(kubectl get pvc postgres-pvc -n phoenixapp -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+            if [ "$PVC_STATUS" = "Bound" ]; then
+                print_status "Database PVC restored and bound to existing data"
+                break
+            fi
+            echo -n "."
+            sleep 2
+        done
+        echo ""
+        
+        # Clean up temp file
+        rm -f "$BACKUP_DIR/postgres-pvc-clean.yaml"
+    fi
+fi
+
+# Deploy with server-side apply to handle existing PVC gracefully
+kubectl apply --server-side=true --force-conflicts -k k3s/overlays/prod/
 print_status "Application deployed"
+
+# Check if phoenix-uploads-pvc is bound (manual storage class can be finicky)
+echo "⏳ Checking phoenix-uploads-pvc binding..."
+for i in {1..10}; do
+    UPLOADS_PVC_STATUS=$(kubectl get pvc phoenix-uploads-pvc -n phoenixapp -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+    if [ "$UPLOADS_PVC_STATUS" = "Bound" ]; then
+        print_status "Phoenix uploads PVC is bound"
+        break
+    elif [ "$UPLOADS_PVC_STATUS" = "Pending" ]; then
+        if [ $i -eq 10 ]; then
+            echo "⚠️  Phoenix uploads PVC stuck in Pending, attempting fix..."
+            # Delete and recreate both PV and PVC for manual storage class
+            kubectl delete pvc phoenix-uploads-pvc -n phoenixapp --force --grace-period=0 2>/dev/null || true
+            sleep 2
+            kubectl delete pv phoenix-uploads-local-pv --force --grace-period=0 2>/dev/null || true
+            sleep 2
+            kubectl apply -f k3s/base/phoenix-uploads-pv.yaml
+            kubectl apply -f k3s/base/phoenix-uploads-pvc.yaml
+            sleep 3
+            print_status "Phoenix uploads PV/PVC recreated"
+        fi
+    fi
+    echo -n "."
+    sleep 2
+done
+echo ""
 
 # Wait for deployment to be ready
 echo "⏳ Waiting for deployment to be ready..."
@@ -240,38 +427,45 @@ kubectl wait --for=condition=available --timeout=300s deployment/phoenix-web -n 
 kubectl wait --for=condition=available --timeout=300s deployment/postgres -n phoenixapp
 print_status "Deployments are ready"
 
-# Import database if backup exists
+# Import database if backup exists AND database is empty (fresh install)
 if [ -d "$BACKUP_DIR" ] && ls "$BACKUP_DIR"/db_backup_*.sql 1> /dev/null 2>&1; then
-    echo "📥 Importing database..."
-    LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/db_backup_*.sql | head -1)
-    
     if ! kubectl get deployment -n phoenixapp postgres &>/dev/null; then
         print_warning "Postgres deployment not found, skipping database import."
     else
         POD_NAME=$(kubectl get pods -n phoenixapp -l app=postgres -o jsonpath="{.items[0].metadata.name}")
         
-        # Scale down Phoenix pods to disconnect from database
-        echo "📉 Scaling down Phoenix pods to release database connections..."
-        kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp
-        kubectl wait --for=delete pod -l app=phoenix-web -n phoenixapp --timeout=120s
+        # Check if database has data (check if users table has rows)
+        USER_COUNT=$(kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' ' || echo "0")
         
-        # Wait a bit for connections to close
-        sleep 5
-        
-        # Terminate remaining connections and drop database
-        echo "🗑️ Dropping existing database for clean restore..."
-        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
-        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "DROP DATABASE IF EXISTS $DB_NAME;"
-        kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "CREATE DATABASE $DB_NAME;"
-        
-        # Import the backup
-        cat "$LATEST_BACKUP" | kubectl exec -i -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d "$DB_NAME"
-        print_status "Database imported from $LATEST_BACKUP"
-        
-        # Scale Phoenix pods back up
-        echo "📈 Scaling Phoenix pods back up..."
-        kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
-        kubectl wait --for=condition=available --timeout=300s deployment/phoenix-web -n phoenixapp
+        if [ "$USER_COUNT" = "0" ]; then
+            echo "📥 Database is empty, importing from backup..."
+            LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/db_backup_*.sql | head -1)
+            
+            # Scale down Phoenix pods to disconnect from database
+            echo "📉 Scaling down Phoenix pods to release database connections..."
+            kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp
+            kubectl wait --for=delete pod -l app=phoenix-web -n phoenixapp --timeout=120s
+            
+            # Wait a bit for connections to close
+            sleep 5
+            
+            # Terminate remaining connections and drop database
+            echo "🗑️ Dropping existing database for clean restore..."
+            kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
+            kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "DROP DATABASE IF EXISTS $DB_NAME;"
+            kubectl exec -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d postgres -c "CREATE DATABASE $DB_NAME;"
+            
+            # Import the backup
+            cat "$LATEST_BACKUP" | kubectl exec -i -n phoenixapp "$POD_NAME" -- env PGPASSWORD="$PGPASSWORD" psql -U "$DB_USER" -h db -d "$DB_NAME"
+            print_status "Database imported from $LATEST_BACKUP"
+            
+            # Scale Phoenix pods back up
+            echo "📈 Scaling Phoenix pods back up..."
+            kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
+            kubectl wait --for=condition=available --timeout=300s deployment/phoenix-web -n phoenixapp
+        else
+            print_status "Database already has data ($USER_COUNT users), skipping import to preserve existing data"
+        fi
     fi
 fi
 

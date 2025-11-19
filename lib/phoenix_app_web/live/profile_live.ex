@@ -72,6 +72,12 @@ defmodule PhoenixAppWeb.ProfileLive do
   end
 
   @impl true
+  def handle_event("validate_avatar", _params, socket) do
+    # This handler allows the upload to be processed
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("cancel-upload", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :avatar, ref)}
   end
@@ -116,13 +122,23 @@ defmodule PhoenixAppWeb.ProfileLive do
   def handle_event("upload_avatar", _params, socket) do
     uploaded_files =
       consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry ->
-        dest = Path.join([:code.priv_dir(:phoenix_app), "static", "uploads", "avatars", "#{entry.uuid}.#{ext(entry)}"])
-        File.mkdir_p!(Path.dirname(dest))
-        File.cp!(path, dest)
-        {:ok, "/uploads/avatars/#{entry.uuid}.#{ext(entry)}"}
+        # Use centralized upload module
+        case PhoenixApp.Uploads.upload_file(socket.assigns.user, path, entry, context: "avatar") do
+          {:ok, url} -> {:ok, url}
+          {:error, reason} -> {:postpone, reason}
+        end
       end)
 
-    case uploaded_files do
+    # Extract successful URLs
+    avatar_urls = 
+      uploaded_files
+      |> Enum.filter(fn
+        {:ok, _url} -> true
+        _ -> false
+      end)
+      |> Enum.map(fn {:ok, url} -> url end)
+
+    case avatar_urls do
       [avatar_url] ->
         case Accounts.update_user_profile(socket.assigns.user, %{avatar_url: avatar_url}) do
           {:ok, updated_user} ->
@@ -137,7 +153,10 @@ defmodule PhoenixAppWeb.ProfileLive do
         end
 
       [] ->
-        {:noreply, socket}
+        {:noreply, put_flash(socket, :error, "No file uploaded or upload failed")}
+        
+      _ ->
+        {:noreply, put_flash(socket, :error, "Please upload only one avatar image")}
     end
   end
 
@@ -483,59 +502,58 @@ defmodule PhoenixAppWeb.ProfileLive do
                       <label class="block text-sm font-medium text-gray-300 mb-3">Avatar Image</label>
                       <div class="glass-dark rounded-lg p-4 border border-gray-600">
                         <!-- Upload Area -->
-                        <div class="flex flex-col items-center justify-center">
-                          <%= if @user.avatar_url do %>
-                            <div class="mb-4">
-                              <img src={@user.avatar_url} alt="Current Avatar" class={"w-32 h-32 object-cover border-4 #{avatar_shape_classes(@user.avatar_shape)}"} style={"border-color: #{@user.avatar_color}"} />
-                            </div>
-                            <button type="button" phx-click="remove_avatar" class="mb-4 text-red-400 hover:text-red-300 text-sm">
-                              Remove Current Avatar
-                            </button>
-                          <% end %>
-                          
-                          <div class="w-full">
-                            <div class="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center hover:border-gray-500 transition-colors"
-                                 phx-drop-target={@uploads.avatar.ref}>
-                              <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                              </svg>
-                              <div class="text-sm text-gray-300">
-                                <label for={@uploads.avatar.ref} class="cursor-pointer">
-                                  <span class="text-blue-400 hover:text-blue-300">Upload a file</span>
-                                  <span> or drag and drop</span>
-                                </label>
-                                <.live_file_input upload={@uploads.avatar} class="sr-only" />
+                        <.form for={%{}} phx-change="validate_avatar" phx-submit="upload_avatar" id="avatar-upload-form">
+                          <div class="flex flex-col items-center justify-center">
+                            <%= if @user.avatar_url do %>
+                              <div class="mb-4">
+                                <img src={@user.avatar_url} alt="Current Avatar" class={"w-32 h-32 object-cover border-4 #{avatar_shape_classes(@user.avatar_shape)}"} style={"border-color: #{@user.avatar_color}"} />
                               </div>
-                              <p class="text-xs text-gray-500 mt-2">PNG, JPG, GIF, WEBP up to 5MB</p>
-                              <button type="button" phx-click="upload_avatar" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-                                Upload Avatar
+                              <button type="button" phx-click="remove_avatar" class="mb-4 text-red-400 hover:text-red-300 text-sm">
+                                Remove Current Avatar
                               </button>
-                            </div>
-                            
-                            <!-- Upload Progress -->
-                            <%= for entry <- @uploads.avatar.entries do %>
-                              <div class="mt-4 bg-gray-700 rounded-lg p-3">
-                                <div class="flex items-center justify-between mb-2">
-                                  <span class="text-sm text-gray-300"><%= entry.client_name %></span>
-                                  <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="text-red-400 hover:text-red-300">
-                                    ✕
-                                  </button>
-                                </div>
-                                <div class="w-full bg-gray-600 rounded-full h-2">
-                                  <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style={"width: #{entry.progress}%"}></div>
-                                </div>
-                                <%= for err <- upload_errors(@uploads.avatar, entry) do %>
-                                  <p class="text-red-400 text-sm mt-1"><%= error_to_string(err) %></p>
-                                <% end %>
-                                <%= if entry.progress == 100 do %>
-                                  <button type="button" phx-click="upload_avatar" class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded transition-colors">
-                                    Save Avatar
-                                  </button>
-                                <% end %>
-                              </div>
                             <% end %>
+                            
+                            <div class="w-full">
+                              <div class="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center hover:border-gray-500 transition-colors"
+                                   phx-drop-target={@uploads.avatar.ref}>
+                                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                  <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="text-sm text-gray-300">
+                                  <label for={@uploads.avatar.ref} class="cursor-pointer">
+                                    <span class="text-blue-400 hover:text-blue-300">Upload a file</span>
+                                    <span> or drag and drop</span>
+                                  </label>
+                                  <.live_file_input upload={@uploads.avatar} class="sr-only" />
+                                </div>
+                                <p class="text-xs text-gray-500 mt-2">PNG, JPG, GIF, WEBP up to 5MB</p>
+                              </div>
+                              
+                              <!-- Upload Progress -->
+                              <%= for entry <- @uploads.avatar.entries do %>
+                                <div class="mt-4 bg-gray-700 rounded-lg p-3">
+                                  <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-gray-300"><%= entry.client_name %></span>
+                                    <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="text-red-400 hover:text-red-300">
+                                      ✕
+                                    </button>
+                                  </div>
+                                  <div class="w-full bg-gray-600 rounded-full h-2">
+                                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style={"width: #{entry.progress}%"}></div>
+                                  </div>
+                                  <%= for err <- upload_errors(@uploads.avatar, entry) do %>
+                                    <p class="text-red-400 text-sm mt-1"><%= error_to_string(err) %></p>
+                                  <% end %>
+                                  <%= if entry.progress == 100 do %>
+                                    <button type="submit" class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded transition-colors">
+                                      Save Avatar
+                                    </button>
+                                  <% end %>
+                                </div>
+                              <% end %>
+                            </div>
                           </div>
-                        </div>
+                        </.form>
                       </div>
                     </div>
 
@@ -1023,10 +1041,4 @@ defmodule PhoenixAppWeb.ProfileLive do
   defp error_to_string(:too_many_files), do: "You have selected too many files"
   defp error_to_string(:not_accepted), do: "You have selected an unacceptable file type"
   defp error_to_string(error), do: inspect(error)
-
-  defp ext(entry) do
-    entry.client_name
-    |> Path.extname()
-    |> String.trim_leading(".")
-  end
 end

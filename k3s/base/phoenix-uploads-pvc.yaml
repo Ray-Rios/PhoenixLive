@@ -11,5 +11,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  # Use hostpath storage class (matching postgres/redis)
-  storageClassName: hostpath
+  # Use manual storage class to bind to our local Windows directory
+  storageClassName: manual
+  # Bind to the specific PV we created
+  volumeName: phoenix-uploads-local-pv

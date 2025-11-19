@@ -114,12 +114,13 @@ defmodule PhoenixApp.Forum do
 
   def create_user_channel(user, attrs) do
     # Set position to be last for user channels
-    max_position = from(c in Channel, where: c.created_by_id == ^user.id, select: max(c.position)) |> Repo.one() || 0
+    max_position = from(c in Channel, where: c.owner_id == ^user.id, select: max(c.position)) |> Repo.one() || 0
 
     attrs = Map.merge(attrs, %{
-      "created_by_id" => user.id,
+      "owner_id" => user.id,
       "position" => max_position + 1,
-      "is_private" => Map.get(attrs, "is_private", false)
+      "is_private" => Map.get(attrs, "is_private", false),
+      "is_user_created" => true
     })
 
     create_channel(attrs)

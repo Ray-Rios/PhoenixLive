@@ -27,10 +27,10 @@ defmodule PhoenixApp.PostImage do
   end
 
   def default_url(:thumb) do
-    "/images/default_post.png"
+    "/uploads/public/images/default_avatar.jpg"
   end
 
   def default_url(_version) do
-    "/images/default_post.png"
+    "/uploads/public/images/default_avatar.jpg"
   end
 end

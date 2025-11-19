@@ -70,10 +70,12 @@
             RUN cd assets && \
                 npm config set fetch-retry-mintimeout 20000 && \
                 npm config set fetch-retry-maxtimeout 120000 && \
-                npm config set fetch-retries 5 && \
+                npm config set fetch-retries 10 && \
+                npm config set fetch-timeout 300000 && \
                 npm config set registry https://registry.npmjs.org/ && \
-                npm cache clean --force && \
-                npm install --prefer-offline --no-audit --no-fund
+                (npm install --prefer-offline --no-audit --no-fund || \
+                 npm install --no-audit --no-fund || \
+                 npm install --no-audit --no-fund)
             
             # Build assets based on environment
             RUN if [ "$MIX_ENV" = "prod" ]; then \

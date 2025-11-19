@@ -14,8 +14,18 @@ defmodule PhoenixApp.Avatar do
     {:convert, "-strip -thumbnail 100x100^ -gravity center -extent 100x100 -format png", :png}
   end
 
-  def filename(version, {_file, scope}) do
+  # Handle nil scope gracefully - return a default filename
+  def filename(_version, {_file, nil}) do
+    "default_avatar"
+  end
+
+  def filename(version, {_file, scope}) when is_map(scope) and not is_nil(scope.id) do
     "#{scope.id}_#{version}"
+  end
+
+  # Fallback for any other unexpected input
+  def filename(_version, _) do
+    "default_avatar"
   end
 
   def storage_dir(_version, {_file, scope}) do
@@ -23,10 +33,10 @@ defmodule PhoenixApp.Avatar do
   end
 
   def default_url(:thumb) do
-    "/images/default_avatar.png"
+    "/uploads/public/images/default_avatar.jpg"
   end
 
   def default_url(_version) do
-    "/images/default_avatar.png"
+    "/uploads/public/images/default_avatar.jpg"
   end
 end
