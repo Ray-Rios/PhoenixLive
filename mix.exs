@@ -72,7 +72,7 @@ defmodule PhoenixApp.MixProject do
       ## File handling
       {:mime, "~> 2.0"},
       # Caching
-      {:cachex, "~> 3.4"},
+      {:cachex, "~> 4.1"},
       # Additional utilities
       {:uuid, "~> 1.1"},
       {:cors_plug, "~> 3.0"},
