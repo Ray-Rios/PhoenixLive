@@ -125,7 +125,7 @@ interface TopBarAPI {
   const topbar: TopBarAPI = {
     config: function (opts: Partial<TopBarOptions>): void {
       for (const key in opts) {
-        if (options.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(options, key)) {
           (options as any)[key] = (opts as any)[key];
         }
       }

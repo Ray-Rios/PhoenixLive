@@ -131,15 +131,8 @@ export const StarfieldScene = {
   },
 
   startAnimation(this: StarfieldSceneHook) {
-    let lastTime = performance.now();
-    
     const animate = () => {
       this.animationId = requestAnimationFrame(animate);
-      
-      // Calculate delta time
-      const currentTime = performance.now();
-      const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
-      lastTime = currentTime;
       
       this.time += 0.016; // Assuming ~60fps
 

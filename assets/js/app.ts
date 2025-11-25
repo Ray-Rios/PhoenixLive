@@ -13,7 +13,6 @@ import { TerminalTypewriter } from "./terminal_typewriter";
 import { FileDragDrop, FileUpload } from "./file_drag_drop";
 
 // Import Three.js hooks
-import { ThreeJSScene } from "./threejs/hooks";
 import { HomeGalaxyScene } from "./threejs/galaxy-scene";
 import { NebulaScene } from "./threejs/scenes/nebula-scene";
 import { StarfieldScene } from "./threejs/scenes/starfield-scene";
@@ -27,6 +26,8 @@ import { BackgroundUpdater } from "./background_updater";
 import { GlobalHooks } from "./global_hooks";
 import { ProfileSettings } from "./profile_settings";
 import { ColorPicker } from "./color_picker";
+import QuillEditorHook from "./quill_editor_hook";
+import CollaborativeQuillHook from "./collaborative_quill_hook";
 
 // Import Desktop hooks
 import "./desktop";
@@ -132,12 +133,16 @@ const MessageReactions = {
 };
 
 // Desktop Window Hook (placeholder to prevent missing hook errors)
-const DesktopWindow = {
+export const DesktopWindow = {
   mounted() {
     console.log('DesktopWindow mounted');
   },
-  updated() {},
-  destroyed() {}
+  updated() {
+    // Intentionally empty - no update logic needed
+  },
+  destroyed() {
+    // Intentionally empty - no cleanup needed
+  }
 };
 
 // ChatInput Hook - Handle Enter key to submit, Shift+Enter for newline
@@ -191,6 +196,8 @@ const Hooks = {
   // Blog/editor
   RichEditor,
   BlogAutosave,
+  QuillEditor: QuillEditorHook,
+  CollaborativeQuill: CollaborativeQuillHook,
   // Chat
   MessageReactions,
   ChatInput,
@@ -208,7 +215,7 @@ const Hooks = {
 // BlogAutosave, FormHandler, FormPreserver, DeviceFingerprint
 
 // Connect LiveSocket
-let liveSocket = new LiveSocket("/live", Socket, {
+const liveSocket = new LiveSocket("/live", Socket, {
   params: { _csrf_token: csrfToken },
   hooks: Hooks
 });
@@ -227,7 +234,6 @@ console.log('✅ Phoenix LiveView connected');
 // are not part of a LiveView patch (they use data-static-scene), initialize
 // the matching Three.js hook directly so LiveView doesn't attempt to attach
 // hooks to DOM nodes it didn't render.
-let staticSceneInstance: any = null;
 const initializeStaticScenes = () => {
   try {
     const staticEls = Array.from(document.querySelectorAll('[data-static-scene]')) as HTMLElement[];
@@ -253,7 +259,6 @@ const initializeStaticScenes = () => {
           instance.mounted.call(instance);
           // Mark the element as initialized and store instance
           (el as any)._threeJSHook = instance;
-          staticSceneInstance = instance;
           console.log('✅ Initialized static scene:', sceneName, 'on', el.id || el.tagName);
         }
       } catch (err) {
@@ -300,7 +305,7 @@ try {
   });
 
   observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
-} catch (e) {
+} catch {
   // ignore mutation observer failures
 }
 
@@ -313,7 +318,9 @@ try {
           if (!(node instanceof HTMLElement)) continue;
           if (node.id === 'global-background-canvas' || (node.querySelector && node.querySelector('#global-background-canvas'))) {
             console.warn('🧨 global-background-canvas was removed from DOM', node);
-            try { console.trace(); } catch(e) {}
+            try { console.trace(); } catch {
+              // Ignore trace errors
+            }
           }
         }
       }
@@ -321,8 +328,8 @@ try {
   });
 
   removalObserver.observe(document.documentElement || document.body, { childList: true, subtree: true });
-} catch (e) {
-  // ignore
+} catch {
+  // ignore removal observer failures
 }
 
 // Global error diagnostics: capture unhandled errors and list phx-hook elements
@@ -356,9 +363,9 @@ document.addEventListener('submit', (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target) return;
     if (target instanceof HTMLFormElement && target.hasAttribute('phx-submit')) {
-      console.log('🔔 phx-submit form submitted:', target.id || target.getAttribute('name') || '(unnamed)');
+      console.log('\ud83d\udd14 phx-submit form submitted:', target.id || target.getAttribute('name') || '(unnamed)');
     }
-  } catch (e) {
-    // ignore
+  } catch {
+    // ignore form submit logging errors
   }
 }, true);

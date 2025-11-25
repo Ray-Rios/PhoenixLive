@@ -81,6 +81,7 @@ defmodule PhoenixAppWeb.Router do
     live "/profile", ProfileLive, :index
     live "/profile/security", ProfileLive, :security
     live "/profile/orders", ProfileLive, :orders
+    live "/profile/uploads", ProfileUploadsLive, :index
     live "/avatar", AvatarLive, :index
 
   end

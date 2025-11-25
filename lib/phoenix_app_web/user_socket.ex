@@ -8,6 +8,7 @@ defmodule PhoenixAppWeb.UserSocket do
 
   ## Channels
   # channel "room:*", PhoenixAppWeb.RoomChannel
+  channel "collab:*", PhoenixAppWeb.CollaborativeEditorChannel
 
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After

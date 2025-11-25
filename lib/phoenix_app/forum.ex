@@ -72,8 +72,66 @@ defmodule PhoenixApp.Forum do
   end
 
   def delete_channel(%Channel{} = channel) do
-    Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_deleted, channel.id})
-    Repo.delete(channel)
+    # Start transaction to ensure all-or-nothing deletion
+    Repo.transaction(fn ->
+      # 1. Get all messages in this channel with their attachments
+      messages = from(m in Message,
+        where: m.channel_id == ^channel.id,
+        preload: [:attachments]
+      ) |> Repo.all()
+
+      # 2. Collect all attachment file paths for cleanup
+      attachment_file_paths = 
+        messages
+        |> Enum.flat_map(& &1.attachments)
+        |> Enum.map(fn attachment ->
+          # Get file path from attachment filename or constructed path
+          Path.join([
+            Application.get_env(:phoenix_app, :uploads_path, "uploads"),
+            "forum",
+            to_string(attachment.message_id),
+            attachment.filename
+          ])
+        end)
+
+      # 3. Delete all reactions for messages in this channel
+      from(r in Reaction, 
+        join: m in Message, on: r.message_id == m.id,
+        where: m.channel_id == ^channel.id
+      ) |> Repo.delete_all()
+
+      # 4. Delete all threads in this channel
+      from(t in Thread, where: t.channel_id == ^channel.id) |> Repo.delete_all()
+
+      # 5. Delete all messages in this channel (this cascades to attachments via DB)
+      from(m in Message, where: m.channel_id == ^channel.id) |> Repo.delete_all()
+
+      # 6. Delete the channel itself
+      case Repo.delete(channel) do
+        {:ok, deleted_channel} ->
+          # 7. Broadcast channel deletion
+          Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_deleted, deleted_channel.id})
+          
+          # 8. Queue background job to delete files from filesystem
+          # Only queue if there are files to delete
+          if length(attachment_file_paths) > 0 do
+            # We'll use a simple GenServer-based background task
+            # since Oban might not be configured
+            Task.start(fn ->
+              Enum.each(attachment_file_paths, fn path ->
+                if File.exists?(path) do
+                  File.rm(path)
+                end
+              end)
+            end)
+          end
+
+          deleted_channel
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   def change_channel(%Channel{} = channel, attrs \\ %{}) do

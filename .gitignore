@@ -37,6 +37,9 @@ pids
 priv/static/assets/
 priv/static/cache_manifest.json
 
+# Avoid accidentally committing compiled bundles
+app.js
+
 # Temporary files
 tmp/
 temp/

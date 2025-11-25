@@ -40,7 +40,14 @@ export default [
         FormData: 'readonly',
         Element: 'readonly',
         Node: 'readonly',
-        NodeListOf: 'readonly'
+        NodeListOf: 'readonly',
+        navigator: 'readonly',
+        performance: 'readonly',
+        crypto: 'readonly',
+        alert: 'readonly',
+        prompt: 'readonly',
+        screen: 'readonly',
+        NodeJS: 'readonly'
       }
     },
     plugins: {
@@ -56,6 +63,9 @@ export default [
       'prefer-const': 'error',
       'no-var': 'error',
       'no-console': 'off'
+      ,
+      // disallow importing CSS directly in JS/TS to avoid bundling issues with esbuild
+      'no-restricted-imports': ['error', { 'patterns': ['*.css', '**/*.css'] }]
     }
   },
   {

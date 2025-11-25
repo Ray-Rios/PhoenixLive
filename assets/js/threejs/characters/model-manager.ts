@@ -298,10 +298,10 @@ export class CharacterModelManager {
 
           resolve(model);
         },
-        (progress: any) => {
+        (_progress: unknown) => {
           // Progress callback
         },
-        (error: any) => {
+        (error: unknown) => {
           console.error('FBX loading error:', error);
           reject(error);
         }

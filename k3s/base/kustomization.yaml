@@ -8,4 +8,6 @@ resources:
 - phoenix-deployment.yaml
 - phoenix-uploads-pv.yaml
 - phoenix-uploads-pvc.yaml
+- phoenix-models-pv.yaml
+- phoenix-models-pvc.yaml
 - db-init-job.yaml

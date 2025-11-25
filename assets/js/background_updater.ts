@@ -82,7 +82,7 @@ export const BackgroundUpdater = {
     }
   },
 
-  cleanup3DScene(canvas: HTMLElement) {
+  cleanup3DScene(_canvas: HTMLElement) {
     // Clean up any existing Three.js scene
     // This is handled by the existing static scene system
     console.log('Cleaning up existing 3D scene');

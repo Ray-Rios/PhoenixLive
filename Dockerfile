@@ -61,12 +61,24 @@
         # Copy source code and compile
         # -------------------------------
             COPY lib ./lib
-            COPY priv ./priv
             
         # -------------------------------
-        # Copy assets and build them - FORCE REBUILD 2025-01-18
+        # Copy assets and build them - FORCE REBUILD 2025-11-19
         # -------------------------------
             COPY assets ./assets
+            # Create priv directory structure but DON'T copy old static assets
+            RUN mkdir -p priv/static/assets priv/static/fonts priv/repo priv/gettext
+            # Copy only non-static priv files
+            COPY priv/repo ./priv/repo
+            COPY priv/gettext ./priv/gettext
+            # Copy static files that don't get regenerated (tri.gif, favicon.ico, robots.txt, etc.)
+            COPY priv/static/tri.gif ./priv/static/
+            COPY priv/static/favicon.ico ./priv/static/
+            COPY priv/static/robots.txt ./priv/static/
+            COPY priv/static/sitemap.xml ./priv/static/
+            COPY priv/static/.well-known ./priv/static/.well-known
+            COPY priv/static/maps ./priv/static/maps
+            COPY priv/static/models ./priv/static/models
             RUN cd assets && \
                 npm config set fetch-retry-mintimeout 20000 && \
                 npm config set fetch-retry-maxtimeout 120000 && \
@@ -79,7 +91,18 @@
             
             # Build assets based on environment
             RUN if [ "$MIX_ENV" = "prod" ]; then \
-                mix assets.deploy; \
+                echo "=== Cleaning any old assets ===" && \
+                rm -rf priv/static/assets/* priv/static/cache_manifest.json && \
+                echo "=== Running npm deploy only (no phx.digest yet) ===" && \
+                cd assets && npm run deploy && cd .. && \
+                echo "=== CSS size after npm deploy ===" && \
+                ls -lh priv/static/assets/app.css && \
+                head -c 200 priv/static/assets/app.css && echo && \
+                echo "=== Now running phx.digest ===" && \
+                mix phx.digest && \
+                echo "=== Final CSS size after phx.digest ===" && \
+                ls -lh priv/static/assets/app*.css && \
+                head -c 200 priv/static/assets/app.css; \
             else \
                 mix assets.build; \
             fi

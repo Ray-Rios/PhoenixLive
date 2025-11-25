@@ -26,7 +26,13 @@ defmodule PhoenixAppWeb.ProfileLive do
           selected_background: current_user.background_preference || "galaxy",
           custom_data: custom_data
         )
-        |> allow_upload(:avatar, accept: ~w(.jpg .jpeg .png .gif .webp), max_entries: 1, max_file_size: 5_000_000)
+        |> allow_upload(:avatar, 
+          accept: ~w(.jpg .jpeg .png .gif .webp image/jpeg image/png image/gif image/webp), 
+          max_entries: 1, 
+          max_file_size: 5_000_000,
+          auto_upload: true,
+          progress: &handle_progress/3
+        )
 
       {:ok, socket}
     end
@@ -116,48 +122,6 @@ defmodule PhoenixAppWeb.ProfileLive do
   @impl true
   def handle_event("close_success", _params, socket) do
     {:noreply, assign(socket, show_success: false)}
-  end
-
-  @impl true
-  def handle_event("upload_avatar", _params, socket) do
-    uploaded_files =
-      consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry ->
-        # Use centralized upload module
-        case PhoenixApp.Uploads.upload_file(socket.assigns.user, path, entry, context: "avatar") do
-          {:ok, url} -> {:ok, url}
-          {:error, reason} -> {:postpone, reason}
-        end
-      end)
-
-    # Extract successful URLs
-    avatar_urls = 
-      uploaded_files
-      |> Enum.filter(fn
-        {:ok, _url} -> true
-        _ -> false
-      end)
-      |> Enum.map(fn {:ok, url} -> url end)
-
-    case avatar_urls do
-      [avatar_url] ->
-        case Accounts.update_user_profile(socket.assigns.user, %{avatar_url: avatar_url}) do
-          {:ok, updated_user} ->
-            {:noreply,
-             socket
-             |> assign(user: updated_user)
-             |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))
-             |> put_flash(:info, "Avatar updated successfully!")}
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to update avatar")}
-        end
-
-      [] ->
-        {:noreply, put_flash(socket, :error, "No file uploaded or upload failed")}
-        
-      _ ->
-        {:noreply, put_flash(socket, :error, "Please upload only one avatar image")}
-    end
   end
 
   @impl true
@@ -409,6 +373,48 @@ defmodule PhoenixAppWeb.ProfileLive do
     end
   end
 
+  # Handle progress updates from auto-upload
+  def handle_progress(:avatar, entry, socket) when entry.done? do
+    # File is fully uploaded, now process it
+    uploaded_file = consume_uploaded_entry(socket, entry, fn %{path: path} ->
+      case PhoenixApp.Uploads.upload_file(socket.assigns.user, path, entry, context: "avatar") do
+        {:ok, url} -> {:ok, url}
+        {:error, reason} -> 
+          IO.inspect(reason, label: "Avatar upload error")
+          {:postpone, :error}
+      end
+    end)
+
+    IO.inspect(uploaded_file, label: "consume_uploaded_entry result")
+
+    case uploaded_file do
+      {:ok, avatar_url} ->
+        IO.inspect(avatar_url, label: "Avatar URL to save")
+        case Accounts.update_user_profile(socket.assigns.user, %{avatar_url: avatar_url}) do
+          {:ok, updated_user} ->
+            IO.inspect("Avatar DB update succeeded")
+            {:noreply,
+             socket
+             |> assign(user: updated_user)
+             |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))
+             |> put_flash(:info, "Avatar updated successfully!")}
+
+          {:error, changeset} ->
+            IO.inspect(changeset, label: "Avatar DB update failed")
+            {:noreply, put_flash(socket, :error, "Failed to save avatar")}
+        end
+
+      other ->
+        IO.inspect(other, label: "Unexpected consume result, showing error")
+        {:noreply, put_flash(socket, :error, "Avatar upload failed")}
+    end
+  end
+
+  def handle_progress(:avatar, _entry, socket) do
+    # Progress update but not done yet
+    {:noreply, socket}
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -428,14 +434,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                 <h2 class="text-lg font-semibold text-white mb-4">Profile Preview</h2>
                 <div class="text-center">
                   <div class="inline-block mb-4">
-                    <%= if @user.avatar_url do %>
-                      <img src={@user.avatar_url} alt="Avatar" class={"w-24 h-24 object-cover mx-auto border-4 #{avatar_shape_classes(@user.avatar_shape)}"} style={"border-color: #{@user.avatar_color || "#3B82F6"}"} />
-                    <% else %>
-                      <div class={"w-24 h-24 flex items-center justify-center text-white text-2xl font-bold mx-auto border-4 #{avatar_shape_classes(@user.avatar_shape)}"} 
-                           style={"background-color: #{@user.avatar_color || "#3B82F6"}; border-color: #{@user.avatar_color || "#3B82F6"}"}>
-                        <%= String.first(@user.name || @user.email) |> String.upcase() %>
-                      </div>
-                    <% end %>
+                    <%= avatar_tag(@user, size_class: "w-24 h-24 text-2xl") %>
                   </div>
                   <h3 class="text-xl font-semibold text-white mb-1"><%= @user.name || "No name set" %></h3>
                   <p class="text-gray-400 mb-2"><%= @user.email %></p>
@@ -504,12 +503,12 @@ defmodule PhoenixAppWeb.ProfileLive do
                         <!-- Upload Area -->
                         <.form for={%{}} phx-change="validate_avatar" phx-submit="upload_avatar" id="avatar-upload-form">
                           <div class="flex flex-col items-center justify-center">
-                            <%= if @user.avatar_url do %>
+                            <%= if has_custom_avatar?(@user) do %>
                               <div class="mb-4">
-                                <img src={@user.avatar_url} alt="Current Avatar" class={"w-32 h-32 object-cover border-4 #{avatar_shape_classes(@user.avatar_shape)}"} style={"border-color: #{@user.avatar_color}"} />
+                                <%= avatar_tag(@user, size_class: "w-32 h-32") %>
                               </div>
                               <button type="button" phx-click="remove_avatar" class="mb-4 text-red-400 hover:text-red-300 text-sm">
-                                Remove Current Avatar
+                                Remove Custom Avatar
                               </button>
                             <% end %>
                             
@@ -545,9 +544,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                                     <p class="text-red-400 text-sm mt-1"><%= error_to_string(err) %></p>
                                   <% end %>
                                   <%= if entry.progress == 100 do %>
-                                    <button type="submit" class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded transition-colors">
-                                      Save Avatar
-                                    </button>
+                                    <p class="text-green-400 text-sm mt-1">✓ Uploading...</p>
                                   <% end %>
                                 </div>
                               <% end %>
@@ -1027,14 +1024,6 @@ defmodule PhoenixAppWeb.ProfileLive do
       </div>
     </div>
     """
-  end
-
-  defp avatar_shape_classes(shape) do
-    case shape do
-      "square" -> "rounded-none"
-      "rounded" -> "rounded-lg"
-      _ -> "rounded-full"  # default to circle
-    end
   end
 
   defp error_to_string(:too_large), do: "Too large"

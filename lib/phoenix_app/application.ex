@@ -11,9 +11,13 @@ defmodule PhoenixApp.Application do
     :ets.new(:blocked_ips, [:set, :public, :named_table])
     :ets.new(:honeypot_tracker, [:set, :public, :named_table])
     
+    # Create ETS table for Y.js collaborative editing documents
+    :ets.new(:yjs_documents, [:set, :public, :named_table])
+    
     children = [
       PhoenixApp.Repo,
       {Phoenix.PubSub, name: PhoenixApp.PubSub},
+      PhoenixAppWeb.Presence,
       {Finch, name: PhoenixApp.Finch},
       PhoenixApp.UserSession,
       PhoenixApp.PresenceTracker,

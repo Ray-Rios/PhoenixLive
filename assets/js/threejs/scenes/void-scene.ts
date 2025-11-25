@@ -123,15 +123,8 @@ export const VoidScene = {
   },
 
   startAnimation(this: VoidSceneHook) {
-    let lastTime = performance.now();
-    
     const animate = () => {
       this.animationId = requestAnimationFrame(animate);
-      
-      // Calculate delta time
-      const currentTime = performance.now();
-      const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
-      lastTime = currentTime;
       
       this.time += 0.0005; // Very slow time progression
 

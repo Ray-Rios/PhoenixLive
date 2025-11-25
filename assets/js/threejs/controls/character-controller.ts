@@ -140,7 +140,7 @@ export class CharacterController {
     const speed = this.isRunning ? this.config.runSpeed : this.config.moveSpeed;
   const rightMouseHeld = this.mouseButtons[2] || false;
     
-    let movement = new THREE.Vector3();
+    const movement = new THREE.Vector3();
     this.isMoving = false;
     
     // Classic MMO controls:
@@ -215,7 +215,7 @@ export class CharacterController {
     }
   }
 
-  private handleCamera(deltaTime: number): void {
+  private handleCamera(_deltaTime: number): void {
     // Camera rotation with right mouse button
     if (this.mouseButtons[2]) {
       this.cameraAngle -= this.mouseDelta.x * 0.003;

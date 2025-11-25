@@ -10,7 +10,8 @@ import type {
   Vector3,
   Euler,
   Material,
-  Mesh
+  Mesh,
+  Clock
 } from 'three';
 
 // Phoenix LiveView Hook interface
@@ -30,7 +31,7 @@ export interface ThreeSceneState {
   camera: PerspectiveCamera;
   renderer: WebGLRenderer;
   controls: OrbitControls | FirstPersonControls;
-  clock: THREE.Clock;
+  clock: Clock;
   isInitialized: boolean;
   isDisposed: boolean;
 }

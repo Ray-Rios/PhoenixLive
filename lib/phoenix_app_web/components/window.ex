@@ -295,7 +295,8 @@ defmodule PhoenixAppWeb.Components.Window do
     end
   end
 
-  defp format_bytes(bytes) do
+  defp format_bytes(nil), do: "0 B"
+  defp format_bytes(bytes) when is_integer(bytes) do
     cond do
       bytes >= 1_000_000_000 -> "#{Float.round(bytes / 1_000_000_000, 1)} GB"
       bytes >= 1_000_000 -> "#{Float.round(bytes / 1_000_000, 1)} MB"
@@ -303,4 +304,5 @@ defmodule PhoenixAppWeb.Components.Window do
       true -> "#{bytes} B"
     end
   end
+  defp format_bytes(_), do: "0 B"
 end

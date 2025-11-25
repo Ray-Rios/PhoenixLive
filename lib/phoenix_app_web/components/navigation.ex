@@ -1,5 +1,6 @@
 defmodule PhoenixAppWeb.Components.Navigation do
   use PhoenixAppWeb, :html
+  import PhoenixAppWeb.AvatarHelpers
 
   attr :current_user, :any, default: nil
   attr :id_prefix, :string, default: ""
@@ -63,14 +64,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
                 dropdown_class="absolute right-0 mt-2 w-48 glass-dark rounded-md shadow-lg py-1 z-50"
               >
                 <:trigger>
-                  <%= if get_user_avatar_url(@current_user) do %>
-                    <img src={get_user_avatar_url(@current_user)} alt="Avatar" class={"w-6 h-6 object-cover flex-shrink-0 #{avatar_shape_classes(get_user_avatar_shape(@current_user))}"} />
-                  <% else %>
-                    <div class={"w-6 h-6 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 #{avatar_shape_classes(get_user_avatar_shape(@current_user))}"} 
-                         style={"background-color: #{get_user_avatar_color(@current_user)}"}>
-                      <%= get_user_initial(@current_user) %>
-                    </div>
-                  <% end %>
+                  <%= avatar_tag(@current_user, size_class: "w-6 h-6 text-xs") %>
                   <span class="hidden sm:block text-xs truncate max-w-[80px]"><%= get_user_display_name(@current_user) %></span>
                   <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -165,24 +159,6 @@ defmodule PhoenixAppWeb.Components.Navigation do
     end
   end
 
-  defp get_user_avatar_color(user) do
-    cond do
-      is_map(user) && Map.has_key?(user, :avatar_color) && user.avatar_color -> user.avatar_color
-      is_map(user) && Map.has_key?(user, "avatar_color") && user["avatar_color"] -> user["avatar_color"]
-      true -> "#4ECDC4"
-    end
-  end
-
-  defp get_user_initial(user) do
-    cond do
-      is_map(user) && Map.has_key?(user, :name) && user.name -> String.first(user.name)
-      is_map(user) && Map.has_key?(user, "name") && user["name"] -> String.first(user["name"])
-      is_map(user) && Map.has_key?(user, :email) && user.email -> String.first(user.email)
-      is_map(user) && Map.has_key?(user, "email") && user["email"] -> String.first(user["email"])
-      true -> "U"
-    end
-  end
-
   defp get_user_display_name(user) do
     cond do
       is_map(user) && Map.has_key?(user, :name) && user.name -> user.name
@@ -192,30 +168,6 @@ defmodule PhoenixAppWeb.Components.Navigation do
       is_map(user) && Map.has_key?(user, "email") && user["email"] -> 
         user["email"] |> String.split("@") |> List.first()
       true -> "User"
-    end
-  end
-
-  defp get_user_avatar_url(user) do
-    cond do
-      is_map(user) && Map.has_key?(user, :avatar_url) && user.avatar_url -> user.avatar_url
-      is_map(user) && Map.has_key?(user, "avatar_url") && user["avatar_url"] -> user["avatar_url"]
-      true -> nil
-    end
-  end
-
-  defp get_user_avatar_shape(user) do
-    cond do
-      is_map(user) && Map.has_key?(user, :avatar_shape) && user.avatar_shape -> user.avatar_shape
-      is_map(user) && Map.has_key?(user, "avatar_shape") && user["avatar_shape"] -> user["avatar_shape"]
-      true -> "circle"
-    end
-  end
-
-  defp avatar_shape_classes(shape) do
-    case shape do
-      "square" -> "rounded-none"
-      "rounded" -> "rounded-lg"
-      _ -> "rounded-full"  # default to circle
     end
   end
 end

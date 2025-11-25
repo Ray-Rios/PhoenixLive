@@ -48,12 +48,14 @@ defmodule PhoenixAppWeb.ForumLive do
         message_attachments: [],
         show_attachments: false,
         active_stream: nil,
+        show_delete_channel_confirm: false,
         can_create_more_channels: length(user_owned_channels) < 5
       )
       |> allow_upload(:forum_attachment,
-        accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .mp3 .wav .zip),
+        accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
         max_entries: 5,
-        max_file_size: 25_000_000
+        max_file_size: 100_000_000,  # 100MB for video files
+        auto_upload: false  # Manual upload control
       )
       
       # Subscribe to the default channel
@@ -297,6 +299,65 @@ defmodule PhoenixAppWeb.ForumLive do
     end
   end
 
+  def handle_event("show_delete_channel_confirm", _params, socket) do
+    {:noreply, assign(socket, show_delete_channel_confirm: true)}
+  end
+
+  def handle_event("cancel_delete_channel", _params, socket) do
+    {:noreply, assign(socket, show_delete_channel_confirm: false)}
+  end
+
+  def handle_event("confirm_delete_channel", _params, socket) do
+    user = socket.assigns.current_user
+    channel = socket.assigns.current_channel
+
+    # Only owner or admin-like roles can delete a channel
+    if (Map.has_key?(channel, :owner_id) && channel.owner_id == user.id) or Map.get(user, :is_admin, false) or Map.get(user, :role) in ["admin", "gm"] do
+      case Forum.delete_channel(channel) do
+        {:ok, _} ->
+          # Refresh channel lists
+          system_channels = Forum.list_channels()
+          user_owned_channels = Forum.list_user_owned_channels(user.id)
+          user_member_channels = Forum.list_user_member_channels(user.id)
+          public_user_channels = Forum.list_public_user_channels()
+
+          # Navigate to default channel
+          default = if Enum.empty?(system_channels) do
+            Forum.get_or_create_default_channel()
+          else
+            List.first(system_channels)
+          end
+
+          {:noreply, 
+           socket
+           |> assign(
+             system_channels: if(Enum.empty?(system_channels), do: [default], else: system_channels),
+             user_owned_channels: user_owned_channels,
+             user_member_channels: user_member_channels,
+             public_user_channels: public_user_channels,
+             public_channels: public_user_channels,
+             user_channels: user_owned_channels ++ user_member_channels,
+             current_channel: default,
+             messages: Forum.list_messages(default.id),
+             show_delete_channel_confirm: false
+           )
+           |> put_flash(:info, "Channel '#{channel.name}' deleted successfully. All messages and files have been removed.")
+           |> push_navigate(to: ~p"/forum/#{default.id}")}
+
+        {:error, _} ->
+          {:noreply, 
+           socket
+           |> assign(show_delete_channel_confirm: false)
+           |> put_flash(:error, "Failed to delete channel")}
+      end
+    else
+      {:noreply, 
+       socket
+       |> assign(show_delete_channel_confirm: false)
+       |> put_flash(:error, "You don't have permission to delete this channel")}
+    end
+  end
+
   def handle_event("delete_channel", %{"channel_id" => channel_id}, socket) do
     user = socket.assigns.current_user
 
@@ -304,7 +365,7 @@ defmodule PhoenixAppWeb.ForumLive do
     channel = Forum.get_channel!(channel_id)
 
     # Only owner or admin-like roles can delete a channel
-    if channel.owner_id == user.id or Map.get(user, :is_admin, false) or Map.get(user, :role) in ["admin", "gm"] do
+    if (Map.has_key?(channel, :owner_id) && channel.owner_id == user.id) or Map.get(user, :is_admin, false) or Map.get(user, :role) in ["admin", "gm"] do
       case Forum.delete_channel(channel) do
         {:ok, _} ->
           # Refresh lists and switch to default channel if needed
@@ -429,12 +490,17 @@ defmodule PhoenixAppWeb.ForumLive do
     end
   end
 
+  def handle_event("validate_message", _params, socket) do
+    # Just validate, don't do anything
+    {:noreply, socket}
+  end
+
   def handle_event("toggle_uploads", _params, socket) do
     {:noreply, assign(socket, show_attachments: !socket.assigns.show_attachments)}
   end
 
-  def handle_event("cancel_upload", _params, socket) do
-    {:noreply, assign(socket, show_attachments: false)}
+  def handle_event("cancel-upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :forum_attachment, ref)}
   end
 
   def handle_event("upload_files", _params, socket) do
@@ -627,26 +693,48 @@ defmodule PhoenixAppWeb.ForumLive do
       </div>
 
       <div class="w-3/4 h-full flex flex-col bg-white dark:bg-gray-900">
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-200">#<%= @current_channel.name %></h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400"><%= @current_channel.description %></p>
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-200">#<%= @current_channel.name %></h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400"><%= @current_channel.description %></p>
+          </div>
+          
+          <%= if @current_user && (@current_user.is_admin || @current_user.role in ["admin", "gm"] || (Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id)) do %>
+            <button 
+              phx-click="show_delete_channel_confirm" 
+              class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors flex items-center gap-2"
+              title="Delete Channel"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Channel
+            </button>
+          <% end %>
         </div>
 
         <div id="messages" class="flex-1 p-4 overflow-y-auto">
           <%= for message <- @messages do %>
             <div class="flex items-start mb-4">
-              <%!-- Safely build an avatar URL: if the user has an uploaded file, provide it to Arc; otherwise use the default image --%>
-              <img src={if message.user && Map.get(message.user, :avatar_file) do
-                PhoenixApp.Avatar.url({message.user.avatar_file, message.user}, :thumb)
-              else
-                PhoenixApp.Avatar.default_url(:thumb)
-              end} class="w-10 h-10 rounded-full mr-4" />
+              <div class="mr-4">
+                <%= avatar_tag(message.user, size_class: "w-10 h-10") %>
+              </div>
               <div class="flex-1">
                 <div class="flex items-baseline">
                   <span class="font-bold text-gray-800 dark:text-gray-200 mr-2"><%= message.user.name || message.user.email %></span>
                   <span class="text-xs text-gray-500 dark:text-gray-400"><%= Calendar.strftime(message.inserted_at, "%H:%M") %></span>
                 </div>
                 <p class="text-gray-700 dark:text-gray-300"><%= message.content %></p>
+                
+                <%!-- Display attachments using media preview component --%>
+                <%= if message.attachments && length(message.attachments) > 0 do %>
+                  <div class="mt-2 space-y-2">
+                    <%= for attachment <- message.attachments do %>
+                      <PhoenixAppWeb.Components.MediaPreview.media_preview attachment={attachment} />
+                    <% end %>
+                  </div>
+                <% end %>
+                
                 <div class="flex mt-1">
                   <%= for {emoji, count} <- group_reactions(message.reactions) do %>
                     <div class="flex items-center mr-2 p-1 bg-gray-200 dark:bg-gray-700 rounded-full">
@@ -661,15 +749,114 @@ defmodule PhoenixAppWeb.ForumLive do
         </div>
 
         <div class="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-          <form phx-submit="send_message">
-            <div class="flex">
-              <input name="message" type="text" placeholder="Type a message..." class="flex-1 p-2 border rounded-l-md" />
-              <button type="submit" class="bg-blue-500 text-white p-2 rounded-r-md hover:bg-blue-600">Send</button>
+          <form phx-submit="send_message" phx-change="validate_message">
+            <%!-- File upload previews --%>
+            <%= if length(@uploads.forum_attachment.entries) > 0 do %>
+              <div class="mb-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div class="text-xs text-gray-600 dark:text-gray-400 mb-2 font-medium">
+                  Attachments (<%= length(@uploads.forum_attachment.entries) %>/5)
+                </div>
+                <div class="space-y-2">
+                  <%= for entry <- @uploads.forum_attachment.entries do %>
+                    <div class="flex items-center justify-between p-2 bg-white dark:bg-gray-600 rounded">
+                      <div class="flex items-center flex-1 min-w-0 mr-2">
+                        <svg class="w-4 h-4 text-gray-500 dark:text-gray-300 flex-shrink-0 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                        </svg>
+                        <span class="text-sm text-gray-700 dark:text-gray-200 truncate"><%= entry.client_name %></span>
+                      </div>
+                      <div class="flex items-center space-x-2 flex-shrink-0">
+                        <div class="w-16 bg-gray-200 dark:bg-gray-500 rounded-full h-1.5">
+                          <div class="bg-blue-500 h-1.5 rounded-full transition-all" style={"width: #{entry.progress}%"}></div>
+                        </div>
+                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="text-red-500 hover:text-red-700 text-xs">✕</button>
+                      </div>
+                    </div>
+                    <%= for err <- upload_errors(@uploads.forum_attachment, entry) do %>
+                      <p class="text-xs text-red-500 mt-1"><%= error_to_string(err) %></p>
+                    <% end %>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+            
+            <div class="flex items-end space-x-2">
+              <div class="flex-1">
+                <textarea 
+                  name="message" 
+                  placeholder="Type a message..." 
+                  class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows="2"
+                  phx-keydown="typing"
+                  phx-debounce="1000"
+                ></textarea>
+              </div>
+              <div class="flex flex-col space-y-1">
+                <label for={@uploads.forum_attachment.ref} class="cursor-pointer bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 p-2 rounded-md transition-colors" title="Attach files">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                  </svg>
+                  <.live_file_input upload={@uploads.forum_attachment} class="sr-only" />
+                </label>
+                <button type="submit" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition-colors">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
           </form>
         </div>
       </div>
     </div>
+
+    <%!-- Delete Channel Confirmation Modal --%>
+    <%= if @show_delete_channel_confirm do %>
+      <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-auto">
+        <div class="absolute inset-0 bg-black/50" phx-click="cancel_delete_channel"></div>
+        <div class="relative bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4 border border-red-500/50">
+          <div class="flex items-start mb-4">
+            <div class="flex-shrink-0">
+              <svg class="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="text-lg font-medium text-white mb-2">Delete Channel</h3>
+              <p class="text-gray-300 text-sm mb-4">
+                Are you sure you want to delete <span class="font-bold text-white">#<%= @current_channel.name %></span>?
+              </p>
+              <p class="text-red-400 text-sm font-medium">
+                ⚠️ This will permanently delete:
+              </p>
+              <ul class="text-gray-300 text-sm mt-2 ml-4 space-y-1">
+                <li>• All messages in this channel</li>
+                <li>• All uploaded files and attachments</li>
+                <li>• All reactions and threads</li>
+              </ul>
+              <p class="text-red-400 text-sm font-bold mt-3">
+                This action cannot be undone!
+              </p>
+            </div>
+          </div>
+          
+          <div class="flex justify-end gap-3">
+            <button 
+              phx-click="cancel_delete_channel" 
+              class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              phx-click="confirm_delete_channel" 
+              class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors font-medium"
+            >
+              Delete Permanently
+            </button>
+          </div>
+        </div>
+      </div>
+    <% end %>
     """
   end
 
@@ -696,4 +883,10 @@ defmodule PhoenixAppWeb.ForumLive do
       true -> "file"
     end
   end
+
+  # Helper for upload errors
+  defp error_to_string(:too_large), do: "File is too large (max 100MB)"
+  defp error_to_string(:not_accepted), do: "File type not accepted"
+  defp error_to_string(:too_many_files), do: "Too many files (max 5)"
+  defp error_to_string(error), do: "Upload error: #{inspect(error)}"
 end

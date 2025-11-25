@@ -3,6 +3,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
   Taskbar component for the desktop environment
   """
   use PhoenixAppWeb, :html
+  import PhoenixAppWeb.AvatarHelpers
 
   @doc """
   Renders the desktop taskbar with start menu and system tray
@@ -31,14 +32,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
             <div class="p-4 border-b border-gray-600">
               <div class="flex items-center space-x-3">
                 <%= if @current_user do %>
-                  <%= if get_user_avatar_url(@current_user) do %>
-                    <img src={get_user_avatar_url(@current_user)} alt="Avatar" class="w-10 h-10 rounded-full object-cover" />
-                  <% else %>
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-white text-lg font-bold" 
-                         style={"background-color: #{get_user_avatar_color(@current_user)}"}>
-                      <%= get_user_initial(@current_user) %>
-                    </div>
-                  <% end %>
+                  <%= avatar_tag(@current_user, size_class: "w-10 h-10") %>
                   <div class="flex-1 min-w-0">
                     <div class="text-white font-medium truncate"><%= get_user_display_name(@current_user) %></div>
                     <div class="text-gray-400 text-sm truncate"><%= @current_user.email %></div>
@@ -228,23 +222,6 @@ defmodule PhoenixAppWeb.Components.Taskbar do
   end
 
   # Helper functions
-  defp get_user_avatar_url(user) do
-    # Implementation depends on your avatar system
-    user.avatar_url
-  end
-
-  defp get_user_avatar_color(user) do
-    # Generate a color based on user ID or name
-    colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57", "#FF9FF3", "#54A0FF", "#5F27CD"]
-    Enum.at(colors, rem(:erlang.phash2(user.id), length(colors)))
-  end
-
-  defp get_user_initial(user) do
-    user.name
-    |> String.first()
-    |> String.upcase()
-  end
-
   defp get_user_display_name(user) do
     user.name || "User"
   end

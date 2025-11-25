@@ -3,13 +3,13 @@
 import { LiveViewHook } from './types/liveview';
 import { FileData } from './types/file-upload';
 
-interface FileDragDropHook extends LiveViewHook {}
-
-interface FileUploadHook extends LiveViewHook {}
+type FileDragDropHook = LiveViewHook;
+type FileUploadHook = LiveViewHook;
 
 export const FileDragDrop: FileDragDropHook = {
   mounted() {
-    const self = this; // Capture 'this' context for use in callbacks
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const hook = this; // Capture hook context for use in callbacks
     
     // For file manager component, the drop zone is the element itself
     const dropZone = this.el.id?.includes('drop-zone') ? this.el : this.el.querySelector('[id*="drop-zone"]') as HTMLElement;
@@ -49,7 +49,7 @@ export const FileDragDrop: FileDragDropHook = {
       e.stopPropagation();
     }
 
-    function highlight(e: Event): void {
+    function highlight(_e: Event): void {
       dropZone.classList.add('border-blue-500', 'bg-blue-900/20');
       if (dropOverlay) {
         dropOverlay.classList.remove('hidden');
@@ -57,7 +57,7 @@ export const FileDragDrop: FileDragDropHook = {
       }
     }
 
-    function unhighlight(e: Event): void {
+    function unhighlight(_e: Event): void {
       dropZone.classList.remove('border-blue-500', 'bg-blue-900/20');
       if (dropOverlay) {
         dropOverlay.classList.add('hidden');
@@ -117,7 +117,7 @@ export const FileDragDrop: FileDragDropHook = {
       showUploadProgress(validFiles);
 
       // Process files
-      validFiles.forEach((file: File, index: number) => {
+      validFiles.forEach((file: File, _index: number) => {
         const reader = new FileReader();
         
         reader.onload = (e: ProgressEvent<FileReader>): void => {
@@ -129,8 +129,8 @@ export const FileDragDrop: FileDragDropHook = {
             lastModified: file.lastModified
           };
           
-          // Send to LiveView using captured 'self' reference
-          self.pushEvent("file_drop", { files: [fileData] });
+          // Send to LiveView using captured hook reference
+          hook.pushEvent("file_drop", { files: [fileData] });
         };
         
         reader.onerror = (e: ProgressEvent<FileReader>): void => {
@@ -168,7 +168,8 @@ export const FileDragDrop: FileDragDropHook = {
 // File Upload Hook for traditional file input
 export const FileUpload: FileUploadHook = {
   mounted() {
-    const self = this; // Capture 'this' context for use in callbacks
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const hook = this; // Capture hook context for use in callbacks
     
     this.el.addEventListener('change', (e: Event) => {
       const target = e.target as HTMLInputElement;
@@ -186,8 +187,8 @@ export const FileUpload: FileUploadHook = {
             lastModified: file.lastModified
           };
           
-          // Use captured 'self' reference instead of 'this'
-          self.pushEvent("file_selected", fileData);
+          // Use captured hook reference instead of 'this'
+          hook.pushEvent("file_selected", fileData);
         };
         
         reader.onerror = (event: ProgressEvent<FileReader>): void => {

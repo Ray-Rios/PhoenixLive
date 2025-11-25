@@ -1,6 +1,5 @@
 // Rich Editor Hook for WordPress-style content editing with full-screen support
 
-import { LiveViewHook } from './types/liveview';
 import { RichEditorHook, TextSelection } from './types/rich-editor';
 
 export const RichEditor: RichEditorHook = {
@@ -266,7 +265,7 @@ export const RichEditor: RichEditorHook = {
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^\- (.*$)/gim, '<li>$1</li>')
+      .replace(/^- (.*$)/gim, '<li>$1</li>')
       .replace(/^1\. (.*$)/gim, '<li>$1</li>')
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
       .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
@@ -327,7 +326,7 @@ export const RichEditor: RichEditorHook = {
         cursorOffset = selectedText ? 0 : 0;
         break;
       
-      case 'link':
+      case 'link': {
         const url = prompt('Enter URL:');
         if (url) {
           replacement = `[${selectedText || 'link text'}](${url})`;
@@ -336,8 +335,9 @@ export const RichEditor: RichEditorHook = {
           return;
         }
         break;
+      }
       
-      case 'image':
+      case 'image': {
         const imageUrl = prompt('Enter image URL:');
         if (imageUrl) {
           const altText = selectedText || 'image';
@@ -347,6 +347,7 @@ export const RichEditor: RichEditorHook = {
           return;
         }
         break;
+      }
       
       case 'code':
         if (selectedText.includes('\n')) {

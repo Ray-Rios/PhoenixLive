@@ -177,17 +177,8 @@ export const HomeGalaxyScene = {
   },
 
   startAnimation(this: GalaxySceneHook) {
-    let lastTime = performance.now();
-    
     const animate = () => {
-      this.animationId = requestAnimationFrame(animate);
-
-      // Calculate delta time
-      const currentTime = performance.now();
-      const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
-      lastTime = currentTime;
-
-      // Ensure canvas always matches window size
+      this.animationId = requestAnimationFrame(animate);      // Ensure canvas always matches window size
       if (this.renderer) {
         const width = window.innerWidth;
         const height = window.innerHeight;
@@ -239,7 +230,9 @@ export const HomeGalaxyScene = {
 
   destroyed(this: GalaxySceneHook) {
     console.log('🗑️ Galaxy scene cleanup');
-    try { console.trace('Galaxy scene destroyed at:'); } catch(e) {}
+    try { console.trace('Galaxy scene destroyed at:'); } catch {
+      // Ignore trace errors
+    }
     
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);

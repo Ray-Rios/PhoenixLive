@@ -221,7 +221,7 @@ export class UniversalModelLoader {
           results.set(name, asset);
           loaded = true;
           break;
-        } catch (error) {
+        } catch {
           // Try next format
           continue;
         }

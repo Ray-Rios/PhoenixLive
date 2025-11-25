@@ -26,7 +26,7 @@ spec:
       volumes:
       - name: source
         hostPath:
-          path: /run/desktop/mnt/host/c/PROJEKT45/uploads
+          path: /run/desktop/mnt/host/c/PROJEKT46/uploads
           type: Directory
       - name: dest
         hostPath:

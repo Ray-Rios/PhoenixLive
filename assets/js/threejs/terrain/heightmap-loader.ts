@@ -63,7 +63,7 @@ export class HeightmapTerrainLoader {
       throw new Error('No heightmap data loaded');
     }
 
-    const { width, height, depth, segments, heightScale, textureRepeat } = this.config;
+    const { width, height, segments, heightScale, textureRepeat } = this.config;
 
     // Create plane geometry
     const geometry = new THREE.PlaneGeometry(
@@ -78,8 +78,6 @@ export class HeightmapTerrainLoader {
 
     // Apply heightmap data to vertices
     const vertices = geometry.attributes.position.array as Float32Array;
-    const segmentWidth = width / segments;
-    const segmentHeight = height / segments;
 
     for (let i = 0; i < segments + 1; i++) {
       for (let j = 0; j < segments + 1; j++) {
@@ -122,7 +120,7 @@ export class HeightmapTerrainLoader {
         material.needsUpdate = true;
       },
       undefined,
-      (error) => {
+      () => {
         console.warn('⚠️ Failed to load grass texture, using color instead');
       }
     );

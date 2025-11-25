@@ -1,0 +1,274 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  elixir-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Elixir deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            _build
+            deps
+            .mix
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19'
+          otp-version: '26'
+      - name: Install Hex & Rebar
+        run: mix local.hex --force && mix local.rebar --force
+      - name: Get dependencies
+        run: mix deps.get --only dev test
+      - name: Compile
+        run: mix compile
+      - name: Run Format Check
+        run: mix format --check-formatted
+      - name: Run Credo (static analysis)
+        run: mix credo --strict
+      - name: Run Sobelow (security scan)
+        run: mix sobelow --exit
+      - name: Run Tests
+        run: mix test
+
+  dialyzer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19'
+          otp-version: '26'
+      - name: Cache PLT & deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            _build
+            deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}-dialyzer
+      - name: Install Hex & Rebar
+        run: mix local.hex --force && mix local.rebar --force
+      - name: Get dependencies
+        run: mix deps.get --only dev test
+      - name: Run Dialyzer
+        run: mix dialyzer --format dialyzer
+
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache NPM
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: assets/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('assets/package-lock.json') }}
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: |
+          cd assets
+          npm ci
+      - name: NPM audit (optional fail if high/critical)
+        run: |
+          cd assets
+          npm audit --audit-level=high || true
+      - name: Run frontend linters
+        run: |
+          cd assets
+          npm run lint
+          npm run type-check
+      - name: Run stylelint
+        run: |
+          cd assets
+          npm run stylelint
+      - name: Run Playwright E2E (fast smoke)
+        run: |
+          cd assets
+          npm ci
+          npm run test:e2e
+      - name: Upload Playwright artifacts (assets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-assets
+          path: |
+            assets/test-results
+            assets/playwright-report
+      - name: Snyk scan (optional)
+        if: ${{ secrets.SNYK_TOKEN != '' }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd assets
+          npm ci
+          npx snyk test || true
+      - name: Build assets (includes prebuild check)
+        run: |
+          cd assets
+          npm run build
+      - name: Run CSS/Style check (stylelint)
+        run: |
+          cd assets
+          if [ -f package.json ]; then
+            if npm pkg get devDependencies.stylelint >/dev/null 2>&1; then
+              npm run stylelint || true
+            fi
+          fi
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [assets]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: phoenix_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d phoenix_test -h localhost" \
+          --health-interval 5s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build Docker image (staging smoke test)
+        run: |
+          docker build -t phoenixapp:test -f Dockerfile .
+      - name: Run container with Postgres/Redis
+        run: |
+          docker run -e DATABASE_URL="ecto://postgres:postgres@postgres:5432/phoenix_test" -e MIX_ENV=prod -p 4000:4000 --name phoenixapp-smoke -d phoenixapp:test || true
+      - name: Wait for app
+        run: |
+          for i in `seq 1 30`; do
+            if curl -fsSL http://localhost:4000/ >/dev/null 2>&1; then echo "app up"; break; fi; sleep 2; done
+      - name: Run Playwright smoke check against container
+        run: |
+          cd assets
+          npm ci
+          TEST_URL="http://localhost:4000" npm run test:e2e
+      - name: Upload Playwright artifacts (integration)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-integration
+          path: assets/test-results
+      - name: Teardown
+        if: always()
+        run: docker rm -f phoenixapp-smoke || true
+
+  staging-deploy:
+    runs-on: ubuntu-latest
+    needs: [integration]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Build and tag image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} -f Dockerfile .
+      - name: Push image to GHCR
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        run: |
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+      - name: Deploy to Kubernetes (staging)
+        if: ${{ secrets.KUBECONFIG != '' && secrets.GHCR_TOKEN != '' }}
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+          IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: |
+          echo "$KUBECONFIG_DATA" | base64 --decode > kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl -n phoenixapp set image deployment/phoenix-web phoenix-web=${IMAGE} --record
+          kubectl -n phoenixapp rollout status deployment/phoenix-web --timeout=120s
+      - name: Run Playwright tests against staging
+        env:
+          TEST_URL: ${{ secrets.STAGING_URL }}
+        run: |
+          cd assets
+          npm ci
+          npx playwright install --with-deps
+          npm run test:e2e
+      - name: Upload Playwright artifacts (staging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-staging
+          path: assets/test-results
+
+  codeql-analysis:
+    name: CodeQL
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+  snyk-scan:
+    runs-on: ubuntu-latest
+    needs: [assets]
+    if: ${{ secrets.SNYK_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: |
+          cd assets
+          npm ci
+      - name: Snyk test (failing on critical only)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd assets
+          npx snyk test --severity-threshold=critical
+      - name: Snyk fix (optional - attempts to fix and create PRs if Snyk integration present)
+        if: ${{ secrets.SNYK_TOKEN != '' && secrets.SNYK_AUTOFIX == 'true' }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd assets
+          npx snyk fix

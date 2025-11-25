@@ -1,0 +1,168 @@
+# ================================
+# STAGE 1: Build Elixir Dependencies (for Phoenix JS packages)
+# ================================
+FROM elixir:1.19-alpine AS deps-builder
+
+WORKDIR /app
+
+# Set build-time environment
+ARG MIX_ENV=prod
+ENV MIX_ENV=${MIX_ENV}
+
+# Install hex and rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Copy dependency files
+COPY mix.exs ./
+
+# Install dependencies (generates mix.lock if missing)
+RUN mix deps.get --only prod
+
+# ================================
+# STAGE 2: Build Assets
+# ================================
+FROM node:20-alpine AS assets-builder
+
+# Install curl for health checks later
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Copy Phoenix JavaScript packages from Elixir deps
+COPY --from=deps-builder /app/deps/phoenix ./deps/phoenix
+COPY --from=deps-builder /app/deps/phoenix_html ./deps/phoenix_html
+COPY --from=deps-builder /app/deps/phoenix_live_view ./deps/phoenix_live_view
+
+# Copy package files
+COPY assets/package*.json ./assets/
+
+# Install npm dependencies
+RUN cd assets && npm ci --prefer-offline --no-audit --no-fund
+
+# Link Phoenix JS packages from deps (remove existing npm-installed versions first)
+RUN cd assets/node_modules && \
+    rm -rf phoenix phoenix_html phoenix_live_view && \
+    ln -sf ../../deps/phoenix/assets phoenix && \
+    ln -sf ../../deps/phoenix_html/priv/static/phoenix_html.js phoenix_html && \
+    ln -sf ../../deps/phoenix_live_view/assets phoenix_live_view
+
+# Copy asset source files
+COPY assets ./assets
+
+# Copy lib directory for Tailwind to scan templates
+COPY lib ./lib
+
+COPY priv/static/tri.gif ./priv/static/
+COPY priv/static/favicon.ico ./priv/static/
+COPY priv/static/robots.txt ./priv/static/
+COPY priv/static/sitemap.xml ./priv/static/
+COPY priv/static/.well-known ./priv/static/.well-known
+COPY priv/static/maps ./priv/static/maps
+# Models excluded - mount as volume or serve from CDN
+
+# Build assets (Tailwind needs lib/ to scan for classes)
+RUN mkdir -p priv/static/assets priv/static/fonts && \
+    cd assets && \
+    npm run deploy
+
+# ================================
+# STAGE 3: Build Elixir Release
+# ================================
+FROM elixir:1.19-alpine AS app-builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    build-base \
+    git \
+    curl
+
+WORKDIR /app
+
+# Set build-time environment
+ARG MIX_ENV=prod
+ENV MIX_ENV=${MIX_ENV}
+
+# Build-time secrets (overridden at runtime)
+ARG SECRET_KEY_BASE=build_time_secret_key_base_placeholder_64_chars_long_minimum
+ARG GUARDIAN_SECRET_KEY=build_time_guardian_secret_key_placeholder_64_chars_long_minimum
+ARG LIVE_VIEW_SIGNING_SALT=build_time_live_view_signing_salt_placeholder_32_chars
+ENV SECRET_KEY_BASE=${SECRET_KEY_BASE}
+ENV GUARDIAN_SECRET_KEY=${GUARDIAN_SECRET_KEY}
+ENV LIVE_VIEW_SIGNING_SALT=${LIVE_VIEW_SIGNING_SALT}
+
+# Install hex and rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Copy dependency files and deps from stage 1
+COPY mix.exs ./
+COPY --from=deps-builder /app/deps ./deps
+COPY --from=deps-builder /app/mix.lock ./mix.lock
+
+# Compile dependencies
+RUN mix deps.compile
+
+# Copy application source
+COPY config ./config
+COPY lib ./lib
+COPY priv/repo ./priv/repo
+COPY priv/gettext ./priv/gettext
+
+# Copy built assets from assets-builder stage
+COPY --from=assets-builder /app/priv/static ./priv/static
+
+# Copy static files that don't change
+COPY priv/static/tri.gif ./priv/static/
+COPY priv/static/favicon.ico ./priv/static/
+COPY priv/static/robots.txt ./priv/static/
+COPY priv/static/sitemap.xml ./priv/static/
+
+# Compile application
+RUN mix compile
+
+# Digest assets for production
+RUN mix phx.digest
+
+# Build release
+RUN mix release
+
+# ================================
+# STAGE 4: Runtime Image
+# ================================
+# Use same Alpine version as elixir:1.19-alpine to match OpenSSL/crypto versions
+FROM alpine:3.22 AS runtime
+
+# Install runtime dependencies only
+RUN apk add --no-cache \
+    bash \
+    openssl \
+    postgresql-client \
+    redis \
+    curl \
+    ca-certificates \
+    libstdc++ \
+    libgcc && \
+    update-ca-certificates
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -S phoenix && \
+    adduser -S phoenix -G phoenix && \
+    mkdir -p /app/uploads && \
+    chown -R phoenix:phoenix /app
+
+# Copy release from builder
+COPY --from=app-builder --chown=phoenix:phoenix /app/_build/prod/rel/phoenix_app ./
+
+# Copy startup script
+COPY --chown=phoenix:phoenix phx-start.sh /usr/local/bin/phx-start.sh
+RUN chmod +x /usr/local/bin/phx-start.sh
+
+# Switch to non-root user
+USER phoenix
+
+EXPOSE 4000
+
+CMD ["/usr/local/bin/phx-start.sh"]

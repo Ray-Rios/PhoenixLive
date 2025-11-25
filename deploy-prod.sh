@@ -9,9 +9,11 @@ if [[ "$*" == *"--help"* ]] || [[ "$*" == *"-h"* ]]; then
 Usage: $0 [OPTIONS]
 
 OPTIONS:
-    --fresh     Fresh install mode: Delete database PVC and restore from backup
-                (Default: Preserve existing database between deployments)
-    --help, -h  Show this help message
+    --fresh         Fresh install mode: Delete database PVC and restore from backup
+                    (Default: Preserve existing database between deployments)
+    # NOTE: This script intentionally does NOT create a Kubernetes cluster.
+    # It expects a kubeconfig/cluster to be available.
+    --help, -h      Show this help message
 
 EXAMPLES:
     $0              # Normal deployment - preserves database
@@ -34,12 +36,18 @@ EOF
     exit 0
 fi
 
+# CLI flags
+# --fresh: fresh install
+# The script uses a standard docker build; avoid build flags to preserve default behavior
+
 # Check for --fresh flag
 FRESH_INSTALL=false
 if [[ "$*" == *"--fresh"* ]]; then
     FRESH_INSTALL=true
     echo "🆕 FRESH INSTALL MODE: Database will be completely wiped and restored from backup"
 fi
+
+# No custom build flags supported - docker image built with default cache semantics
 
 # Colors for output
 RED='\033[0;31m'
@@ -240,6 +248,17 @@ if ! command -v kubectl &> /dev/null; then
 fi
 print_status "kubectl is available"
 
+# Check if Node.js is available
+if ! command -v node &> /dev/null; then
+    print_error "Node.js is not installed or not in PATH"
+    exit 1
+fi
+print_status "Node.js is available"
+
+# Note: Linting is handled by GitHub Actions CI
+# Docker build will catch any real compilation errors
+print_status "Skipping pre-deployment linting (handled by CI)"
+
 # Check if Docker is available
 if ! command -v docker &> /dev/null; then
     print_error "Docker is not installed or not in PATH"
@@ -260,15 +279,10 @@ kubectl create namespace phoenixapp --dry-run=client -o yaml | kubectl apply -f 
 kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
 print_status "Namespaces ready"
 
-# Build production Docker image with BuildKit caching...
-echo "🔨 Building production Docker image with BuildKit caching..."
-DOCKER_BUILDKIT=1 docker build \
-  -t "phoenixapp:prod" \
-  --progress=plain \
-  --build-arg "MIX_ENV=prod" \
-  --cache-from "phoenixapp:prod" \
-  --build-arg BUILDKIT_INLINE_CACHE=0 \
-  .
+echo "🔨 Building production Docker image with BuildKit..."
+
+# Use multi-stage Dockerfile for faster builds
+docker build -f Dockerfile.multistage -t "phoenixapp:prod" --progress=plain --build-arg "MIX_ENV=prod" .
 print_status "Production image built: phoenixapp:prod"
 
 # Deploy SSL infrastructure first

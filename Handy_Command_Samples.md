@@ -106,12 +106,6 @@ rm file_name.ts && touch file_name.ts
 ./redis-ops.sh keys "session:*"         # Show session keys
 ./redis-ops.sh flush                     # DANGEROUS: Delete all data
 
-# Manual Redis commands (legacy)
-docker exec projekt-redis-1 redis-cli MONITOR
-# Check specific data types
-docker exec projekt-redis-1 redis-cli KEYS "player:*"
-docker exec projekt-redis-1 redis-cli KEYS "session:*"
-docker exec projekt-redis-1 redis-cli KEYS "leaderboard:*"
 
 🌐 Quick Test Links:
 Phoenix App: http://localhost:4000
@@ -129,7 +123,7 @@ docker-compose exec web bash -c "cd assets && npm run build"
                                               npm run build:css
 
 # Update browserslist database (fixes caniuse-lite warnings)
-cd assets && npm run update-browserslist
+./scripts/dev-assets.sh run update-browserslist
 
 Get-Process | Where-Object {$_.ProcessName -like "*beam*" -or $_.ProcessName -like "*erl*" -or $_.ProcessName -like "*node*"}
 
@@ -142,6 +136,12 @@ curl -X POST http://localhost/api/auth/login -H "Content-Type: application/json"
 
 # JS bundled file inspection (used to verify caching issues)
  curl -Ik https://localhost/assets/app.js
+
+# Debugging commands to verify JavaScript/LiveSocket execution
+# 1) Check for LiveView console log in browser: should see "✅ Phoenix LiveView connected"
+# 2) Check for WebSocket upgrade in Network -> WS, or use curl to verify Upgrade headers via the ingress/backend
+# 3) Tail Phoenix logs to see joins and channel debugging
+kubectl logs -n phoenixapp -l app=phoenix-web -f | grep -i "phx_join" --line-buffered
 
 
 AI context:

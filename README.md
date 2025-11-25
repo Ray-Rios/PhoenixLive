@@ -39,10 +39,26 @@ Proposed dependency update path (safe increments):
 
 Rationale: Upgrading ESLint first removes most deprecated transient packages. Jumping directly to major versions without aligning plugin versions can break CI.
 
+## Assets & Local Builds (Important)
+
+Frontend assets are built inside containers or in CI to ensure reproducible builds and to avoid environment-specific issues (especially on Windows).
+
+- `mix assets.setup`, `mix assets.build`, and the lint aliases will now refuse to run npm on your host unless you opt in. This prevents accidental -- and often destructive -- host npm installs. If you need to build assets locally, run the Docker command below.
+
+Local Docker-based build example (recommended):
+
+```bash
+# Use the repo's dev-assets helper which wraps the Docker invocation:
+./scripts/dev-assets.sh build
+```
+
+If you need to run `npm` on your host (not recommended), you can still do so manually, but prefer the helper above.
+
+
 Verification commands:
 ```
 mix compile
-cd assets && npm run type-check && npm run build
+./scripts/dev-assets.sh run type-check && ./scripts/dev-assets.sh build
 ```
 
 To trace deprecated packages:

@@ -115,21 +115,28 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
               "url" => url_path,
               "usage_context" => "blog_featured"
             }) do
-              {:ok, media} -> media.url
-              {:error, _changeset} -> nil
+              {:ok, media} -> {:ok, media.url}
+              {:error, _changeset} -> {:postpone, :error}
             end
 
           {:error, _reason} ->
-            nil
+            {:postpone, :error}
         end
       end)
-      |> Enum.reject(&is_nil/1)
+      
+      # Extract URLs from {:ok, url} tuples and reject errors
+      uploaded_urls = uploaded_files
+      |> Enum.filter(fn 
+        {:ok, _} -> true
+        _ -> false
+      end)
+      |> Enum.map(fn {:ok, url} -> url end)
       
       # Process params and set publication status
       processed_params = 
         post_params
         |> process_post_params()
-        |> maybe_add_featured_image(uploaded_files)
+        |> maybe_add_featured_image(uploaded_urls)
         |> Map.put("is_published", should_publish)
       
       # Set published_at if publishing

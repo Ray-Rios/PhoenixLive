@@ -115,7 +115,7 @@ export class CameraController {
     this.lastInteractionTime = Date.now();
   }
 
-  private onMouseUp(event: MouseEvent): void {
+  private onMouseUp(_event: MouseEvent): void {
     this.isMouseDown = false;
   }
 
@@ -145,7 +145,7 @@ export class CameraController {
     this.keys[event.code] = false;
   }
 
-  update(deltaTime?: number): void {
+  update(_deltaTime?: number): void {
     if (!this.isEnabled) return;
 
     // Auto-rotate if enabled and no recent interaction (3 seconds)

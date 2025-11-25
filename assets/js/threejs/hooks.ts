@@ -1,5 +1,4 @@
 // Three.js Phoenix LiveView Hooks
-import * as THREE from 'three';
 import ThreeSceneManager from './core/scene-manager';
 import { CharacterModelManager } from './characters/model-manager';
 import { HomeGalaxyScene } from './galaxy-scene';

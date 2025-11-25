@@ -70,6 +70,7 @@ defmodule PhoenixAppWeb do
       import Phoenix.HTML
       import PhoenixAppWeb.CoreComponents
       import PhoenixAppWeb.Components.Navigation
+      import PhoenixAppWeb.AvatarHelpers
 
       unquote(verified_routes())
     end

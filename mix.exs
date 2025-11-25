@@ -50,7 +50,7 @@ defmodule PhoenixApp.MixProject do
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.1"},
       {:gettext, "~> 0.26"},
-      {:jason, "~> 1.4"},
+  {:jason, "~> 1.4"},
       {:joken, "~> 2.6"},
       {:guardian, "~> 2.3"},
       {:plug_cowboy, "~> 2.7"},
@@ -78,7 +78,12 @@ defmodule PhoenixApp.MixProject do
       {:cors_plug, "~> 3.0"},
       {:tz, "~> 0.24"},
       {:httpoison, "~> 2.0"},
-      {:csv, "~> 3.0"},
+  {:csv, "~> 3.0"},
+
+  # Linting and security tools
+  {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+  {:sobelow, "~> 0.12", only: :dev, runtime: false},
+  {:dialyxir, "~> 1.2", only: [:dev, :test], runtime: false}
 
     ]
   end
@@ -91,9 +96,11 @@ defmodule PhoenixApp.MixProject do
     test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
 
     # Frontend asset tasks using npm instead of mix tailwind
-    "assets.setup": ["cmd --cd assets npm install"],
-    "assets.build": ["cmd --cd assets npm run build"],
-    "assets.deploy": ["cmd --cd assets npm run deploy", "phx.digest"]
+  "assets.setup": ["cmd --cd assets ../scripts/dev-assets.sh ci"],
+  "assets.build": ["cmd --cd assets ../scripts/dev-assets.sh build"],
+  "assets.deploy": ["cmd --cd assets ../scripts/dev-assets.sh run deploy", "phx.digest"],
+    # Lint alias for CI
+  lint: ["format --check-formatted", "cmd --cd assets ../scripts/dev-assets.sh run lint", "cmd --cd assets ../scripts/dev-assets.sh run type-check", "credo --strict", "sobelow --exit", "dialyzer"]
   ]
   end
 

@@ -102,8 +102,8 @@ done
 # Rebuild assets in development mode
 # ----------------------------
 if [ "$MIX_ENV" = "dev" ]; then
-  echo "Rebuilding assets for development..."
-  cd assets && npm install && npm run build
+  echo "Rebuilding assets for development (container or opt-in only)..."
+  cd assets && ../scripts/dev-assets.sh build
   cd ..
 fi
 
@@ -115,9 +115,12 @@ echo "Starting Phoenix server..."
 if [ "$MIX_ENV" = "prod" ]; then
   echo "Production mode: Starting Phoenix application..."
   
-  # Use the compiled release if available
-  if [ -f "/app/_build/prod/rel/phoenix_app/bin/phoenix_app" ]; then
-    echo "Using Elixir release..."
+  # Use the compiled release (multi-stage build copies to /app/)
+  if [ -f "/app/bin/phoenix_app" ]; then
+    echo "Using Elixir release (multi-stage build)..."
+    exec /app/bin/phoenix_app start
+  elif [ -f "/app/_build/prod/rel/phoenix_app/bin/phoenix_app" ]; then
+    echo "Using Elixir release (single-stage build)..."
     exec /app/_build/prod/rel/phoenix_app/bin/phoenix_app start
   else
     echo "Starting with compiled application..."

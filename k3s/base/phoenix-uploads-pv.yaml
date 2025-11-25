@@ -12,7 +12,7 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   hostPath:
-    # Use /var/lib/k8s-pvs which Docker Desktop handles properly
-    # We'll copy uploads there from the Windows directory
+    # Use Docker VM internal storage (survives docker system prune)
+    # To sync to Windows, run: ./sync-uploads-from-k8s.sh
     path: /var/lib/k8s-pvs/phoenix-uploads
     type: DirectoryOrCreate

@@ -1,6 +1,22 @@
 import Config
 
 # ----------------------------
+# MIME Types
+# ----------------------------
+# Add custom MIME types for file uploads
+config :mime, :types, %{
+  "audio/mpeg" => ["mp3"],
+  "audio/wav" => ["wav"],
+  "audio/ogg" => ["ogg"],
+  "video/ogg" => ["ogv"],
+  "audio/flac" => ["flac"],
+  "audio/x-m4a" => ["m4a"],
+  "video/webm" => ["webm"],
+  "video/quicktime" => ["mov"],
+  "video/x-msvideo" => ["avi"]
+}
+
+# ----------------------------
 # Global Phoenix App Config
 # ----------------------------
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase

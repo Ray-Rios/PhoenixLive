@@ -17,13 +17,27 @@ else
   usage
 fi
 
+# ---- Pre-flight checks ----
+echo "🔍 Running pre-flight checks..."
+
+# Check if Node.js is available
+if ! command -v node &> /dev/null; then
+    echo "❌ Node.js is not installed or not in PATH"
+    exit 1
+fi
+echo "✅ Node.js is available"
+
+# Note: Linting is handled by GitHub Actions CI
+# Docker build will catch any real compilation errors
+echo "✅ Skipping pre-deployment linting (handled by CI)"
+
 # ---- Docker build ----
 kubectl delete namespace phoenixapp-dev --ignore-not-found=true
 echo "🧹 Cleaning up old Phoenix Docker images..."
 docker images --filter=reference="phoenixapp*" -q | xargs -r docker rmi -f || true
 echo "🐳 Building Phoenix Docker image for $ENVIRONMENT..."
-#docker build --progress=plain -t "phoenixapp:$ENVIRONMENT" --build-arg "MIX_ENV=$ENVIRONMENT" .
 docker build -t "phoenixapp:$ENVIRONMENT" \
+              -f Dockerfile.multistage \
               --progress=plain \
               --build-arg "MIX_ENV=$ENVIRONMENT" \
               .
