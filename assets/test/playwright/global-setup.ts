@@ -44,7 +44,10 @@ export default async function globalSetup(config: FullConfig) {
     const targetUrl = baseURL;
     const isHttps = baseURL.startsWith('https');
 
-    const rewritten = currentCookies.map((c: any) => ({
+    // Only keep reasonable cookies (name + value) and map them to the TEST_URL origin.
+    const rewritten = currentCookies
+      .filter((c: any) => c && c.name && typeof c.value !== 'undefined')
+      .map((c: any) => ({
       name: c.name,
       value: c.value,
       url: targetUrl,
