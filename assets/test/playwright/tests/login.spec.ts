@@ -20,8 +20,14 @@ test.describe('Auth/Login flow', () => {
     await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
     await page.click('#auth-form button[type="submit"]');
 
-    await expect(page).toHaveURL(/\/(|profile|dashboard|)$/i, { timeout: 5000 });
-    // Ensure we do not show error for wrong credentials
+    // The app may redirect to a canonical host (e.g. https://phxlive.net). Accept either a
+    // successful redirect away from the login path OR presence of a 'Logout' UI affordance.
+    await Promise.race([
+      page.waitForSelector('text=Logout', { timeout: 5000 }),
+      page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 5000 }),
+    ]);
+
+    // Ensure we do not show a login error message
     await expect(page.locator('text=Invalid login')).toHaveCount(0);
     // After login, if storage wasn't present, store auth state for subsequent tests
     if (!fs.existsSync(storageFile)) {

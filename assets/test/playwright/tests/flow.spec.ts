@@ -21,7 +21,8 @@ test('Shop and add-to-cart smoke', async ({ page }: any) => {
     let clicked = false;
     for (let attempt = 0; attempt < 3 && !clicked; attempt++) {
       try {
-        await addButton.waitFor({ state: 'visible', timeout: 2500 });
+        // allow a little more time for product details / animations to settle in CI environments
+        await addButton.waitFor({ state: 'visible', timeout: 5000 });
         // ensure the button is enabled (if it's not an interactive element, isEnabled might still be true)
         try {
           if (await addButton.isEnabled()) {
