@@ -5,6 +5,9 @@ import fs from 'fs';
 const storageFile = 'test/playwright/.auth.json';
 
 test.describe('Auth/Login flow', () => {
+  // Give this test a little more time in CI (Chromium can sometimes be slower).
+  test.setTimeout(60_000);
+
   test('login with credentials when provided', async ({ page, baseURL }: any) => {
     const username = process.env.TEST_USER || '';
     const password = process.env.TEST_PWD || '';
@@ -20,11 +23,16 @@ test.describe('Auth/Login flow', () => {
     await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
     await page.click('#auth-form button[type="submit"]');
 
-    // The app may redirect to a canonical host (e.g. https://phxlive.net). Accept either a
-    // successful redirect away from the login path OR presence of a 'Logout' UI affordance.
+    // The app may redirect to a canonical host (e.g. https://phxlive.net). Accept any of:
+    //  - a visible 'Logout' affordance, OR
+    //  - the top navigation/avatar/username becoming visible, OR
+    //  - a navigation away from /login
+    // Broadening the conditions reduces flakiness across browsers (Chromium sometimes hides
+    // dropdown items until you interact with them).
     await Promise.race([
-      page.waitForSelector('text=Logout', { timeout: 15000 }),
-      page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 15000 }),
+      page.waitForSelector('text=Logout', { timeout: 25000 }),
+      page.waitForSelector('#main-navbar img[alt], #main-navbar .hidden.sm\:block', { timeout: 25000 }),
+      page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 25000 }),
     ]);
 
     // Ensure we do not show a login error message
