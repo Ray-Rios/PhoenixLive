@@ -18,6 +18,9 @@ spec:
           env:
             - name: TEST_URL
               value: "http://phoenix-web"
+            # Host header to use for the registration request when the app enforces a canonical host
+            - name: TEST_HOST
+              value: "phxlive.net"
             # credentials expected to be provided via ci-playwright-auth secret
             - name: TEST_USER
               valueFrom:
@@ -51,6 +54,7 @@ spec:
               set +e
               HTTP_CODE=$(curl -s -o /tmp/register_resp -w "%{http_code}" -X POST "${URL}/api/auth/register" \
                 -H "Content-Type: application/json" \
+                -H "Host: ${TEST_HOST}" \
                 -d "{\"email\":\"${EMAIL}\",\"name\":\"${NAME}\",\"password\":\"${PWD}\"}")
               RC=$?
               set -e
@@ -72,6 +76,9 @@ spec:
               set +e
               VCODE=$(curl -s -o /tmp/verify_resp -w "%{http_code}" -X POST "${URL}/api/auth/dev-verify" \
                 -H "Content-Type: application/json" -d "{\"email\":\"${EMAIL}\"}")
+              # include Host for dev-verify too (idempotent - may 404 if not allowed)
+              VCODE=$(curl -s -o /tmp/verify_resp -w "%{http_code}" -X POST "${URL}/api/auth/dev-verify" \
+                -H "Content-Type: application/json" -H "Host: ${TEST_HOST}" -d "{\"email\":\"${EMAIL}\"}")
               set -e
               echo "Dev-verify response HTTP code: ${VCODE}"
 
