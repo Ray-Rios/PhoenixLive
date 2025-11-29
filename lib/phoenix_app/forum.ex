@@ -5,7 +5,7 @@ defmodule PhoenixApp.Forum do
 
   import Ecto.Query, warn: false
   alias PhoenixApp.Repo
-  alias PhoenixApp.Forum.{Channel, Message, Reaction, Thread}
+  alias PhoenixApp.Forum.{Channel, Message, Reaction, Thread, ChannelMember, ChannelInvite}
 
   # Channels
   def list_channels do
@@ -72,66 +72,95 @@ defmodule PhoenixApp.Forum do
   end
 
   def delete_channel(%Channel{} = channel) do
-    # Start transaction to ensure all-or-nothing deletion
-    Repo.transaction(fn ->
-      # 1. Get all messages in this channel with their attachments
-      messages = from(m in Message,
-        where: m.channel_id == ^channel.id,
-        preload: [:attachments]
-      ) |> Repo.all()
+    # Protect the General channel from deletion
+    if String.downcase(channel.name) == "general" do
+      {:error, :protected_channel}
+    else
+      # Start transaction to ensure all-or-nothing deletion
+      Repo.transaction(fn ->
+        # 1. Get all messages in this channel with their attachments
+        messages = from(m in Message,
+          where: m.channel_id == ^channel.id,
+          preload: [:attachments]
+        ) |> Repo.all()
 
-      # 2. Collect all attachment file paths for cleanup
-      attachment_file_paths = 
-        messages
-        |> Enum.flat_map(& &1.attachments)
-        |> Enum.map(fn attachment ->
-          # Get file path from attachment filename or constructed path
-          Path.join([
-            Application.get_env(:phoenix_app, :uploads_path, "uploads"),
-            "forum",
-            to_string(attachment.message_id),
-            attachment.filename
-          ])
-        end)
+        # 2. Collect all attachment URL paths for cleanup (cleaner than reconstructing FS paths)
+        attachment_file_paths =
+          messages
+          |> Enum.flat_map(& &1.attachments)
+          |> Enum.map(fn attachment -> attachment.file end)
+          |> Enum.filter(& &1)
 
-      # 3. Delete all reactions for messages in this channel
-      from(r in Reaction, 
-        join: m in Message, on: r.message_id == m.id,
-        where: m.channel_id == ^channel.id
-      ) |> Repo.delete_all()
+        # 3. Delete all reactions for messages in this channel
+        from(r in Reaction, 
+          join: m in Message, on: r.message_id == m.id,
+          where: m.channel_id == ^channel.id
+        ) |> Repo.delete_all()
 
-      # 4. Delete all threads in this channel
-      from(t in Thread, where: t.channel_id == ^channel.id) |> Repo.delete_all()
+        # 4. Delete all threads in this channel (can delete directly by channel_id)
+        from(t in Thread, where: t.channel_id == ^channel.id) |> Repo.delete_all()
 
-      # 5. Delete all messages in this channel (this cascades to attachments via DB)
-      from(m in Message, where: m.channel_id == ^channel.id) |> Repo.delete_all()
+        # 5. Delete all messages in this channel (this cascades to attachments via DB)
+        from(m in Message, where: m.channel_id == ^channel.id) |> Repo.delete_all()
 
-      # 6. Delete the channel itself
-      case Repo.delete(channel) do
-        {:ok, deleted_channel} ->
-          # 7. Broadcast channel deletion
-          Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_deleted, deleted_channel.id})
-          
-          # 8. Queue background job to delete files from filesystem
-          # Only queue if there are files to delete
-          if length(attachment_file_paths) > 0 do
-            # We'll use a simple GenServer-based background task
-            # since Oban might not be configured
+        # 6. Delete the channel itself
+        case Repo.delete(channel) do
+          {:ok, deleted_channel} ->
+            # 7. Broadcast channel deletion
+            Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_deleted, deleted_channel.id})
+            
+            # 8. Queue background job to delete files and channel directories from filesystem
             Task.start(fn ->
-              Enum.each(attachment_file_paths, fn path ->
-                if File.exists?(path) do
-                  File.rm(path)
-                end
+              # Delete individual attachment files
+              Enum.each(attachment_file_paths, fn url_path ->
+                PhoenixApp.Uploads.delete_file(url_path)
+              end)
+              
+              # Delete channel directory for each user who uploaded to this channel
+              # Extract unique user_ids from attachment paths
+              user_dirs = attachment_file_paths
+                |> Enum.map(fn path ->
+                  # Extract user_id from path: /uploads/{user_id}/forum/{channel_id}/...
+                  case String.split(path, "/", parts: 5) do
+                    ["", "uploads", user_id, "forum", _] -> user_id
+                    _ -> nil
+                  end
+                end)
+                |> Enum.filter(& &1)
+                |> Enum.uniq()
+              
+              # Remove channel directories for each user
+              Enum.each(user_dirs, fn user_id ->
+                channel_dir = Path.join([PhoenixApp.Uploads.base_dir(), user_id, "forum", deleted_channel.id])
+                File.rm_rf(channel_dir)
               end)
             end)
-          end
 
-          deleted_channel
+            deleted_channel
 
-        {:error, changeset} ->
-          Repo.rollback(changeset)
+          {:error, changeset} ->
+            Repo.rollback(changeset)
+        end
+      end)
+    end
+  end
+
+  @doc "Delete a channel with permission checks for a user. Owners/creators, admins, and editors are allowed."
+  def delete_channel_by_user(%{id: user_id} = user, %Channel{} = channel) do
+    if String.downcase(channel.name) == "general" do
+      {:error, :protected_channel}
+    else
+      can_delete = (Map.has_key?(channel, :owner_id) && channel.owner_id == user_id) ||
+                   (Map.has_key?(channel, :created_by_id) && channel.created_by_id == user_id) ||
+                   Map.get(user, :is_admin, false) ||
+                   user.role in ["admin", "gm", "editor"]
+
+      if can_delete do
+        delete_channel(channel)
+      else
+        {:error, :forbidden}
       end
-    end)
+    end
   end
 
   def change_channel(%Channel{} = channel, attrs \\ %{}) do
@@ -176,6 +205,7 @@ defmodule PhoenixApp.Forum do
 
     attrs = Map.merge(attrs, %{
       "owner_id" => user.id,
+      "created_by_id" => user.id,
       "position" => max_position + 1,
       "is_private" => Map.get(attrs, "is_private", false),
       "is_user_created" => true
@@ -186,43 +216,73 @@ defmodule PhoenixApp.Forum do
 
   # Messages
   def list_messages(channel_id, limit \\ 50) do
-    from(m in Message, 
+    from(m in Message,
+      join: u in assoc(m, :user),
       where: m.channel_id == ^channel_id,
+      where: is_nil(u.role) or u.role != "banned",
       order_by: [desc: m.inserted_at],
       limit: ^limit,
-      preload: [:user, :reactions, :attachments, :thread]
+      preload: [:user, :reactions, :thread, attachments: :user]
     )
     |> Repo.all()
+    |> Enum.map(fn m ->
+      # Filter attachments uploaded by banned users
+      filtered_attachments = Enum.filter(m.attachments || [], fn att ->
+        case att do
+          %{user_id: nil} -> true
+          %{user: u} when not is_nil(u) -> is_nil(u.role) or u.role != "banned"
+          _ -> true
+        end
+      end)
+
+      %{m | attachments: filtered_attachments}
+    end)
     |> Enum.reverse()
   end
 
   def list_messages_by_room(room_id, limit \\ 50) do
-    from(m in Message, 
+    from(m in Message,
       where: m.room_id == ^room_id,
       order_by: [desc: m.inserted_at],
       limit: ^limit,
-      preload: [:user, :reactions, :attachments, :thread]
+      preload: [:user, :reactions, :thread, attachments: :user]
     )
     |> Repo.all()
+    |> Enum.map(fn m ->
+      filtered_attachments = Enum.filter(m.attachments || [], fn att ->
+        case att do
+          %{user_id: nil} -> true
+          %{user: u} when not is_nil(u) -> is_nil(u.role) or u.role != "banned"
+          _ -> true
+        end
+      end)
+
+      %{m | attachments: filtered_attachments}
+    end)
     |> Enum.reverse()
   end
 
   def get_message!(id) do
-    Repo.get!(Message, id) |> Repo.preload([:user, :reactions, :attachments, :thread])
+    Repo.get!(Message, id) |> Repo.preload([:user, :reactions, :thread, attachments: :user])
   end
 
   def create_message(user, channel_id, attrs \\ %{}) do
-    %Message{}
-    |> Message.changeset(attrs)
-    |> Ecto.Changeset.put_assoc(:user, user)
-    |> Ecto.Changeset.put_change(:channel_id, channel_id)
-    |> Repo.insert()
-    |> case do
-      {:ok, message} ->
-        message = Repo.preload(message, [:user, :reactions, :attachments])
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{channel_id}", {:new_message, message})
-        {:ok, message}
-      error -> error
+    # Defensive check - disallow banned users from creating messages
+    if user && Map.get(user, :role) == "banned" do
+      {:error, :banned}
+    else
+      %Message{}
+      |> Message.changeset(attrs)
+      |> Ecto.Changeset.put_assoc(:user, user)
+      |> Ecto.Changeset.put_change(:channel_id, channel_id)
+      |> Repo.insert()
+      |> case do
+        {:ok, message} ->
+          message = Repo.preload(message, [:user, :reactions, :attachments])
+          Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{channel_id}", {:new_message, message})
+          {:ok, message}
+        error -> error
+      end
     end
   end
 
@@ -244,7 +304,7 @@ defmodule PhoenixApp.Forum do
   def update_message(%Message{} = message, attrs) do
     message
     |> Message.changeset(attrs)
-    |> Ecto.Changeset.put_change(:edited_at, DateTime.utc_now())
+    |> Ecto.Changeset.put_change(:edited_at, DateTime.truncate(DateTime.utc_now(), :second))
     |> Repo.update()
     |> case do
       {:ok, updated_message} ->
@@ -256,8 +316,85 @@ defmodule PhoenixApp.Forum do
   end
 
   def delete_message(%Message{} = message) do
+    # Preload attachments so we can clean up files
+    message = Repo.preload(message, [:attachments])
+
     Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:message_deleted, message.id})
-    Repo.delete(message)
+
+    # Collect attachment paths for cleanup before deletion
+    attachment_paths = message.attachments |> Enum.map(fn att -> att.file end) |> Enum.filter(& &1)
+
+    # Delete DB record (attachments are set to delete_all via migration/associations)
+    result = Repo.delete(message)
+
+    # Cleanup files asynchronously via Uploads.delete_file (handles URL->FS mapping)
+    if length(attachment_paths) > 0 do
+      Task.start(fn ->
+        Enum.each(attachment_paths, fn url_path ->
+          PhoenixApp.Uploads.delete_file(url_path)
+        end)
+      end)
+    end
+
+    result
+  end
+
+  @doc "Delete a message with permission check for a given user (admins/editors or owner)."
+  def delete_message_by_user(%{id: user_id} = user, %Message{} = message) do
+    can_delete = message.user_id == user_id || Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"]
+
+    if can_delete do
+      delete_message(message)
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  @doc """
+  Create a message attachment that belongs to a message and channel.
+  Accepts attrs: filename, content_type, file_size, file (url/path), user_id
+  """
+  def create_message_attachment(%Message{} = message, attrs) do
+    attrs = attrs
+            |> Map.put("message_id", message.id)
+            |> Map.put("channel_id", message.channel_id)
+
+    %PhoenixApp.Forum.MessageAttachment{}
+    |> PhoenixApp.Forum.MessageAttachment.changeset(attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, attachment} ->
+        # Broadcast message updated so clients can refresh attachments
+        updated = get_message!(message.id)
+        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:message_updated, updated})
+        {:ok, attachment}
+      error -> error
+    end
+  end
+
+  def get_attachment!(id) do
+    Repo.get!(PhoenixApp.Forum.MessageAttachment, id) |> Repo.preload([:message, :user, :channel])
+  end
+
+  def delete_attachment(%PhoenixApp.Forum.MessageAttachment{} = attachment) do
+    # Broadcast update to update message attachments on clients
+    message = Repo.preload(attachment, [:message]) |> Map.get(:message)
+
+    # Capture file path/url for deletion
+    file_path = attachment.file
+
+    result = Repo.delete(attachment)
+
+    # Cleanup file if exists
+    if file_path do
+      Task.start(fn -> PhoenixApp.Uploads.delete_file(file_path) end)
+    end
+
+    if message do
+      Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:message_updated, get_message!(message.id)})
+    end
+
+    result
   end
 
   # Reactions
@@ -297,11 +434,11 @@ defmodule PhoenixApp.Forum do
   end
 
   def list_thread_messages(thread_id, limit \\ 50) do
-    from(m in Message, 
+    from(m in Message,
       where: m.thread_id == ^thread_id,
       order_by: [asc: m.inserted_at],
       limit: ^limit,
-      preload: [:user, :reactions, :attachments]
+      preload: [:user, :reactions, attachments: :user]
     )
     |> Repo.all()
   end
@@ -398,6 +535,10 @@ defmodule PhoenixApp.Forum do
     Repo.get_by(ChannelMember, channel_id: channel_id, user_id: user_id)
   end
 
+  def get_channel_member_by_id(id) do
+    Repo.get(ChannelMember, id) |> Repo.preload(:user)
+  end
+
   def create_channel_member(attrs \\ %{}) do
     %ChannelMember{}
     |> ChannelMember.changeset(attrs)
@@ -418,12 +559,134 @@ defmodule PhoenixApp.Forum do
   end
 
   def list_channel_members(channel_id) do
-    from(m in ChannelMember,
-      where: m.channel_id == ^channel_id,
-      preload: [:user],
-      order_by: [asc: m.joined_at]
-    )
-    |> Repo.all()
+    # Base members from channel_members table
+    members =
+      from(m in ChannelMember,
+        where: m.channel_id == ^channel_id,
+        preload: [:user],
+        order_by: [asc: m.joined_at]
+      )
+      |> Repo.all()
+
+    # Ensure channel owner appears in the list (may not have a ChannelMember row)
+    channel = Repo.get(Channel, channel_id)
+
+    owner_member =
+      if channel && channel.owner_id do
+        owner_present = Enum.any?(members, fn m -> Map.get(m, :user_id) == channel.owner_id end)
+
+        if owner_present do
+          []
+        else
+          case Repo.get(PhoenixApp.Accounts.User, channel.owner_id) do
+            nil -> []
+            owner_user ->
+              [%ChannelMember{channel_id: channel.id, user_id: owner_user.id, role: "owner", user: owner_user, id: nil, joined_at: channel.inserted_at}]
+          end
+        end
+      else
+        []
+      end
+
+    # Include any pending channel invites (targeted invitee_id present, not accepted, not revoked)
+    pending_invites =
+      from(i in ChannelInvite,
+        where: i.channel_id == ^channel_id and not i.is_revoked and is_nil(i.accepted_at) and not is_nil(i.invitee_id),
+        preload: [:invitee, :inviter]
+      )
+      |> Repo.all()
+
+    invite_members =
+      Enum.map(pending_invites, fn invite ->
+        %ChannelMember{channel_id: channel_id, user_id: invite.invitee_id, role: "invited", user: invite.invitee, id: nil, joined_at: invite.inserted_at}
+        |> Map.put(:_invite_id, invite.id)
+      end)
+
+    members ++ owner_member ++ invite_members
+  end
+
+  # Permission helpers
+  @doc "Return the role string for a user in a channel (or nil if not a member)."
+  def user_role_in_channel(channel_id, user_id) do
+    case get_channel_member(channel_id, user_id) do
+      nil -> nil
+      %ChannelMember{role: role} -> role
+    end
+  end
+
+  @doc "Returns true if the user can fully manage the channel (owner, channel creator, or site admin)."
+  def can_manage_channel?(nil, _channel), do: false
+  def can_manage_channel?(%{id: user_id} = user, %Channel{} = channel) do
+    is_admin = Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"]
+    is_owner = Map.get(channel, :owner_id) == user_id
+    is_creator = Map.get(channel, :created_by_id) == user_id
+
+    cond do
+      is_admin -> true
+      is_owner -> true
+      is_creator -> true
+      true -> user_role_in_channel(channel.id, user_id) == "owner"
+    end
+  end
+
+  @doc "Returns true if the user can moderate a channel (owner, moderator, or site admin)."
+  def can_moderate_channel?(nil, _channel), do: false
+  def can_moderate_channel?(%{id: user_id} = user, %Channel{} = channel) do
+    is_admin = Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"]
+
+    if is_admin do
+      true
+    else
+      member_role = user_role_in_channel(channel.id, user_id)
+      member_role in ["owner", "moderator"]
+    end
+  end
+
+  @doc "Returns true if a user is allowed to post in a channel.
+  - Private channels: must be a member and not banned
+  - Public channels: disallow site-level 'banned' users"
+  def can_post_in_channel?(nil, %Channel{} = channel) do
+    # anonymous users cannot post in private channels
+    !channel.is_private
+  end
+
+  def can_post_in_channel?(%{id: user_id} = user, %Channel{} = channel) do
+    # site level ban prevents posting anywhere
+    if Map.get(user, :role) == "banned" do
+      false
+    else
+      if channel.is_private do
+        case get_channel_member(channel.id, user_id) do
+          %ChannelMember{is_banned: true} -> false
+          %ChannelMember{} -> true
+          nil -> false
+        end
+      else
+        true
+      end
+    end
+  end
+
+  @doc "Returns true if a user can create invites for a channel.
+  Owners and moderators can always invite; members can invite if channel is public/user-created (configurable later)."
+  def can_invite_to_channel?(nil, _channel), do: false
+  def can_invite_to_channel?(%{id: user_id} = user, %Channel{} = channel) do
+    # site admins always can
+    is_admin = Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"]
+
+    cond do
+      is_admin -> true
+      true ->
+        member = get_channel_member(channel.id, user_id)
+        cond do
+          member == nil -> false
+          member.is_banned -> false
+          member.role in ["owner", "moderator"] -> true
+          # allow regular members to invite to public user-created channels
+          member.role == "member" and channel.is_public == true -> true
+          true -> false
+        end
+    end
   end
 
   # ============================================
@@ -436,6 +699,38 @@ defmodule PhoenixApp.Forum do
     %ChannelInvite{}
     |> ChannelInvite.changeset(attrs)
     |> Repo.insert()
+    |> case do
+      {:ok, invite} -> {:ok, Repo.preload(invite, [:invitee, :inviter, :channel])}
+      error -> error
+    end
+  end
+
+  @doc "Create a personal invite targeted at a specific user (invitee_id)."
+  def create_personal_invite(inviter_id, invitee_identifier, channel_id, opts \\ %{}) do
+    # Accept either user id (UUID) or username/email. Resolve to user id when possible.
+    resolved_invitee_id =
+      cond do
+        is_binary(invitee_identifier) ->
+          # Try as UUID first
+          case Ecto.UUID.cast(invitee_identifier) do
+            {:ok, uuid} -> uuid
+            :error ->
+              # Try resolving by username or email via Accounts
+              case PhoenixApp.Accounts.get_user_by_email_or_username(invitee_identifier) do
+                nil -> nil
+                user -> user.id
+              end
+          end
+        is_nil(invitee_identifier) -> nil
+        true -> nil
+      end
+
+    if resolved_invitee_id == nil do
+      {:error, :invitee_not_found}
+    else
+      attrs = Map.merge(%{inviter_id: inviter_id, invitee_id: resolved_invitee_id, channel_id: channel_id}, opts)
+      create_channel_invite(attrs)
+    end
   end
 
   def get_invite_by_code(code) do
@@ -449,7 +744,15 @@ defmodule PhoenixApp.Forum do
         {:error, :invalid_invite}
       
       invite ->
-        if ChannelInvite.is_valid?(invite) do
+        # Ensure invite is still valid for use
+        if invite.is_revoked == true || (!!invite.revoked_at) do
+          {:error, :invite_revoked}
+        else
+          if ChannelInvite.is_valid?(invite) do
+            # If invite is targeted to a specific invitee, verify the caller
+            if invite.invitee_id && invite.invitee_id != user_id do
+              {:error, :invite_not_for_user}
+            else
           # Check if already a member
           if is_channel_member?(invite.channel_id, user_id) do
             {:error, :already_member}
@@ -466,6 +769,12 @@ defmodule PhoenixApp.Forum do
                   invite
                   |> Ecto.Changeset.change(uses: invite.uses + 1)
                   |> Repo.update!()
+                  # Mark accepted timestamp when invite is personal
+                  if invite.invitee_id do
+                    invite
+                    |> ChannelInvite.accept()
+                    |> Repo.update!()
+                  end
                   
                   member
                 
@@ -474,9 +783,93 @@ defmodule PhoenixApp.Forum do
               end
             end)
           end
-        else
-          {:error, :invite_expired}
+            end
+          else
+            {:error, :invite_expired}
+          end
         end
+        end
+    end
+
+  @doc "Accept a channel invite by ID (used for personal invites). Returns {:ok, member} or {:error, reason}."
+  def accept_channel_invite(invite_id, user_id) do
+    case Repo.get(ChannelInvite, invite_id) do
+      nil -> {:error, :not_found}
+      invite ->
+        if invite.is_revoked || (invite.invitee_id && invite.invitee_id != user_id) do
+          {:error, :forbidden}
+        else
+          if ChannelInvite.is_valid?(invite) do
+            Repo.transaction(fn ->
+              case create_channel_member(%{channel_id: invite.channel_id, user_id: user_id, role: "member"}) do
+                {:ok, member} ->
+                  invite
+                  |> Ecto.Changeset.change(uses: invite.uses + 1)
+                  |> ChannelInvite.accept()
+                  |> Repo.update!()
+                  member
+
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+            end)
+          else
+            {:error, :invite_expired}
+          end
+        end
+    end
+  end
+
+  @doc "Revoke a channel invite. Only the inviter, channel owner, or site admins can revoke." 
+  def revoke_channel_invite(%{id: user_id} = user, invite_id) do
+    case Repo.get(ChannelInvite, invite_id) do
+      nil -> {:error, :not_found}
+      invite ->
+        # Permission check: inviter, channel owner or site admin
+        channel = get_channel!(invite.channel_id)
+        is_admin = Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"]
+
+        if invite.inviter_id == user_id || channel.owner_id == user_id || is_admin do
+          invite
+          |> ChannelInvite.revoke()
+          |> Repo.update()
+        else
+          {:error, :forbidden}
+        end
+    end
+  end
+
+  @doc "Transfer ownership of a channel to a new owner. Only owners, channel creator or site admins can transfer."
+  def transfer_channel_ownership(%{id: user_id} = user, %Channel{} = channel, new_owner_id) do
+    # Permission: must be current owner, creator, or admin
+    is_admin = Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"]
+    allowed = is_admin || channel.owner_id == user_id || channel.created_by_id == user_id
+
+    if not allowed do
+      {:error, :forbidden}
+    else
+      Repo.transaction(fn ->
+        # Update channel owner_id
+        case update_channel(channel, %{owner_id: new_owner_id}) do
+          {:ok, updated_channel} ->
+            # Demote previous owner member role (if present and different)
+            if channel.owner_id && channel.owner_id != new_owner_id do
+              case get_channel_member(channel.id, channel.owner_id) do
+                nil -> :ok
+                member -> update_channel_member(member, %{role: "member"})
+              end
+            end
+
+            # Promote new owner to member-owner role
+            case get_channel_member(channel.id, new_owner_id) do
+              nil -> create_channel_member(%{channel_id: channel.id, user_id: new_owner_id, role: "owner"})
+              member -> update_channel_member(member, %{role: "owner"})
+            end
+
+            updated_channel
+
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
     end
   end
 

@@ -15,6 +15,7 @@ defmodule PhoenixApp.Accounts.User do
     field :confirmed_at, :utc_datetime
     field :avatar_shape, :string, default: "circle"
     field :avatar_color, :string, default: "#3B82F6"
+    field :avatar_opacity, :integer, default: 100
     field :avatar_file, PhoenixApp.Avatar.Type
     field :avatar_url, :string
     field :is_online, :boolean, default: false
@@ -122,20 +123,22 @@ defmodule PhoenixApp.Accounts.User do
 
   def profile_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role])
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_opacity, :avatar_url, :role])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
+    |> validate_number(:avatar_opacity, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
     |> unique_constraint(:email)
   end
 
   # Admin changeset: allow updating status and correct roles
   def admin_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_url, :role, :status, :email_verified_at, :background_preference, :background_custom_data])
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_opacity, :avatar_url, :role, :status, :email_verified_at, :background_preference, :background_custom_data])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
     |> validate_inclusion(:role, ["admin", "gm", "editor", "moderator", "member", "guest", "banned"])
     |> validate_inclusion(:status, ["active", "disabled", "unverified"], message: "Invalid status")
+    |> validate_number(:avatar_opacity, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
     |> validate_inclusion(:background_preference, ["galaxy", "nebula", "starfield", "void", "gradient", "solid"])
     |> unique_constraint(:email)
   end
@@ -201,8 +204,9 @@ defmodule PhoenixApp.Accounts.User do
   # Avatar changeset
   def avatar_changeset(user, attrs) do
     user
-    |> cast(attrs, [:avatar_shape, :avatar_color, :avatar_url])
+    |> cast(attrs, [:avatar_shape, :avatar_color, :avatar_opacity, :avatar_url])
     |> cast_attachments(attrs, [:avatar_file])
+    |> validate_number(:avatar_opacity, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
   end
 
   # Position changeset

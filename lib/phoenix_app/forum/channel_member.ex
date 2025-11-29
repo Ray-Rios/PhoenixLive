@@ -22,7 +22,7 @@ defmodule PhoenixApp.Forum.ChannelMember do
     member
     |> cast(attrs, [:channel_id, :user_id, :role, :nickname, :is_muted, :is_banned, :joined_at])
     |> validate_required([:channel_id, :user_id])
-    |> validate_inclusion(:role, ["owner", "admin", "moderator", "member"])
+    |> validate_inclusion(:role, ["owner", "moderator", "member", "banned"])
     |> unique_constraint([:channel_id, :user_id])
     |> maybe_set_joined_at()
   end

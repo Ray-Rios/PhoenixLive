@@ -9,17 +9,19 @@ defmodule PhoenixApp.Forum.MessageAttachment do
     field :filename, :string
     field :content_type, :string
     field :file_size, :integer
-    field :file, PhoenixApp.ForumAttachment.Type
+    field :file, :string
 
     belongs_to :message, PhoenixApp.Forum.Message
+    belongs_to :channel, PhoenixApp.Forum.Channel
+    # Optional: keep track of which user uploaded this attachment
+    belongs_to :user, PhoenixApp.Accounts.User
 
     timestamps(type: :utc_datetime)
   end
 
   def changeset(attachment, attrs) do
     attachment
-    |> cast(attrs, [:filename, :content_type, :file_size])
-    |> cast_attachments(attrs, [:file])
-    |> validate_required([:filename, :content_type, :file_size])
+    |> cast(attrs, [:filename, :content_type, :file_size, :file, :message_id, :channel_id, :user_id])
+    |> validate_required([:filename, :content_type, :file_size, :file])
   end
 end

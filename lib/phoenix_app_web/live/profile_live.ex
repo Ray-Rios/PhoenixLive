@@ -14,6 +14,7 @@ defmodule PhoenixAppWeb.ProfileLive do
       changeset = Accounts.change_user_profile(current_user, %{})
       password_changeset = Accounts.User.password_changeset(current_user, %{})
       custom_data = current_user.background_custom_data || %{}
+      avatar_opacity = Map.get(current_user, :avatar_opacity) || 100
 
       socket = 
         assign(socket,
@@ -24,7 +25,8 @@ defmodule PhoenixAppWeb.ProfileLive do
           show_success: false,
           active_tab: "profile",
           selected_background: current_user.background_preference || "galaxy",
-          custom_data: custom_data
+          custom_data: custom_data,
+          avatar_opacity: avatar_opacity
         )
         |> allow_upload(:avatar, 
           accept: ~w(.jpg .jpeg .png .gif .webp image/jpeg image/png image/gif image/webp), 
@@ -141,12 +143,55 @@ defmodule PhoenixAppWeb.ProfileLive do
 
   @impl true
   def handle_event("select_avatar_color", %{"color" => color}, socket) do
-    changeset = 
-      socket.assigns.user
-      |> Accounts.change_user_profile(%{avatar_color: color})
-      |> Map.put(:action, :validate)
+    # Save color immediately to database
+    case Accounts.update_user_profile(socket.assigns.user, %{avatar_color: color}) do
+      {:ok, updated_user} ->
+        {:noreply,
+         socket
+         |> assign(user: updated_user)
+         |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))
+         |> put_flash(:info, "Avatar color updated!")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update avatar color")}
+    end
+  end
+
+  @impl true
+  def handle_event("update_avatar_opacity", %{"opacity" => opacity}, socket) do
+    opacity_int = String.to_integer(opacity)
+    # Save opacity immediately to database
+    case Accounts.update_user_profile(socket.assigns.user, %{avatar_opacity: opacity_int}) do
+      {:ok, updated_user} ->
+        {:noreply,
+         socket
+         |> assign(user: updated_user)
+         |> assign(avatar_opacity: opacity_int)
+         |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update avatar opacity")}
+    end
+  end
+
+  @impl true
+  def handle_event("select_avatar_shape", %{"avatar_shape" => shape}, socket) do
+    require Logger
+    Logger.info("Avatar shape event received: #{inspect(shape)}")
     
-    {:noreply, assign(socket, form: to_form(changeset))}
+    # Save avatar shape immediately to database
+    case Accounts.update_user_profile(socket.assigns.user, %{avatar_shape: shape}) do
+      {:ok, updated_user} ->
+        Logger.info("Avatar shape updated successfully to: #{updated_user.avatar_shape}")
+        {:noreply,
+         socket
+         |> assign(user: updated_user)
+         |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))}
+
+      {:error, changeset} ->
+        Logger.error("Failed to update avatar shape: #{inspect(changeset.errors)}")
+        {:noreply, put_flash(socket, :error, "Failed to update avatar shape")}
+    end
   end
 
   @impl true
@@ -379,33 +424,29 @@ defmodule PhoenixAppWeb.ProfileLive do
     uploaded_file = consume_uploaded_entry(socket, entry, fn %{path: path} ->
       case PhoenixApp.Uploads.upload_file(socket.assigns.user, path, entry, context: "avatar") do
         {:ok, url} -> {:ok, url}
-        {:error, reason} -> 
-          IO.inspect(reason, label: "Avatar upload error")
-          {:postpone, :error}
+        {:error, _reason} -> {:postpone, :error}
       end
     end)
 
-    IO.inspect(uploaded_file, label: "consume_uploaded_entry result")
-
+    # consume_uploaded_entry unwraps {:ok, value} and returns just value
     case uploaded_file do
-      {:ok, avatar_url} ->
-        IO.inspect(avatar_url, label: "Avatar URL to save")
+      avatar_url when is_binary(avatar_url) ->
         case Accounts.update_user_profile(socket.assigns.user, %{avatar_url: avatar_url}) do
           {:ok, updated_user} ->
-            IO.inspect("Avatar DB update succeeded")
             {:noreply,
              socket
              |> assign(user: updated_user)
              |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))
              |> put_flash(:info, "Avatar updated successfully!")}
 
-          {:error, changeset} ->
-            IO.inspect(changeset, label: "Avatar DB update failed")
+          {:error, _changeset} ->
             {:noreply, put_flash(socket, :error, "Failed to save avatar")}
         end
 
-      other ->
-        IO.inspect(other, label: "Unexpected consume result, showing error")
+      {:postpone, _} ->
+        {:noreply, put_flash(socket, :error, "Avatar upload failed")}
+
+      _other ->
         {:noreply, put_flash(socket, :error, "Avatar upload failed")}
     end
   end
@@ -497,6 +538,17 @@ defmodule PhoenixAppWeb.ProfileLive do
                       </div>
                     </div>
 
+                    <div class="pt-4">
+                      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors font-medium">
+                        Save Profile
+                      </button>
+                    </div>
+                  </.form>
+
+                  <!-- Avatar Settings (outside form - auto-saves) -->
+                  <div class="space-y-6 mt-6 pt-6 border-t border-gray-700">
+                    <h3 class="text-md font-semibold text-white">Avatar Settings</h3>
+                    
                     <div>
                       <label class="block text-sm font-medium text-gray-300 mb-3">Avatar Image</label>
                       <div class="glass-dark rounded-lg p-4 border border-gray-600">
@@ -555,35 +607,57 @@ defmodule PhoenixAppWeb.ProfileLive do
                     </div>
 
                     <div>
-                      <label class="block text-sm font-medium text-gray-300 mb-3">Avatar Color</label>
-                      <div class="grid grid-cols-8 gap-2 mb-4">
-                        <%= for color <- ["#3B82F6", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16", "#F97316", "#6366F1", "#14B8A6", "#F43F5E"] do %>
-                          <button type="button" 
-                                  phx-click="select_avatar_color"
-                                  phx-value-color={color}
-                                  class={"w-10 h-10 rounded-full border-2 hover:scale-110 transition-transform #{if Phoenix.HTML.Form.input_value(@form, :avatar_color) == color, do: "border-white", else: "border-gray-600"}"}
-                                  style={"background-color: #{color}"}>
-                          </button>
-                        <% end %>
+                      <label class="block text-sm font-medium text-gray-300 mb-3">Avatar Border Color</label>
+                      <div class="space-y-4">
+                        <div class="flex items-center gap-4">
+                          <div 
+                            class="w-16 h-16 rounded-lg border-2 border-gray-600"
+                            style={"background-color: #{@user.avatar_color || "#3B82F6"}"}
+                          ></div>
+                          <div class="flex-1 space-y-3">
+                            <div>
+                              <label class="block text-xs text-gray-400 mb-1">Color</label>
+                              <input 
+                                type="color" 
+                                id="avatar-color-picker"
+                                phx-hook="ColorPicker"
+                                data-event="select_avatar_color"
+                                value={@user.avatar_color || "#3B82F6"}
+                                class="w-full h-10 rounded cursor-pointer bg-gray-700 border border-gray-600"
+                              />
+                            </div>
+                            <div>
+                              <label class="block text-xs text-gray-400 mb-1">Opacity: <span id="opacity-value"><%= @avatar_opacity %></span>%</label>
+                              <input 
+                                type="range" 
+                                id="avatar-opacity-slider"
+                                phx-hook="OpacitySlider"
+                                min="0" 
+                                max="100" 
+                                value={@avatar_opacity}
+                                class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <p class="text-xs text-gray-500">This color is used as your avatar border/glow effect</p>
                       </div>
-                      <.input field={@form[:avatar_color]} type="color" label="Custom Color" />
                     </div>
 
                     <div>
                       <label class="block text-sm font-medium text-gray-300 mb-2">Avatar Shape</label>
-                      <select name="user[avatar_shape]" class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
-                        <option value="circle" selected={Phoenix.HTML.Form.input_value(@form, :avatar_shape) == "circle"}>Circle</option>
-                        <option value="square" selected={Phoenix.HTML.Form.input_value(@form, :avatar_shape) == "square"}>Square</option>
-                        <option value="rounded" selected={Phoenix.HTML.Form.input_value(@form, :avatar_shape) == "rounded"}>Rounded Square</option>
-                      </select>
+                      <form phx-change="select_avatar_shape" id="avatar-shape-form">
+                        <select 
+                          name="avatar_shape" 
+                          class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="circle" selected={@user.avatar_shape == "circle"}>Circle</option>
+                          <option value="square" selected={@user.avatar_shape == "square"}>Square</option>
+                          <option value="rounded" selected={@user.avatar_shape == "rounded"}>Rounded Square</option>
+                        </select>
+                      </form>
                     </div>
-
-                    <div class="pt-4">
-                      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors font-medium">
-                        Save Changes
-                      </button>
-                    </div>
-                  </.form>
+                  </div>
                 </div>
               <% end %>
 

@@ -25,7 +25,7 @@ import { GlassTheme } from "./glass_theme";
 import { BackgroundUpdater } from "./background_updater";
 import { GlobalHooks } from "./global_hooks";
 import { ProfileSettings } from "./profile_settings";
-import { ColorPicker } from "./color_picker";
+import { ColorPicker, OpacitySlider } from "./color_picker";
 import QuillEditorHook from "./quill_editor_hook";
 import CollaborativeQuillHook from "./collaborative_quill_hook";
 
@@ -184,6 +184,7 @@ const Hooks = {
   GlassTheme,                 // Glass theme customization
   BackgroundUpdater,          // Background customization
   ColorPicker,                // Color input handler for LiveView
+  OpacitySlider,              // Opacity slider for avatar border
   // Background Scenes
   HomeGalaxyScene,            // Default galaxy background
   NebulaScene,                // Colorful nebula with gas clouds

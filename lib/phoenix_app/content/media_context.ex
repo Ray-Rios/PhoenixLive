@@ -5,8 +5,14 @@ defmodule PhoenixApp.Content.Media do
   alias PhoenixApp.Content.UserMedia
 
   def list_media_for_user(user_id) do
-    from(m in UserMedia, where: m.user_id == ^user_id, order_by: [desc: m.inserted_at])
-    |> Repo.all()
+    # If the user's role is banned, do not show any media
+    user = PhoenixApp.Repo.get(PhoenixApp.Accounts.User, user_id)
+    if user && user.role == "banned" do
+      []
+    else
+      from(m in UserMedia, where: m.user_id == ^user_id, order_by: [desc: m.inserted_at])
+      |> Repo.all()
+    end
   end
 
   def get_media!(id), do: Repo.get!(UserMedia, id)
@@ -29,7 +35,13 @@ defmodule PhoenixApp.Content.Media do
   end
 
   def list_all_media do
-    from(m in UserMedia, preload: [:user], order_by: [desc: m.inserted_at])
+    # Exclude media uploaded by banned users
+    from(m in UserMedia,
+      join: u in assoc(m, :user),
+      where: is_nil(u.role) or u.role != "banned",
+      preload: [:user],
+      order_by: [desc: m.inserted_at]
+    )
     |> Repo.all()
   end
 

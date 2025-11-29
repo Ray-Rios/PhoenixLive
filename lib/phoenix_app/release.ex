@@ -5,6 +5,14 @@ defmodule PhoenixApp.Release do
   """
   @app :phoenix_app
 
+  def create_db do
+    load_app()
+
+    for repo <- repos() do
+      :ok = repo.__adapter__.storage_up(repo.config)
+    end
+  end
+
   def migrate do
     load_app()
 

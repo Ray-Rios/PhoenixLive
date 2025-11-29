@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: playwright-e2e
+  namespace: phoenixapp
+  labels:
+    app: ci
+    job: playwright-e2e
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: playwright-runner
+          # Playwright image includes browsers + dependencies
+          image: mcr.microsoft.com/playwright:v1.46.1-focal
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TEST_URL
+              # In-cluster service for the Phoenix app. Adjust if your service name/port is different.
+              value: "http://phoenix-web"
+            - name: GIT_REPO
+              value: "https://github.com/ray-rios/phoenixlive.git"
+            - name: GIT_REF
+              value: "master"
+            # Optional: credentials for the Playwright global-setup to create test/playwright/.auth.json
+            # Create a k8s secret named `ci-playwright-auth` with keys `user` and `pwd` to enable this.
+            - name: TEST_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ci-playwright-auth
+                  key: user
+            - name: TEST_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: ci-playwright-auth
+                  key: pwd
+            # Optional: mount a secret named `ci-github` with key `token` for private repos
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ci-github
+                  key: token
+          # Use bash so 'set -euo pipefail' works reliably
+          command: ["/bin/bash","-lc"]
+          args:
+            - |
+              set -euo pipefail
+              echo "Starting Playwright CI job"
+              mkdir -p /workspace && cd /workspace
+              if [ -n "${GIT_TOKEN:-}" ]; then
+                echo "Cloning private repo using provided token"
+                git clone --depth 1 https://${GIT_TOKEN}@github.com/ray-rios/phoenixlive.git repo || (echo "git clone failed" && exit 2)
+              else
+                echo "Cloning public repo"
+                git clone --depth 1 ${GIT_REPO} repo || (echo "git clone failed" && exit 2)
+              fi
+              cd repo/assets
+              echo "Installing npm packages (ci)"
+              npm ci --prefer-offline --no-audit --no-fund
+              echo "Installing playwright browsers"
+              npx playwright install --with-deps
+              echo "Running Playwright tests against ${TEST_URL}"
+              # Ensure we pass base URL (the tests use process.env.TEST_URL by default)
+              TEST_URL=${TEST_URL} npx playwright test --output=../../assets/test-results --forbid-only --workers=1 || RC=$?; echo "Playwright exit code $RC"; exit ${RC:-0}
+      # small ephemeral storage for test results
+      volumes: []
+  ttlSecondsAfterFinished: 3600

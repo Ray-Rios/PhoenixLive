@@ -32,11 +32,11 @@ spec:
           echo "PostgreSQL is ready!"
           
           echo "Creating database..."
-          mix ecto.create --quiet || echo "Database already exists or creation failed, continuing..."
+          /app/bin/phoenix_app eval "PhoenixApp.Release.create_db()" || echo "Database already exists or creation failed, continuing..."
           
           echo "Running migrations..."
           for i in {1..3}; do
-            if mix ecto.migrate; then
+            if /app/bin/phoenix_app eval "PhoenixApp.Release.migrate()"; then
               echo "Migrations completed successfully"
               break
             else

@@ -20,6 +20,10 @@ defmodule PhoenixApp.ForumAttachment do
   end
 
   def storage_dir(_version, {_file, scope}) do
-    "uploads/forum/#{scope.message_id}"
+    # Prefer explicit channel_id if available; fall back to message_id or scope id.
+    channel_part = Map.get(scope, :channel_id) || Map.get(scope, :message_id) || Map.get(scope, :id)
+    message_part = Map.get(scope, :message_id) || Map.get(scope, :id)
+
+    "uploads/forum/#{channel_part}/#{message_part}"
   end
 end

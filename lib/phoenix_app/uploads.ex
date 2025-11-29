@@ -8,7 +8,7 @@ defmodule PhoenixApp.Uploads do
   ## File Structure
   
   All uploads are stored under `priv/static/uploads/` with the following structure:
-  - User-specific: `uploads/{user_id}/{yyyy}/{mm}/{context}/{filename}`
+  - User-specific: `uploads/{user_id}/{context}/{filename}`
   - Public: `uploads/public/{context}/{filename}`
   
   ## Examples
@@ -48,7 +48,7 @@ defmodule PhoenixApp.Uploads do
   end
 
   @doc """
-  Build upload directory path for a user with yyyy/mm structure.
+  Build upload directory path for a user.
   
   ## Options
   - `:context` - Upload context (e.g., "avatar", "blog", "forum")
@@ -56,7 +56,7 @@ defmodule PhoenixApp.Uploads do
   
   ## Examples
       iex> PhoenixApp.Uploads.user_dir(123, context: "blog")
-      "priv/static/uploads/123/2025/11/blog"
+      "priv/static/uploads/123/blog"
       
       iex> PhoenixApp.Uploads.user_dir(nil, public: true, context: "images")
       "priv/static/uploads/public/images"
@@ -71,11 +71,7 @@ defmodule PhoenixApp.Uploads do
         ctx -> Path.join([public_dir(), ctx])
       end
     else
-      now = DateTime.utc_now()
-      year = now.year |> to_string()
-      month = now.month |> to_string() |> String.pad_leading(2, "0")
-      
-      parts = [base_dir(), to_string(user_id), year, month]
+      parts = [base_dir(), to_string(user_id)]
       parts = if context, do: parts ++ [context], else: parts
       
       Path.join(parts)
@@ -86,13 +82,13 @@ defmodule PhoenixApp.Uploads do
   Build URL path for serving uploaded files.
   
   ## Examples
-      iex> PhoenixApp.Uploads.url_path(123, "2025", "11", "blog", "image.png")
-      "/uploads/123/2025/11/blog/image.png"
+      iex> PhoenixApp.Uploads.url_path(123, "blog", "image.png")
+      "/uploads/123/blog/image.png"
       
-      iex> PhoenixApp.Uploads.url_path(nil, nil, nil, "images", "logo.png", public: true)
+      iex> PhoenixApp.Uploads.url_path(nil, "images", "logo.png", public: true)
       "/uploads/public/images/logo.png"
   """
-  def url_path(user_id, year, month, context, filename, opts \\ []) do
+  def url_path(user_id, context, filename, opts \\ []) do
     public = Keyword.get(opts, :public, false)
     
     if public do
@@ -101,27 +97,12 @@ defmodule PhoenixApp.Uploads do
         ctx -> "/uploads/public/#{ctx}/#{filename}"
       end
     else
-      parts = ["/uploads", to_string(user_id), year, month]
+      parts = ["/uploads", to_string(user_id)]
       parts = if context, do: parts ++ [context], else: parts
       parts = parts ++ [filename]
       
       Path.join(parts)
     end
-  end
-
-  @doc """
-  Get current year and month for path building.
-  Returns: {year_string, month_string}
-  
-  ## Example
-      iex> PhoenixApp.Uploads.current_date_parts()
-      {"2025", "11"}
-  """
-  def current_date_parts do
-    now = DateTime.utc_now()
-    year = now.year |> to_string()
-    month = now.month |> to_string() |> String.pad_leading(2, "0")
-    {year, month}
   end
 
   @doc """
@@ -181,12 +162,11 @@ defmodule PhoenixApp.Uploads do
     # Generate paths
     {dest_dir, url} = if public do
       dir = user_dir(nil, public: true, context: context)
-      url_path = url_path(nil, nil, nil, context, filename, public: true)
+      url_path = url_path(nil, context, filename, public: true)
       {dir, url_path}
     else
-      {year, month} = current_date_parts()
       dir = user_dir(user.id, context: context)
-      url_path = url_path(user.id, year, month, context, filename)
+      url_path = url_path(user.id, context, filename)
       {dir, url_path}
     end
     

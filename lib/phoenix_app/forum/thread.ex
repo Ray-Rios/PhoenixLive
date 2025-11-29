@@ -8,6 +8,7 @@ defmodule PhoenixApp.Forum.Thread do
     field :name, :string
     field :is_archived, :boolean, default: false
 
+    belongs_to :channel, PhoenixApp.Forum.Channel
     belongs_to :message, PhoenixApp.Forum.Message
     belongs_to :user, PhoenixApp.Accounts.User
     has_many :messages, PhoenixApp.Forum.Message

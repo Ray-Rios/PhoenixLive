@@ -10,7 +10,33 @@ defmodule PhoenixAppWeb.Components.MediaPreview do
   attr :show_filename, :boolean, default: true
 
   def media_preview(assigns) do
-    assigns = assign(assigns, :file_type, detect_file_type(assigns.attachment))
+    # Normalize a few common keys for compatibility with message attachments and media records
+    attachment = assigns.attachment
+    
+    # Handle both maps and structs
+    get_field = fn att, field, fallback ->
+      cond do
+        is_map(att) && Map.has_key?(att, field) -> Map.get(att, field)
+        is_struct(att) && Map.has_key?(att, field) -> Map.get(att, field)
+        true -> fallback
+      end
+    end
+    
+    normalized = %{
+      file_name: get_field.(attachment, :file_name, nil) || 
+                 get_field.(attachment, :filename, nil) || 
+                 (get_field.(attachment, :file, nil) |> to_string() |> Path.basename()),
+      file_size: get_field.(attachment, :file_size, nil) || get_field.(attachment, :size, 0),
+      file_type: get_field.(attachment, :file_type, nil) || 
+                 get_field.(attachment, :content_type, nil) || 
+                 get_field.(attachment, :mime_type, nil),
+      url_path: get_field.(attachment, :url_path, nil) || 
+                get_field.(attachment, :url, nil) || 
+                get_field.(attachment, :file, nil) || 
+                get_field.(attachment, :path, nil)
+    }
+
+    assigns = assigns |> assign(:attachment, normalized) |> assign(:file_type, detect_file_type(normalized))
 
     ~H"""
     <div class={["media-preview", @class]}>

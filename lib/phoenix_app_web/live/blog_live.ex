@@ -123,11 +123,15 @@ defmodule PhoenixAppWeb.BlogLive do
                             Read More
                           </.link>
                           <div class="flex items-center text-gray-400 text-sm">
-                            <div class="w-6 h-6 rounded-full mr-2" style={"background-color: #{post.user.avatar_color};"}>
-                              <span class="text-xs text-white flex items-center justify-center h-full">
-                                <%= String.first(post.user.name || post.user.email) %>
-                              </span>
-                            </div>
+                            <%= if post.user.avatar_url do %>
+                              <img src={post.user.avatar_url} alt={post.user.name || post.user.email} class="w-6 h-6 rounded-full mr-2 object-cover" />
+                            <% else %>
+                              <div class="w-6 h-6 rounded-full mr-2" style={"background-color: #{post.user.avatar_color};";}>
+                                <span class="text-xs text-white flex items-center justify-center h-full">
+                                  <%= String.first(post.user.name || post.user.email) %>
+                                </span>
+                              </div>
+                            <% end %>
                             <span class="mr-4"><%= post.user.name || post.user.email %></span>
                             <span><%= Calendar.strftime(post.published_at, "%b %d, %Y") %></span>
                           </div>
@@ -172,11 +176,15 @@ defmodule PhoenixAppWeb.BlogLive do
 
                   <div class="p-6">
                     <div class="flex items-center text-gray-400 text-sm mb-3">
-                      <div class="w-6 h-6 rounded-full mr-2" style={"background-color: #{post.user.avatar_color};"}>
-                        <span class="text-xs text-white flex items-center justify-center h-full">
-                          <%= String.first(post.user.name || post.user.email) %>
-                        </span>
-                      </div>
+                      <%= if post.user.avatar_url do %>
+                        <img src={post.user.avatar_url} alt={post.user.name || post.user.email} class="w-6 h-6 rounded-full mr-2 object-cover" />
+                      <% else %>
+                        <div class="w-6 h-6 rounded-full mr-2" style={"background-color: #{post.user.avatar_color};";}>
+                          <span class="text-xs text-white flex items-center justify-center h-full">
+                            <%= String.first(post.user.name || post.user.email) %>
+                          </span>
+                        </div>
+                      <% end %>
                       <span class="mr-4"><%= post.user.name || post.user.email %></span>
                       <span><%= Calendar.strftime(post.published_at, "%b %d, %Y") %></span>
                     </div>
@@ -230,11 +238,15 @@ defmodule PhoenixAppWeb.BlogLive do
             <h1 class="text-4xl font-bold text-white mb-4"><%= @post.title %></h1>
 
             <div class="flex items-center text-gray-400 text-sm mb-8">
-              <div class="w-8 h-8 rounded-full mr-3" style={"background-color: #{@post.user.avatar_color};"}>
-                <span class="text-sm text-white flex items-center justify-center h-full">
-                  <%= String.first(@post.user.name || @post.user.email) %>
-                </span>
-              </div>
+              <%= if @post.user.avatar_url do %>
+                <img src={@post.user.avatar_url} alt={@post.user.name || @post.user.email} class="w-8 h-8 rounded-full mr-3 object-cover" />
+              <% else %>
+                <div class="w-8 h-8 rounded-full mr-3" style={"background-color: #{@post.user.avatar_color};";}>
+                  <span class="text-sm text-white flex items-center justify-center h-full">
+                    <%= String.first(@post.user.name || @post.user.email) %>
+                  </span>
+                </div>
+              <% end %>
               <span class="mr-4"><%= @post.user.name || @post.user.email %></span>
               <span><%= Calendar.strftime(@post.published_at, "%B %d, %Y") %></span>
             </div>

@@ -24,7 +24,8 @@ async function run() {
     });
     console.log('liveSocket exists?', liveSocketExists);
     // Basic checks
-    const hooks = await page.$$eval('[data-phx-hook]', (els) => els.map(e => e.getAttribute('data-phx-hook')));
+    // Accept both 'data-phx-hook' and 'phx-hook' attributes (some elements may use either)
+    const hooks = await page.$$eval('[data-phx-hook], [phx-hook]', (els) => els.map(e => e.getAttribute('data-phx-hook') || e.getAttribute('phx-hook')));
     console.log('Hooks present:', hooks.slice(0, 5));
     if (consoleErrors.length > 0) {
       console.error('Console errors:', consoleErrors.join('\n'));
