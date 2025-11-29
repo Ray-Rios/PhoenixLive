@@ -21,7 +21,9 @@ export default async function globalSetup(config: FullConfig) {
   try {
     await page.fill('input[name="user[email]"]', user);
     await page.fill('input[name="user[password]"]', pwd);
-    await page.click('text=Log in');
+    // click the form submit button (more resilient than a literal text locator)
+    await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
+    await page.click('#auth-form button[type="submit"]');
     await page.waitForLoadState('networkidle');
   } catch (e) {
     // ignore

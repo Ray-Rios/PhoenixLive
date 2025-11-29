@@ -16,7 +16,9 @@ test.describe('Auth/Login flow', () => {
     await page.goto('/login');
     await page.fill('input[name="user[email]"]', username);
     await page.fill('input[name="user[password]"]', password);
-    await page.click('text=Log in');
+    // Use the auth form submit button, more robust than text-only selectors
+    await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
+    await page.click('#auth-form button[type="submit"]');
 
     await expect(page).toHaveURL(/\/(|profile|dashboard|)$/i, { timeout: 5000 });
     // Ensure we do not show error for wrong credentials

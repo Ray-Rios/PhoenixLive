@@ -24,7 +24,9 @@ test('LiveView client and websocket connection', async ({ page }: any) => {
       try {
         await page.fill('input[name="user[email]"]', username);
         await page.fill('input[name="user[password]"]', password);
-        await page.click('text=Log in');
+          // Use the auth form submit in case the literal text differs (Sign In vs Log in)
+          await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
+          await page.click('#auth-form button[type="submit"]');
         await page.waitForLoadState('networkidle');
       } catch (e) {
         // best-effort login; if it fails the later checks will fail and surface an error
