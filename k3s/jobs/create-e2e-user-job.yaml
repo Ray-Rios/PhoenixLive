@@ -55,6 +55,7 @@ spec:
               HTTP_CODE=$(curl -s -o /tmp/register_resp -w "%{http_code}" -X POST "${URL}/api/auth/register" \
                 -H "Content-Type: application/json" \
                 -H "Host: ${TEST_HOST}" \
+                -H "X-Forwarded-Proto: https" \
                 -d "{\"email\":\"${EMAIL}\",\"name\":\"${NAME}\",\"password\":\"${PWD}\"}")
               RC=$?
               set -e
@@ -78,7 +79,7 @@ spec:
                 -H "Content-Type: application/json" -d "{\"email\":\"${EMAIL}\"}")
               # include Host for dev-verify too (idempotent - may 404 if not allowed)
               VCODE=$(curl -s -o /tmp/verify_resp -w "%{http_code}" -X POST "${URL}/api/auth/dev-verify" \
-                -H "Content-Type: application/json" -H "Host: ${TEST_HOST}" -d "{\"email\":\"${EMAIL}\"}")
+                -H "Content-Type: application/json" -H "Host: ${TEST_HOST}" -H "X-Forwarded-Proto: https" -d "{\"email\":\"${EMAIL}\"}")
               set -e
               echo "Dev-verify response HTTP code: ${VCODE}"
 
