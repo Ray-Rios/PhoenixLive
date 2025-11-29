@@ -10,7 +10,8 @@ test('LiveView client and websocket connection', async ({ page }: any) => {
     wsOpen = true;
   });
 
-  await page.goto('/');
+  // Use the forum route (LiveView) to exercise LiveView client + hooks
+  await page.goto('/forum');
 
   // wait briefly for LiveView behavior
   await page.waitForTimeout(1000);
@@ -22,7 +23,8 @@ test('LiveView client and websocket connection', async ({ page }: any) => {
   // Check we opened a websocket - Playwright will fire 'websocket' events when created
   expect(wsOpen).toBeTruthy();
 
-  // Check that a phx-hook element exists
+  // Check that a phx-hook element exists (allow more time for LiveView to render)
+  await page.waitForSelector('[data-phx-hook]', { timeout: 5000 });
   const hooks = await page.locator('[data-phx-hook]').count();
   expect(hooks).toBeGreaterThan(0);
 });
