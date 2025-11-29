@@ -1,11 +1,8 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 
-// If a pre-created storage state exists, reuse it. If not, tests will perform interactive login and save the storage state.
+// If a pre-created storage state exists, tests can optionally use it — but don't require it.
 const storageFile = 'test/playwright/.auth.json';
-if (fs.existsSync(storageFile)) {
-  test.use({ storageState: storageFile });
-}
 
 test.describe('Auth/Login flow', () => {
   test('login with credentials when provided', async ({ page, baseURL }: any) => {
