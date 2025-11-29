@@ -26,7 +26,43 @@ export default async function globalSetup(config: FullConfig) {
     await page.click('#auth-form button[type="submit"]');
     await page.waitForLoadState('networkidle');
   } catch (e) {
-    // ignore
+    // ignore - best-effort login
+  }
+
+  // Playwright may follow redirects to a canonical host (e.g. phxlive.net) when the
+  // application enforces a canonical domain. In those cases the cookies saved will
+  // be tied to that canonical domain and won't be reused for tests hitting an
+  // in-cluster hostname like `phoenix-web`.
+  //
+  // To make the saved storage state usable regardless of the canonical host,
+  // copy all cookies returned by the session and re-set them against the
+  // configured TEST_URL host (so subsequent tests against TEST_URL will have
+  // the correct cookies). Also ensure the `secure` flag matches whether TEST_URL
+  // uses HTTPS.
+  try {
+    const currentCookies = await context.cookies();
+    const targetUrl = baseURL;
+    const isHttps = baseURL.startsWith('https');
+
+    const rewritten = currentCookies.map((c: any) => ({
+      name: c.name,
+      value: c.value,
+      url: targetUrl,
+      path: c.path || '/',
+      httpOnly: c.httpOnly || false,
+      secure: !!isHttps,
+      sameSite: c.sameSite || 'Lax',
+      expires: c.expires || undefined
+    }));
+
+    if (rewritten.length) {
+      // Re-set cookies on the context for the target TEST_URL host
+      await context.addCookies(rewritten as any);
+    }
+  } catch (err) {
+    // best-effort - don't fail setup if cookie rewriting fails
+    // (we'll still persist whatever storage state we have)
+    console.warn('cookie normalization failed:', err);
   }
 
   // Save storage state with cookies/localStorage/session
