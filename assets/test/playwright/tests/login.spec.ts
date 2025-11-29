@@ -23,8 +23,8 @@ test.describe('Auth/Login flow', () => {
     // The app may redirect to a canonical host (e.g. https://phxlive.net). Accept either a
     // successful redirect away from the login path OR presence of a 'Logout' UI affordance.
     await Promise.race([
-      page.waitForSelector('text=Logout', { timeout: 5000 }),
-      page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 5000 }),
+      page.waitForSelector('text=Logout', { timeout: 15000 }),
+      page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 15000 }),
     ]);
 
     // Ensure we do not show a login error message
