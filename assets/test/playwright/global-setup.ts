@@ -17,16 +17,50 @@ export default async function globalSetup(config: FullConfig) {
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto(`${baseURL}/login`);
+  // Try an API-based login first. This is deterministic and avoids UI timing
+  // flakiness and issues with canonical host redirects which can bind cookies
+  // to a different domain.
+  let didLogin = false;
   try {
-    await page.fill('input[name="user[email]"]', user);
-    await page.fill('input[name="user[password]"]', pwd);
-    // click the form submit button (more resilient than a literal text locator)
-    await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
-    await page.click('#auth-form button[type="submit"]');
-    await page.waitForLoadState('networkidle');
-  } catch (e) {
-    // ignore - best-effort login
+    // Ensure we are on the same origin so fetch will set cookies from the server
+    await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
+
+    const apiResp = await page.evaluate(async (loginPath, email, pass) => {
+      try {
+        const r = await fetch(loginPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email, password: pass })
+        });
+        const payload = await r.json().catch(() => ({}));
+        return { status: r.status, payload };
+      } catch (err) {
+        return { status: 0, payload: {} };
+      }
+    }, `${baseURL}/api/auth/login`, user, pwd);
+
+    if (apiResp && apiResp.status >= 200 && apiResp.status < 300 && apiResp.payload && apiResp.payload.success) {
+      didLogin = true;
+    }
+  } catch (err) {
+    // Ignore and fall through to UI fallback below
+    console.warn('api login attempt failed:', err);
+  }
+
+  // If API login didn't succeed, fall back to the old UI-based login (best-effort)
+  if (!didLogin) {
+    try {
+      await page.goto(`${baseURL}/login`);
+      await page.fill('input[name="user[email]"]', user);
+      await page.fill('input[name="user[password]"]', pwd);
+      // click the form submit button (more resilient than a literal text locator)
+      await page.waitForSelector('#auth-form button[type="submit"]', { timeout: 5000 });
+      await page.click('#auth-form button[type="submit"]');
+      await page.waitForLoadState('networkidle');
+    } catch (e) {
+      // ignore - best-effort login
+    }
   }
 
   // Playwright may follow redirects to a canonical host (e.g. phxlive.net) when the

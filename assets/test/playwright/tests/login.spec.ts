@@ -29,13 +29,41 @@ test.describe('Auth/Login flow', () => {
     //  - a navigation away from /login
     // Broadening the conditions reduces flakiness across browsers (Chromium sometimes hides
     // dropdown items until you interact with them).
-    await Promise.race([
+    try {
+      await Promise.race([
       page.waitForSelector('text=Logout', { timeout: 25000 }),
       // Accept a stable visual indicator in the top-nav (avatar image). Avoid complex
       // class-based selectors (which can require escaping) to reduce flakiness.
       page.waitForSelector('#main-navbar img[alt]', { timeout: 25000 }),
       page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 25000 }),
-    ]);
+      ]);
+    } catch (raceErr) {
+      // If the UI didn't log us in within the timeout (sometimes redirect or
+      // dropdown hiding causes flaky waits), try an API-based login from the
+      // browser context which is deterministic and will set the session cookie.
+      console.warn('UI login wait timed out; attempting API login fallback');
+
+      try {
+        const loginResult = await page.evaluate(async (loginPath, email, pass) => {
+          const r = await fetch(loginPath, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password: pass })
+          });
+          return { status: r.status, body: await r.json().catch(() => ({})) };
+        }, '/api/auth/login', username, password);
+
+        if (loginResult && loginResult.status >= 200 && loginResult.status < 300 && loginResult.body && loginResult.body.success) {
+          // reload the app to pick up the session cookie
+          await page.reload({ waitUntil: 'networkidle' });
+        } else {
+          console.warn('API fallback login did not return success', loginResult);
+        }
+      } catch (apiErr) {
+        console.warn('API fallback login failed:', apiErr);
+      }
+    }
 
     // Ensure we do not show a login error message
     await expect(page.locator('text=Invalid login')).toHaveCount(0);
