@@ -29,8 +29,8 @@
   "stylelint": "stylelint 'css/**/*.css' --allow-empty-input",
     "type-check:watch": "tsc --noEmit --watch",
   "lint": "npm run lint:ts && npm run stylelint",
-  "test:e2e": "npx playwright install --with-deps && npx playwright test --output=assets/test-results --forbid-only",
-  "test:e2e:report": "npx playwright show-report assets/playwright-report || true",
+  "test:e2e": "npx playwright test",
+  "test:e2e:ui": "npx playwright test --ui",
   "lint:fix": "eslint js/**/*.ts --fix && npx stylelint 'css/**/*.css' --fix",
   "dev": "npm run type-check & npm run watch"
   },
