@@ -47,16 +47,24 @@ export default async function globalSetup(config: FullConfig) {
     // Only keep reasonable cookies (name + value) and map them to the TEST_URL origin.
     const rewritten = currentCookies
       .filter((c: any) => c && c.name && typeof c.value !== 'undefined')
-      .map((c: any) => ({
-      name: c.name,
-      value: c.value,
-      url: targetUrl,
-      path: c.path || '/',
-      httpOnly: c.httpOnly || false,
-      secure: !!isHttps,
-      sameSite: c.sameSite || 'Lax',
-      expires: c.expires || undefined
-    }));
+      .map((c: any) => {
+        // Build a minimal safe cookie object for addCookies — only include
+        // defined fields. Playwright requires either url OR domain+path.
+        const out: any = {
+          name: c.name,
+          value: c.value,
+          url: targetUrl,
+          path: c.path || '/',
+        };
+
+        if (typeof c.httpOnly !== 'undefined') out.httpOnly = c.httpOnly;
+        if (typeof c.sameSite !== 'undefined') out.sameSite = c.sameSite;
+        // ensure secure flag matches whether TEST_URL is HTTPS
+        out.secure = !!isHttps;
+        if (typeof c.expires === 'number' && c.expires > 0) out.expires = c.expires;
+
+        return out;
+      });
 
     if (rewritten.length) {
       // Re-set cookies on the context for the target TEST_URL host

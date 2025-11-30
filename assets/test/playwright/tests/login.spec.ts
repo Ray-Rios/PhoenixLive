@@ -31,8 +31,9 @@ test.describe('Auth/Login flow', () => {
     // dropdown items until you interact with them).
     await Promise.race([
       page.waitForSelector('text=Logout', { timeout: 25000 }),
-      // Note: escape the ':' in Tailwind class selectors in a JS string ('\\:') so it's a valid CSS selector at runtime
-      page.waitForSelector('#main-navbar img[alt], #main-navbar .hidden.sm\\:block', { timeout: 25000 }),
+      // Accept a stable visual indicator in the top-nav (avatar image). Avoid complex
+      // class-based selectors (which can require escaping) to reduce flakiness.
+      page.waitForSelector('#main-navbar img[alt]', { timeout: 25000 }),
       page.waitForFunction(() => !window.location.pathname.includes('/login'), null, { timeout: 25000 }),
     ]);
 
