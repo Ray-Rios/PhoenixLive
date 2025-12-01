@@ -16,6 +16,7 @@ defmodule PhoenixAppWeb.Markdown do
     |> convert_bold()
     |> convert_italic()
     |> convert_code()
+    |> convert_images()
     |> convert_links()
     |> convert_lists()
     |> convert_newlines()
@@ -41,6 +42,10 @@ defmodule PhoenixAppWeb.Markdown do
     text
     |> String.replace(~r/```(.+?)```/s, "<pre><code>\\1</code></pre>")
     |> String.replace(~r/`(.+?)`/s, "<code>\\1</code>")
+  end
+
+  defp convert_images(text) do
+    String.replace(text, ~r/!\[([^\]]*)\]\(([^)]+)\)/, "<img src=\"\\2\" alt=\"\\1\" class=\"max-w-full h-auto rounded-lg my-4\" />")
   end
 
   defp convert_links(text) do

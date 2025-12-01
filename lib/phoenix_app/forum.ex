@@ -200,18 +200,46 @@ defmodule PhoenixApp.Forum do
   end
 
   def create_user_channel(user, attrs) do
-    # Set position to be last for user channels
+    # Normalize attrs + set position for user channels
     max_position = from(c in Channel, where: c.owner_id == ^user.id, select: max(c.position)) |> Repo.one() || 0
+
+    # Ensure we interpret is_private when provided as strings from forms
+    is_private = case Map.get(attrs, "is_private") do
+      "true" -> true
+      "on" -> true
+      true -> true
+      _ -> false
+    end
 
     attrs = Map.merge(attrs, %{
       "owner_id" => user.id,
       "created_by_id" => user.id,
       "position" => max_position + 1,
-      "is_private" => Map.get(attrs, "is_private", false),
+      "is_private" => is_private,
+      "is_public" => !is_private,
       "is_user_created" => true
     })
 
-    create_channel(attrs)
+    Repo.transaction(fn ->
+      # Create the channel
+      channel = case create_channel(attrs) do
+        {:ok, channel} -> channel
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+
+      # Auto-create owner membership
+      owner_attrs = %{
+        channel_id: channel.id,
+        user_id: user.id,
+        role: "owner",
+        joined_at: DateTime.utc_now()
+      }
+
+      case create_channel_member(owner_attrs) do
+        {:ok, _member} -> channel
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
   end
 
   # Messages
@@ -220,7 +248,7 @@ defmodule PhoenixApp.Forum do
       join: u in assoc(m, :user),
       where: m.channel_id == ^channel_id,
       where: is_nil(u.role) or u.role != "banned",
-      order_by: [desc: m.inserted_at],
+      order_by: [asc: m.inserted_at],
       limit: ^limit,
       preload: [:user, :reactions, :thread, attachments: :user]
     )
@@ -237,7 +265,8 @@ defmodule PhoenixApp.Forum do
 
       %{m | attachments: filtered_attachments}
     end)
-    |> Enum.reverse()
+    # messages are returned ordered oldest -> newest already (ascending inserted_at)
+    |> Enum.map(& &1)
   end
 
   def list_messages_by_room(room_id, limit \\ 50) do
@@ -247,7 +276,6 @@ defmodule PhoenixApp.Forum do
       limit: ^limit,
       preload: [:user, :reactions, :thread, attachments: :user]
     )
-    |> Repo.all()
     |> Enum.map(fn m ->
       filtered_attachments = Enum.filter(m.attachments || [], fn att ->
         case att do
@@ -259,7 +287,8 @@ defmodule PhoenixApp.Forum do
 
       %{m | attachments: filtered_attachments}
     end)
-    |> Enum.reverse()
+    # Ensure chronological order (oldest -> newest)
+    |> Enum.map(& &1)
   end
 
   def get_message!(id) do
@@ -495,31 +524,7 @@ defmodule PhoenixApp.Forum do
     |> Repo.all()
   end
 
-  def create_user_channel(attrs \\ %{}) do
-    # Auto-set is_user_created flag
-    attrs = Map.put(attrs, :is_user_created, true)
-    
-    Repo.transaction(fn ->
-      # Create the channel
-      channel = case create_channel(attrs) do
-        {:ok, channel} -> channel
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-
-      # Auto-create owner membership
-      owner_attrs = %{
-        channel_id: channel.id,
-        user_id: attrs.owner_id || attrs["owner_id"],
-        role: "owner",
-        joined_at: DateTime.utc_now()
-      }
-
-      case create_channel_member(owner_attrs) do
-        {:ok, _member} -> channel
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
+  # Note: use create_user_channel(user, attrs) which creates the channel and owner membership
 
   # ============================================
   # Channel Members

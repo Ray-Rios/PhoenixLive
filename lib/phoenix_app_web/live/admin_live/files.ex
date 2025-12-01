@@ -46,7 +46,7 @@ defmodule PhoenixAppWeb.AdminLive.Files do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen">
+    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
       <div class="flex relative z-10 pt-[30px]">
         <!-- Admin Sidebar -->
         <div class={"bg-gray-900 transition-all duration-300 fixed left-0 top-[30px] h-[calc(100vh-30px)] " <> if @sidebar_collapsed, do: "w-16", else: "w-64"}>

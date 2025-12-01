@@ -106,9 +106,7 @@ defmodule PhoenixAppWeb.ShopLive do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen pointer-events-none">
-      <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px] pointer-events-auto">
-        <div class="auth-glass-panel p-8 rounded-xl">
+    <PhoenixAppWeb.Components.PageContainer.page_container>
         <%= if @view != :product_detail do %>
           <!-- Product List View -->
           <div class="flex justify-between items-center mb-8">
@@ -251,9 +249,7 @@ defmodule PhoenixAppWeb.ShopLive do
             </div>
           </div>
         <% end %>
-        </div>
-      </div>
-    </div>
+    </PhoenixAppWeb.Components.PageContainer.page_container>
     """
   end
 end

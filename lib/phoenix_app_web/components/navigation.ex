@@ -116,6 +116,8 @@ defmodule PhoenixAppWeb.Components.Navigation do
         const taskbar = document.getElementById('taskbar');
         const icon = document.getElementById('nav-toggle-icon');
         const pageContent = document.querySelector('.page-content');
+        // Find any content containers that should be responsive to navbar/taskbar state
+        const responsiveContainers = document.querySelectorAll('[data-responsive-content]');
         
         if (navbar.style.transform === 'translateY(-100%)') {
           // Show navbar and taskbar
@@ -123,12 +125,24 @@ defmodule PhoenixAppWeb.Components.Navigation do
           if (taskbar) taskbar.style.transform = 'translateY(0)';
           icon.style.transform = 'rotate(0deg)';
           if (pageContent) pageContent.classList.remove('navbar-hidden');
+          
+          // Reset padding for all responsive containers
+          responsiveContainers.forEach(container => {
+            container.style.paddingTop = '30px';
+            container.style.paddingBottom = '48px';
+          });
         } else {
           // Hide navbar and taskbar
           navbar.style.transform = 'translateY(-100%)';
           if (taskbar) taskbar.style.transform = 'translateY(100%)';
           icon.style.transform = 'rotate(180deg)';
           if (pageContent) pageContent.classList.add('navbar-hidden');
+          
+          // Remove padding when hidden
+          responsiveContainers.forEach(container => {
+            container.style.paddingTop = '0';
+            container.style.paddingBottom = '0';
+          });
         }
       }
       
@@ -137,6 +151,13 @@ defmodule PhoenixAppWeb.Components.Navigation do
         // Ensure content has proper spacing for navbar
         const pageContent = document.querySelector('.page-content');
         if (pageContent) pageContent.classList.remove('navbar-hidden');
+        
+        // Initialize padding for all responsive containers
+        const responsiveContainers = document.querySelectorAll('[data-responsive-content]');
+        responsiveContainers.forEach(container => {
+          container.style.paddingTop = '30px';
+          container.style.paddingBottom = '48px';
+        });
       });
     </script>
     """

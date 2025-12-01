@@ -71,8 +71,7 @@ defmodule PhoenixAppWeb.CartLive do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-      <div class="auth-glass-panel p-8 rounded-xl">
+    <PhoenixAppWeb.Components.PageContainer.page_container>
         <div class="max-w-4xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">Shopping Cart</h1>
           
@@ -170,8 +169,7 @@ defmodule PhoenixAppWeb.CartLive do
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </PhoenixAppWeb.Components.PageContainer.page_container>
     """
   end
 end

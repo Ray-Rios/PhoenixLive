@@ -2,43 +2,39 @@ defmodule PhoenixAppWeb.ForumLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Forum
   alias Phoenix.PubSub
+  import PhoenixAppWeb.CoreComponents
 
   @impl true
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
 
     if user do
-      # Get system channels (non-user-created)
-      system_channels = Forum.list_channels()
-      # Only show private system channels to users who are owners/members or admins/editors
-      visible_system_channels = Enum.filter(system_channels, fn ch ->
-        not ch.is_private || Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"] ||
-          Forum.is_channel_member?(ch.id, user.id) || (Map.get(ch, :owner_id) == user.id) || (Map.get(ch, :created_by_id) == user.id)
+      # Get all channels
+      all_channels = Forum.list_channels()
+      
+      # Split channels strictly by is_private flag
+      {public_channels, all_private_channels_unfiltered} = Enum.split_with(all_channels, fn ch ->
+        !ch.is_private
       end)
       
-      # Ensure we have at least a default channel
-      default_channel = if Enum.empty?(visible_system_channels) do
-        Forum.get_or_create_default_channel()
-      else
-        List.first(visible_system_channels)
-      end
-
-      # Get user-created channels
-      user_owned_channels = Forum.list_user_owned_channels(user.id)
-      user_member_channels = Forum.list_user_member_channels(user.id)
-      public_user_channels = Forum.list_public_user_channels()
+      # For private channels, filter to only those the user can access
+      visible_private_channels = Enum.filter(all_private_channels_unfiltered, fn ch ->
+        can_access_channel?(user, ch)
+      end)
+      
+      # Sort channels
+      public_channels = Enum.sort_by(public_channels, & &1.name)
+      all_private_channels = Enum.sort_by(visible_private_channels, & &1.name)
+      
+      # Default channel should be first public or first private accessible
+      default_channel = List.first(public_channels) || List.first(all_private_channels) || Forum.get_or_create_default_channel()
 
       # Subscribe to channel updates
       Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "chat:channels")
 
       socket = assign(socket,
-        system_channels: if(Enum.empty?(visible_system_channels), do: [default_channel], else: visible_system_channels),
-        user_owned_channels: user_owned_channels,
-        user_member_channels: user_member_channels,
-        public_user_channels: public_user_channels,
-        # Add missing assigns expected by template
-        public_channels: public_user_channels,
-        user_channels: user_owned_channels ++ user_member_channels,
+        public_channels: public_channels,
+        private_channels: all_private_channels,
         current_channel: default_channel,
         messages: Forum.list_messages(default_channel.id),
         current_message: "",
@@ -55,7 +51,11 @@ defmodule PhoenixAppWeb.ForumLive do
         show_delete_channel_confirm: false,
         editing_message_id: nil,
         editing_message_content: "",
-        can_create_more_channels: length(user_owned_channels) < 5
+        can_create_more_channels: length(visible_private_channels) < 5,
+        show_image_viewer: false,
+        viewer_image_url: nil,
+        viewer_image_filename: nil,
+        show_invite_modal: false
       )
       |> allow_upload(:forum_attachment,
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
@@ -76,23 +76,39 @@ defmodule PhoenixAppWeb.ForumLive do
   @impl true
   def handle_params(%{"channel_id" => channel_id}, _uri, socket) do
     channel = Forum.get_channel!(channel_id)
-    messages = Forum.list_messages(channel_id)
-    active_stream = Forum.get_active_stream(channel_id)
+    user = socket.assigns.current_user
     
-    # Unsubscribe from previous channel
-    if socket.assigns[:current_channel] do
-      PubSub.unsubscribe(PhoenixApp.PubSub, "channel:#{socket.assigns.current_channel.id}")
+    # Check if user has access to this channel
+    has_access = can_access_channel?(channel, user)
+    
+    if has_access do
+      messages = Forum.list_messages(channel_id)
+      active_stream = Forum.get_active_stream(channel_id)
+      
+      # Unsubscribe from previous channel
+      if socket.assigns[:current_channel] do
+        PubSub.unsubscribe(PhoenixApp.PubSub, "channel:#{socket.assigns.current_channel.id}")
+      end
+      
+      # Subscribe to new channel
+      PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel_id}")
+      
+      {:noreply, assign(socket,
+        current_channel: channel,
+        messages: messages,
+        active_stream: active_stream,
+        page_title: "Chat - #{channel.name}"
+      )}
+    else
+      # User doesn't have access - redirect to general channel
+      general_channel = Forum.get_or_create_default_channel()
+      
+      socket = socket
+        |> put_flash(:error, "You don't have access to that channel")
+        |> push_navigate(to: "/forum/#{general_channel.id}")
+      
+      {:noreply, socket}
     end
-    
-    # Subscribe to new channel
-    PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel_id}")
-    
-    {:noreply, assign(socket,
-      current_channel: channel,
-      messages: messages,
-      active_stream: active_stream,
-      page_title: "Chat - #{channel.name}"
-    )}
   end
 
   def handle_params(_params, _uri, socket) do
@@ -118,11 +134,8 @@ defmodule PhoenixAppWeb.ForumLive do
       if user && Map.get(user, :role) == "banned" do
         {:noreply, put_flash(socket, :error, "You are banned from posting messages.")}
       else
-        # If the channel is private make sure user can post
-        if channel.is_private && not (
-          Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"] ||
-          Map.get(channel, :owner_id) == user.id || Map.get(channel, :created_by_id) == user.id || Forum.is_channel_member?(channel.id, user.id)
-        ) do
+        # Check if user has access to post in this channel
+        if !can_access_channel?(channel, user) do
           {:noreply, put_flash(socket, :error, "You don't have permission to post in this channel.")}
         else
         # 1. Create the message record first so we have a message id to attach files under
@@ -266,24 +279,23 @@ defmodule PhoenixAppWeb.ForumLive do
     
     # Fetch new channel data
     channel = Forum.get_channel!(channel_id)
-    messages = Forum.list_messages(channel_id)
+    user = socket.assigns.current_user
     
-    # Block switching into private channels unless allowed
-    if channel.is_private && not (
-      Map.get(socket.assigns.current_user, :is_admin, false) || socket.assigns.current_user.role in ["admin", "gm", "editor"] ||
-      Map.get(channel, :owner_id) == socket.assigns.current_user.id || Map.get(channel, :created_by_id) == socket.assigns.current_user.id || Forum.is_channel_member?(channel.id, socket.assigns.current_user.id)
-    ) do
-      {:noreply, put_flash(socket, :error, "You do not have access to that private channel")}
-    else
+    # Check if user has access using the centralized helper
+    if can_access_channel?(channel, user) do
+      messages = Forum.list_messages(channel_id)
+      
       # Subscribe to the new channel
       PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel.id}")
     
       socket = assign(socket,
-      current_channel: channel,
-      messages: messages,
-      page_title: "Forum - #{channel.name}"
-    )
+        current_channel: channel,
+        messages: messages,
+        page_title: "Forum - #{channel.name}"
+      )
       {:noreply, push_navigate(socket, to: "/forum/#{channel.id}")}
+    else
+      {:noreply, put_flash(socket, :error, "You do not have access to that private channel")}
     end
   end
 
@@ -318,12 +330,25 @@ defmodule PhoenixAppWeb.ForumLive do
     if user && (user.is_admin || user.role in ["admin", "gm", "editor"]) do
       case Forum.create_channel(channel_params) do
         {:ok, channel} ->
-          system_channels = Forum.list_channels()
+          # Refresh channel lists after creation
+          all_channels = Forum.list_channels()
+          user_owned = Forum.list_user_owned_channels(user.id)
+          user_member = Forum.list_user_member_channels(user.id)
+          
+          {public_system_channels, private_system_channels} = Enum.split_with(all_channels, fn ch ->
+            !ch.is_private
+          end)
+          
+          visible_private_system = Enum.filter(private_system_channels, fn ch ->
+            Forum.is_channel_member?(ch.id, user.id) || ch.owner_id == user.id || user.is_admin
+          end)
+          
+          all_private_channels = (user_owned ++ user_member ++ visible_private_system) |> Enum.uniq_by(& &1.id)
 
           {:noreply,
            socket
            |> assign(show_create_channel_form: false, channel_form: to_form(Forum.change_channel(%Forum.Channel{})))
-           |> assign(system_channels: system_channels)
+           |> assign(public_channels: public_system_channels, private_channels: all_private_channels)
            |> put_flash(:info, "Channel '#{channel.name}' created successfully!")}
 
         {:error, changeset} ->
@@ -366,27 +391,28 @@ defmodule PhoenixAppWeb.ForumLive do
         case Forum.delete_channel_by_user(user, channel) do
         {:ok, _} ->
           # Refresh channel lists
-          system_channels = Forum.list_channels()
-          user_owned_channels = Forum.list_user_owned_channels(user.id)
-          user_member_channels = Forum.list_user_member_channels(user.id)
-          public_user_channels = Forum.list_public_user_channels()
+          all_channels = Forum.list_channels()
+          user_owned = Forum.list_user_owned_channels(user.id)
+          user_member = Forum.list_user_member_channels(user.id)
+          
+          {public_system_channels, private_system_channels} = Enum.split_with(all_channels, fn ch ->
+            !ch.is_private
+          end)
+          
+          visible_private_system = Enum.filter(private_system_channels, fn ch ->
+            Forum.is_channel_member?(ch.id, user.id) || ch.owner_id == user.id || user.is_admin
+          end)
+          
+          all_private_channels = (user_owned ++ user_member ++ visible_private_system) |> Enum.uniq_by(& &1.id)
 
           # Navigate to default channel
-          default = if Enum.empty?(system_channels) do
-            Forum.get_or_create_default_channel()
-          else
-            List.first(system_channels)
-          end
+          default = List.first(public_system_channels) || List.first(all_private_channels) || Forum.get_or_create_default_channel()
 
           {:noreply, 
            socket
            |> assign(
-             system_channels: if(Enum.empty?(system_channels), do: [default], else: system_channels),
-             user_owned_channels: user_owned_channels,
-             user_member_channels: user_member_channels,
-             public_user_channels: public_user_channels,
-             public_channels: public_user_channels,
-             user_channels: user_owned_channels ++ user_member_channels,
+             public_channels: public_system_channels,
+             private_channels: all_private_channels,
              current_channel: default,
              messages: Forum.list_messages(default.id),
              show_delete_channel_confirm: false
@@ -434,15 +460,14 @@ defmodule PhoenixAppWeb.ForumLive do
       if can_delete do
         case Forum.delete_channel_by_user(user, channel) do
         {:ok, _} ->
-          # Refresh lists and switch to default channel if needed
-          user_owned_channels = Forum.list_user_owned_channels(user.id)
-          user_member_channels = Forum.list_user_member_channels(user.id)
-          public_user_channels = Forum.list_public_user_channels()
+          # Refresh channel lists
+          all_channels = Forum.list_channels()
+          {public_channels, all_private_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
+          private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(user, ch) end)
 
           socket = assign(socket,
-            user_owned_channels: user_owned_channels,
-            user_member_channels: user_member_channels,
-            public_user_channels: public_user_channels
+            public_channels: public_channels,
+            private_channels: private_channels
           )
 
           # If deleted channel was current, navigate to default
@@ -628,10 +653,29 @@ defmodule PhoenixAppWeb.ForumLive do
     {:noreply, assign(socket, show_channel_modal: false, editing_channel: nil, channel_members: nil)}
   end
 
+  # Invite Modal
+  def handle_event("show_invite_modal", _params, socket) do
+    {:noreply, assign(socket, show_invite_modal: true)}
+  end
+
+  def handle_event("hide_invite_modal", _params, socket) do
+    {:noreply, assign(socket, show_invite_modal: false)}
+  end
+
+  # Image Viewer
+  def handle_event("open_image_viewer", %{"url" => url, "filename" => filename}, socket) do
+    {:noreply, assign(socket, show_image_viewer: true, viewer_image_url: url, viewer_image_filename: filename)}
+  end
+
+  def handle_event("close_image_viewer", _params, socket) do
+    {:noreply, assign(socket, show_image_viewer: false, viewer_image_url: nil, viewer_image_filename: nil)}
+  end
+
   # User-Created Channel Events
   def handle_event("show_create_user_channel", _params, socket) do
     if socket.assigns.can_create_more_channels do
-      {:noreply, assign(socket, show_create_channel_form: true, creating_user_channel: true)}
+      # When opening the user-created channel form, default to a private channel checked
+      {:noreply, assign(socket, show_create_channel_form: true, creating_user_channel: true, channel_form: to_form(Forum.change_channel(%Forum.Channel{is_private: true})))}
     else
       {:noreply, put_flash(socket, :error, "You've reached the maximum of 5 channels")}
     end
@@ -641,22 +685,37 @@ defmodule PhoenixAppWeb.ForumLive do
     user = socket.assigns.current_user
     
     # Add owner_id and user_created flag
+    # parse checkbox values robustly (checkbox may be "on", "true" or boolean)
+    is_private = case channel_params["is_private"] do
+      "true" -> true
+      "on" -> true
+      true -> true
+      _ -> false
+    end
+    
     channel_params = Map.merge(channel_params, %{
       "owner_id" => user.id,
-      "is_user_created" => true
+      "is_user_created" => true,
+      "is_private" => is_private,
+      "is_public" => !is_private
     })
     
-    case Forum.create_user_channel(channel_params) do
+    case Forum.create_user_channel(user, channel_params) do
       {:ok, channel} ->
-        user_owned_channels = Forum.list_user_owned_channels(user.id)
+        # Refresh channel lists
+        all_channels = Forum.list_channels()
+        {public_channels, all_private_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
+        private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(user, ch) end)
         
         {:noreply,
          socket
          |> assign(
            show_create_channel_form: false,
            creating_user_channel: false,
-           user_owned_channels: user_owned_channels,
-           can_create_more_channels: length(user_owned_channels) < 5
+           channel_form: to_form(Forum.change_channel(%Forum.Channel{})),
+           public_channels: public_channels,
+           private_channels: private_channels,
+           can_create_more_channels: length(private_channels) < 5
          )
          |> put_flash(:info, "Channel '#{channel.name}' created!")
          |> push_navigate(to: ~p"/forum/#{channel.id}")}
@@ -745,9 +804,16 @@ defmodule PhoenixAppWeb.ForumLive do
     {:noreply, assign(socket, show_attachments: false)}
   end
 
+  def handle_event("stop_propagation", _params, socket) do
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_info({:new_message, message}, socket) do
-    messages = [message | socket.assigns.messages] |> Enum.take(100)
+    # Messages are stored oldest -> newest. When a new message arrives we should
+    # append it to the end so the conversation remains chronological in real-time
+    # (avoids the new-message briefly appearing at the top).
+    messages = (socket.assigns.messages ++ [message]) |> Enum.take(-100)
     {:noreply, assign(socket, messages: messages)}
   end
 
@@ -790,10 +856,8 @@ defmodule PhoenixAppWeb.ForumLive do
     end
     
     socket = socket
-    |> assign(system_channels: update_channel_in_list.(socket.assigns.system_channels))
-    |> assign(user_owned_channels: update_channel_in_list.(socket.assigns.user_owned_channels))
-    |> assign(user_member_channels: update_channel_in_list.(socket.assigns.user_member_channels))
-    |> assign(public_user_channels: update_channel_in_list.(socket.assigns.public_user_channels))
+    |> assign(public_channels: update_channel_in_list.(socket.assigns.public_channels))
+    |> assign(private_channels: update_channel_in_list.(socket.assigns.private_channels))
     
     # Update current channel if it's the one being edited
     socket = if socket.assigns.current_channel.id == updated_channel.id do
@@ -812,10 +876,8 @@ defmodule PhoenixAppWeb.ForumLive do
     end
     
     socket = socket
-    |> assign(system_channels: remove_channel_from_list.(socket.assigns.system_channels))
-    |> assign(user_owned_channels: remove_channel_from_list.(socket.assigns.user_owned_channels))
-    |> assign(user_member_channels: remove_channel_from_list.(socket.assigns.user_member_channels))
-    |> assign(public_user_channels: remove_channel_from_list.(socket.assigns.public_user_channels))
+    |> assign(public_channels: remove_channel_from_list.(socket.assigns.public_channels))
+    |> assign(private_channels: remove_channel_from_list.(socket.assigns.private_channels))
     
     # If the deleted channel is the current one, switch to default
     if socket.assigns.current_channel.id == channel_id do
@@ -866,105 +928,116 @@ defmodule PhoenixAppWeb.ForumLive do
   def render(assigns) do
     ~H"""
     <.flash_group flash={@flash} />
-    <div class="w-full h-full flex flex-row">
-      <div class="w-1/4 h-full bg-gray-100 dark:bg-gray-800 p-4 overflow-y-auto">
-        <div class="mb-4">
-          <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">System Channels</h2>
-          <ul>
-            <%= for channel <- @system_channels do %>
-              <li class="my-1">
-                <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"block p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 #{active_channel_class(channel, @current_channel)}"}>
-                  # <%= channel.name %>
-                </a>
-              </li>
-            <% end %>
-          </ul>
-        </div>
+    <PhoenixAppWeb.Components.PageContainer.fullscreen_container>
+      <div class="flex-1 flex flex-row overflow-hidden">
+        <%!-- Sidebar with glass theme --%>
+        <div class="w-64 dark-glass overflow-y-auto border-r border-cyan-500/30">
+          <div class="p-4">
+            <%!-- Public Channels Section --%>
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-2">
+                  <h2 class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Public Channels</h2>
+                  <div class="flex items-center gap-2">
+                    <button phx-click={if @current_user && (Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin","gm","editor"], do: "show_create_channel", else: "show_create_user_channel")} class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                      <span>Create new channel</span>
+                    </button>
+                  </div>
+                </div>
+              <ul class="space-y-0.5">
+                <%= for channel <- @public_channels do %>
+                  <li>
+                    <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"flex items-center px-2 py-1.5 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors #{active_channel_class(channel, @current_channel)}"}>
+                      <span class="mr-1">#</span>
+                      <span class="truncate"><%= channel.name %></span>
+                    </a>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
 
-        <div class="mb-4">
-          <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">Your Channels</h2>
-          <ul>
-            <%= for channel <- @user_owned_channels do %>
-              <li class="my-1">
-                <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"block p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 #{active_channel_class(channel, @current_channel)}"}>
-                  # <%= channel.name %>
-                </a>
-              </li>
-            <% end %>
-          </ul>
-        </div>
-
-        <div class="mb-4">
-          <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">Public Channels</h2>
-          <ul>
-            <%= for channel <- @public_channels do %>
-              <li class="my-1">
-                <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"block p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 #{active_channel_class(channel, @current_channel)}"}>
-                  # <%= channel.name %>
-                </a>
-              </li>
-            <% end %>
-          </ul>
-        </div>
-
-        <div class="mt-4">
-          <button phx-click="toggle_create_channel" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600">
-            Create Channel
-          </button>
-        </div>
-
-        <%= if @show_create_channel_form do %>
-          <div class="mt-4 p-4 bg-white dark:bg-gray-700 rounded-md shadow-md">
-            <h3 class="text-lg font-semibold mb-2 text-gray-800 dark:text-gray-200">New Channel</h3>
-            <.form for={@channel_form} phx-submit="save_channel">
-              <div class="mb-2">
-                <.input field={@channel_form[:name]} type="text" placeholder="Channel Name" class="w-full p-2 border rounded-md" />
+            <%!-- Private Channels Section --%>
+            <div class="mb-6">
+              <div class="flex items-center justify-between mb-2">
+                <h2 class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Private Channels</h2>
+                <%!-- leave a small spacer to visually align --%>
+                <div class="w-24"></div>
               </div>
-              <div class="mb-2">
-                <.input field={@channel_form[:is_public]} type="checkbox" label="Public" class="mr-2" />
-              </div>
-              <button type="submit" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Save</button>
-            </.form>
+              <ul class="space-y-0.5">
+                <%= for channel <- @private_channels do %>
+                  <li>
+                    <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"flex items-center px-2 py-1.5 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors #{active_channel_class(channel, @current_channel)}"}>
+                      <svg class="w-3 h-3 mr-1.5 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                      </svg>
+                      <span class="truncate"><%= channel.name %></span>
+                    </a>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
           </div>
-        <% end %>
-      </div>
+        </div>
 
-      <div class="w-3/4 h-full flex flex-col bg-white dark:bg-gray-900">
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-200">#<%= @current_channel.name %></h1>
-            <p class="text-sm text-gray-500 dark:text-gray-400"><%= @current_channel.description %></p>
-          </div>
-          
+        <%!-- Main chat area with glass theme --%>
+        <div class="flex-1 flex flex-col">
+          <%!-- Channel header with glass theme --%>
+          <div class="p-4 border-b border-cyan-500/30 flex items-center justify-between dark-glass shadow-sm">
+            <div class="flex-1 min-w-0">
+              <h1 class="text-xl font-bold text-gray-800 dark:text-gray-200 truncate">#<%= @current_channel.name %></h1>
+              <%= if @current_channel.description do %>
+                <p class="text-sm text-gray-500 dark:text-gray-400 truncate"><%= @current_channel.description %></p>
+              <% end %>
+            </div>
+            
+            <div class="flex items-center space-x-2 ml-4">
+              <%!-- Invite button for private channels --%>
+                  <%= if @current_channel.is_private && (@current_user.is_admin || @current_user.role in ["admin", "gm", "editor"] || 
+                    (@current_channel.owner_id && @current_channel.owner_id == @current_user.id)) do %>
+                <button phx-click="show_invite_modal" class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors flex items-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                  </svg>
+                  Invite
+                </button>
+              <% end %>
+              
+              <%!-- Members and Delete buttons --%>
+              <%!-- Only show members management for private channels or user-created channels. Public system channels shouldn't expose members UI. --%>
               <%= if @current_user && String.downcase(@current_channel.name) != "general" && (
-                @current_user.is_admin || @current_user.role in ["admin", "gm", "editor"] ||
-                (Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id) ||
-                (Map.has_key?(@current_channel, :created_by_id) && @current_channel.created_by_id == @current_user.id)
-              ) do %>
-            <button 
-              phx-click="show_delete_channel_confirm" 
-              class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors flex items-center gap-2"
-              title="Delete Channel"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Delete Channel
-            </button>
-            <button phx-click="open_members_modal" phx-value-channel_id={@current_channel.id} class="px-4 py-2 ml-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors" title="Manage Members">Members</button>
-          <% end %>
-        </div>
+                    Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin", "gm", "editor"] ||
+                    ( @current_channel.is_private && (Map.get(@current_channel, :is_user_created, false) || (Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id) || (Map.has_key?(@current_channel, :created_by_id) && @current_channel.created_by_id == @current_user.id)) )
+                  ) do %>
+                <button phx-click="open_members_modal" phx-value-channel_id={@current_channel.id} class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors flex items-center gap-1.5" title="Manage Members">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                  </svg>
+                  Members
+                </button>
+                <button 
+                  phx-click="show_delete_channel_confirm" 
+                  class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors flex items-center gap-1.5"
+                  title="Delete Channel"
+                >
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
+                </button>
+              <% end %>
+            </div>
+          </div>
 
-        <div id="messages" class="flex-1 p-4 overflow-y-auto">
+        <div id="messages" class="flex-1 p-4 overflow-y-auto dark-glass" phx-update="append">
           <%= for message <- @messages do %>
-            <div class="flex items-start mb-4 group">
+            <div id={"message-#{message.id}"} class="flex items-start mb-4 group">
               <div class="mr-4">
                 <%= avatar_tag(message.user, size_class: "w-10 h-10") %>
               </div>
               <div class="flex-1">
                 <div class="flex items-baseline">
                   <span class="font-bold text-gray-800 dark:text-gray-200 mr-2"><%= message.user.name || message.user.email %></span>
-                  <span class="text-xs text-gray-500 dark:text-gray-400"><%= Calendar.strftime(message.inserted_at, "%H:%M") %></span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400"><%= Calendar.strftime(message.inserted_at, "%b %d %Y %I:%M %p") %></span>
                   
                   <%!-- Message actions (edit/delete) - visible on hover --%>
                   <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">
@@ -1043,7 +1116,7 @@ defmodule PhoenixAppWeb.ForumLive do
           <% end %>
         </div>
 
-        <div class="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        <div class="p-4 border-t border-cyan-500/30" style="background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px);">
           <form phx-submit="send_message" phx-change="validate_message">
             <%!-- File upload previews --%>
             <%= if length(@uploads.forum_attachment.entries) > 0 do %>
@@ -1102,8 +1175,8 @@ defmodule PhoenixAppWeb.ForumLive do
             </div>
           </form>
         </div>
+        </div>
       </div>
-    </div>
 
     <%!-- Delete Channel Confirmation Modal --%>
     <%!-- Channel Member Management Modal --%>
@@ -1165,13 +1238,46 @@ defmodule PhoenixAppWeb.ForumLive do
                         <button phx-click="kick_member" phx-value-member_id={member.id} class="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-xs">Kick</button>
                       <% end %>
 
-                      <button phx-click="transfer_ownership" phx-value-new_owner_id={member.user_id} class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs">Make Owner</button>
+                      <%!-- Only show Make Owner button if member is not already the owner --%>
+                      <%= if member.role != "owner" && @editing_channel.owner_id != member.user_id do %>
+                        <button phx-click="transfer_ownership" phx-value-new_owner_id={member.user_id} class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs">Make Owner</button>
+                      <% end %>
                     <% end %>
                   </div>
                 </div>
               </div>
             <% end %>
           </div>
+        </div>
+      </div>
+    <% end %>
+
+    <%!-- Create Channel Modal (used for both admin/system channel creation and user-created private channels) --%>
+    <%= if @show_create_channel_form do %>
+      <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-auto">
+        <div class="absolute inset-0 bg-black/50" phx-click="hide_create_channel"></div>
+        <div class="relative bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4 border border-cyan-500/50">
+          <h3 class="text-xl font-bold text-white mb-4"><%= if @creating_user_channel, do: "Create Private Channel", else: "Create Channel" %></h3>
+
+          <.form for={@channel_form} phx-submit={if @creating_user_channel, do: "create_user_channel", else: "create_channel"} phx-change="validate_channel" class="space-y-3">
+            <div>
+              <.input field={@channel_form[:name]} label="Name" class="w-full mt-1 p-2 rounded bg-gray-900 text-white" />
+            </div>
+
+            <div>
+              <.input field={@channel_form[:description]} type="textarea" label="Description (optional)" class="w-full mt-1 p-2 rounded bg-gray-900 text-white" rows="3" />
+            </div>
+
+            <div class="flex items-center gap-3">
+              <.input field={@channel_form[:is_private]} type="checkbox" label="Private channel (only invited/members can view)" />
+            </div>
+
+            <div class="flex justify-end gap-3 mt-4">
+              <button phx-click="hide_create_channel" type="button" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded">Cancel</button>
+              <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">Create</button>
+            </div>
+          </.form>
+
         </div>
       </div>
     <% end %>
@@ -1221,7 +1327,91 @@ defmodule PhoenixAppWeb.ForumLive do
         </div>
       </div>
     <% end %>
+
+    <!-- Image Viewer Modal -->
+    <%= if @show_image_viewer do %>
+      <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-auto">
+        <div class="absolute inset-0 bg-black/90" phx-click="close_image_viewer"></div>
+        <div class="relative max-w-7xl max-h-screen w-full h-full p-8 flex flex-col">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-white font-medium"><%= @viewer_image_filename %></h3>
+            <div class="flex gap-2">
+              <a href={@viewer_image_url} download={@viewer_image_filename} class="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </a>
+              <button phx-click="close_image_viewer" class="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 flex items-center justify-center overflow-hidden">
+            <img src={@viewer_image_url} alt={@viewer_image_filename} class="max-w-full max-h-full object-contain" />
+          </div>
+        </div>
+      </div>
+    <% end %>
+
+    <!-- Invite Modal -->
+    <%= if @show_invite_modal do %>
+      <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-auto">
+        <div class="absolute inset-0 bg-black/50" phx-click="hide_invite_modal"></div>
+        <div class="relative bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4 border border-cyan-500/50">
+          <h3 class="text-xl font-bold text-white mb-4">Invite Users to <%= @current_channel.name %></h3>
+          <p class="text-gray-300 text-sm mb-4">Invite people by username/email or create a shareable invite code.</p>
+
+          <div class="grid grid-cols-1 gap-4">
+            <%!-- Personal invite form (username or email) --%>
+            <div class="bg-gray-900 rounded p-3">
+              <h4 class="text-sm font-semibold text-white mb-2">Invite a specific user</h4>
+              <.form phx-submit="create_personal_invite" for={%{}} class="flex gap-2 items-center">
+                <input name="invitee_id" placeholder="username or email" class="flex-1 p-2 rounded bg-gray-800 text-white text-sm" />
+                <button type="submit" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">Invite</button>
+              </.form>
+            </div>
+
+            <%!-- Channel invite code form (creates server-side invite) --%>
+            <div class="bg-gray-900 rounded p-3">
+              <h4 class="text-sm font-semibold text-white mb-2">Create invite code</h4>
+              <.form phx-submit="create_channel_invite" for={%{}} class="space-y-2">
+                <div class="flex gap-2">
+                  <input name="max_uses" placeholder="Max uses (optional)" class="flex-1 p-2 rounded bg-gray-800 text-white text-sm" />
+                  <input name="expires_at" type="datetime-local" class="p-2 rounded bg-gray-800 text-white text-sm" />
+                </div>
+                <div class="flex justify-end gap-2">
+                  <button type="submit" class="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm rounded">Create code</button>
+                </div>
+              </.form>
+            </div>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button phx-click="hide_invite_modal" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+    </PhoenixAppWeb.Components.PageContainer.fullscreen_container>
     """
+  end
+
+  # Authorization helper - check if user can access a channel
+  defp can_access_channel?(channel, user) do
+    # Public channels are accessible to everyone
+    if !channel.is_private do
+      true
+    else
+      # Private channels require explicit permission
+      Map.get(user, :is_admin, false) || 
+      user.role in ["admin", "gm", "editor"] ||
+      Map.get(channel, :owner_id) == user.id || 
+      Map.get(channel, :created_by_id) == user.id ||
+      Forum.is_channel_member?(channel.id, user.id)
+    end
   end
 
   defp group_reactions(reactions) do

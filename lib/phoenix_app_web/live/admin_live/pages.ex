@@ -83,7 +83,7 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen pointer-events-none">
+    <div data-responsive-content class="min-h-screen pointer-events-none" style="padding-top: 30px; padding-bottom: 48px;">
       <div class="w-full max-w-[90%] mx-auto px-4 py-8 mt-16 pointer-events-auto">
         <div class="max-w-6xl mx-auto">
           <div class="auth-glass-panel p-8 rounded-xl">

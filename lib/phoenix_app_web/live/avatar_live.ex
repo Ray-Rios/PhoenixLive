@@ -71,7 +71,7 @@ defmodule PhoenixAppWeb.AvatarLive do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen">
+    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
       <div class="container mx-auto px-4 py-8 relative z-10">
         <div class="text-center mb-8">
           <h1 class="text-4xl font-bold text-white mb-4">Choose Your Avatar</h1>

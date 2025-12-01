@@ -59,6 +59,7 @@ docker build --no-cache -t phoenix-app . && kubectl rollout restart deployment/p
 kubectl rollout restart deployment/phoenix-web -n phoenixapp
 
 kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp && sleep 5 && kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
+
 ## 🔧 Phoenix stuff 🔧 ##
 # PostgreSQL Operations Script
 ./postgres-ops.sh backup                # Backup PostgreSQL database

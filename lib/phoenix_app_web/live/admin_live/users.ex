@@ -37,7 +37,7 @@ defmodule PhoenixAppWeb.AdminLive.Users do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen">
+    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
       <div class="flex relative z-10">
         <!-- Admin Sidebar -->
         <div class="w-64 bg-gray-900 min-h-screen">

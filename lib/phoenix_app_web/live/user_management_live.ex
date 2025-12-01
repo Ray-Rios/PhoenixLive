@@ -191,9 +191,8 @@ defmodule PhoenixAppWeb.UserManagementLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen">
-      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <div class="max-w-7xl mx-auto">
+    <PhoenixAppWeb.Components.PageContainer.page_container max_width="max-w-[85%]" glass={false}>
+      <div class="max-w-7xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">User Management</h1>
           
           <!-- Default Role Setting -->
@@ -340,9 +339,8 @@ defmodule PhoenixAppWeb.UserManagementLive do
               </div>
             </div>
           </div>
-        </div>
       </div>
-    </div>
+    </PhoenixAppWeb.Components.PageContainer.page_container>
     """
   end
 end

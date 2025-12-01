@@ -81,7 +81,7 @@ defmodule PhoenixAppWeb.AdminLive.ServicesLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen">
+    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
       <div class="w-full max-w-[80%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
         <div class="max-w-6xl mx-auto">
           <div class="flex justify-between items-center mb-8">

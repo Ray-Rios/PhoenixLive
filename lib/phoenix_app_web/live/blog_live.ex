@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.BlogLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
+  import PhoenixAppWeb.Components.PageContainer
 
   on_mount {PhoenixAppWeb.UserAuth, :default}
 
@@ -59,9 +60,13 @@ defmodule PhoenixAppWeb.BlogLive do
   # Helper to get featured image URL - handles both Arc files and plain URLs
   defp get_featured_image_url(post, _version) do
     cond do
-      # If featured_image is nil, use default
-      is_nil(post.featured_image) ->
-        "/uploads/public/images/default_avatar.jpg"
+      # If featured_image is nil or empty, use default
+      is_nil(post.featured_image) or post.featured_image == "" ->
+        "/images/default-blog.jpg"
+      
+      # If featured_image starts with /uploads/, use it directly
+      is_binary(post.featured_image) and String.starts_with?(post.featured_image, "/uploads/") ->
+        post.featured_image
       
       # If featured_image starts with /, it's already a URL path
       is_binary(post.featured_image) and String.starts_with?(post.featured_image, "/") ->
@@ -71,9 +76,13 @@ defmodule PhoenixAppWeb.BlogLive do
       is_binary(post.featured_image) and String.starts_with?(post.featured_image, "http") ->
         post.featured_image
       
-      # Otherwise fall back to default (avoid calling Arc at compile-time)
+      # Otherwise treat as hash filename - construct full path with user ID
+      is_binary(post.featured_image) and post.user ->
+        "/uploads/#{post.user.id}/blog/#{post.featured_image}"
+      
+      # Fallback
       true ->
-        "/uploads/public/images/default_avatar.jpg"
+        "/images/default-blog.jpg"
     end
   end
 
@@ -81,10 +90,9 @@ defmodule PhoenixAppWeb.BlogLive do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen w-full pointer-events-none">
-      <div class="max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px] pointer-events-auto">
-        <!-- Blog List View -->
-        <div :if={@view != :post_detail}>
+    <.page_container glass={false}>
+      <!-- Blog List View -->
+      <div :if={@view != :post_detail}>
         <h1 class="text-4xl font-bold text-white mb-8 text-center">Our Blog</h1>
 
         <!-- Featured Posts Carousel -->
@@ -215,12 +223,11 @@ defmodule PhoenixAppWeb.BlogLive do
                 </article>
               <% end %>
             </div>
+          </div>
         </div>
-        </div>
-      </div>
 
       <!-- Blog Post Detail View -->
-      <div :if={@view == :post_detail} class="w-full max-w-[80%] mx-auto px-4 py-4 relative z-10 mt-[20px]">
+      <div :if={@view == :post_detail}>
         <div class="auth-glass-panel rounded-xl p-8 mb-6">
           <!-- Back button -->
           <.link navigate={~p"/blog"} class="text-blue-400 hover:text-blue-300 mb-6 inline-block">
@@ -267,16 +274,16 @@ defmodule PhoenixAppWeb.BlogLive do
           </article>
         </div>
       </div>
-    </div>
 
-    <script>
-      setInterval(() => {
-        if (window.location.pathname === '/blog') {
-          const nextButton = document.querySelector('[phx-click="next_slide"]');
-          if (nextButton) nextButton.click();
-        }
-      }, 5000);
-    </script>
+      <script>
+        setInterval(() => {
+          if (window.location.pathname === '/blog') {
+            const nextButton = document.querySelector('[phx-click="next_slide"]');
+            if (nextButton) nextButton.click();
+          }
+        }, 5000);
+      </script>
+    </.page_container>
     """
   end
 end

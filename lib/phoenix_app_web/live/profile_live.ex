@@ -459,9 +459,8 @@ defmodule PhoenixAppWeb.ProfileLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen pointer-events-none" phx-hook="ProfileSettings" id="profile-container">
-      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 pointer-events-auto">
-        <div class="auth-glass-panel p-8 rounded-xl">
+    <div phx-hook="ProfileSettings" id="profile-container">
+    <PhoenixAppWeb.Components.PageContainer.page_container max_width="max-w-[85%]">
         <div class="max-w-4xl mx-auto">
           <div class="mb-8">
             <h1 class="text-3xl font-bold text-white mb-2">Profile Settings</h1>
@@ -1094,8 +1093,7 @@ defmodule PhoenixAppWeb.ProfileLive do
             </div>
           </div>
         </div>
-        </div>
-      </div>
+    </PhoenixAppWeb.Components.PageContainer.page_container>
     </div>
     """
   end

@@ -56,16 +56,34 @@ defmodule PhoenixAppWeb.Components.MediaPreview do
     """
   end
 
-  # Image preview with lightbox support
+  # Image preview with lightbox support - click to expand
   defp image_preview(assigns) do
     ~H"""
-    <div class="image-preview group cursor-pointer" phx-click="view_image" phx-value-url={@attachment.url_path}>
+    <div class="image-preview relative group">
       <img 
         src={@attachment.url_path} 
         alt={@attachment.file_name}
-        class="max-w-sm max-h-64 rounded-lg object-cover border border-gray-300 dark:border-gray-600 group-hover:opacity-90 transition-opacity"
+        class="max-w-sm max-h-64 rounded-lg object-cover border border-gray-300 dark:border-gray-600 cursor-pointer hover:opacity-90 transition-opacity"
         loading="lazy"
+        phx-click="open_image_viewer"
+        phx-value-url={@attachment.url_path}
+        phx-value-filename={@attachment.file_name}
       />
+      <%!-- Quick action buttons on hover --%>
+      <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+        <a 
+          href={@attachment.url_path} 
+          download
+          class="p-1.5 bg-black/60 hover:bg-black/80 rounded text-white"
+          title="Download"
+          phx-click="stop_propagation"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+          </svg>
+        </a>
+        <%!-- Removed redundant fullscreen button - clicking image already opens fullscreen --%>
+      </div>
       <%= if @show_filename do %>
         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate max-w-sm">
           <%= @attachment.file_name %> · <%= format_file_size(@attachment.file_size) %>
@@ -75,13 +93,13 @@ defmodule PhoenixAppWeb.Components.MediaPreview do
     """
   end
 
-  # Video preview with HTML5 player
+  # Video preview with HTML5 player - lazy load (preload=none delays download until play)
   defp video_preview(assigns) do
     ~H"""
     <div class="video-preview">
       <video 
         controls 
-        preload="metadata"
+        preload="none"
         class="max-w-lg max-h-96 rounded-lg border border-gray-300 dark:border-gray-600"
       >
         <source src={@attachment.url_path} type={@attachment.file_type || "video/mp4"} />
@@ -96,18 +114,30 @@ defmodule PhoenixAppWeb.Components.MediaPreview do
     """
   end
 
-  # Audio preview with HTML5 player
+  # Audio preview with HTML5 player and download button
   defp audio_preview(assigns) do
     ~H"""
     <div class="audio-preview max-w-md">
       <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 border border-gray-300 dark:border-gray-600">
-        <div class="flex items-center mb-2">
-          <svg class="w-6 h-6 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-          </svg>
-          <span class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate flex-1">
-            <%= @attachment.file_name %>
-          </span>
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center flex-1 min-w-0 mr-3">
+            <svg class="w-6 h-6 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+            </svg>
+            <span class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+              <%= @attachment.file_name %>
+            </span>
+          </div>
+          <a 
+            href={@attachment.url_path} 
+            download
+            class="flex-shrink-0 p-2 text-blue-500 hover:text-blue-600 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+            title="Download audio"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+          </a>
         </div>
         <audio controls class="w-full">
           <source src={@attachment.url_path} type={@attachment.file_type || "audio/mpeg"} />

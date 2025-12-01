@@ -39,7 +39,7 @@ defmodule PhoenixAppWeb.PageLive do
     assigns = assign(assigns, :max_width, max_width)
 
     ~H"""
-    <div class="min-h-screen pointer-events-none">
+    <div data-responsive-content class="min-h-screen pointer-events-none" style="padding-top: 30px; padding-bottom: 48px;">
       <div class={"w-full #{@max_width} mx-auto px-4 py-8 relative z-10 pointer-events-auto"}>
         <div class="auth-glass-panel p-8 rounded-xl">
           <!-- Featured Image -->

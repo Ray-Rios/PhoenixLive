@@ -88,7 +88,7 @@ defmodule PhoenixAppWeb.ProfileUploadsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen pointer-events-none">
+    <div data-responsive-content class="min-h-screen pointer-events-none" style="padding-top: 30px; padding-bottom: 48px;">
       <div class="max-w-7xl mx-auto px-4 py-8 pointer-events-auto">
         <div class="auth-glass-panel p-8 rounded-xl">
           <!-- Header -->
