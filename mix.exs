@@ -37,7 +37,7 @@ defmodule PhoenixApp.MixProject do
       {:phoenix, "~> 1.7.18"},
       {:phoenix_ecto, "~> 4.6"},
       {:ecto_sql, "~> 3.12"},
-      {:postgrex, "~> 0.19.0"},
+      {:postgrex, "~> 0.21.1"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.5", only: :dev},
       {:phoenix_live_view, "~> 1.0.0"},
