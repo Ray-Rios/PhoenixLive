@@ -57,6 +57,11 @@ defmodule PhoenixAppWeb.BlogLive do
     {:noreply, assign(socket, current_slide: slide)}
   end
 
+  # Desktop UI sometimes pushes update_window_position globally; ignore in BlogLive
+  def handle_event("update_window_position", _params, socket) do
+    {:noreply, socket}
+  end
+
   # Helper to get featured image URL - handles both Arc files and plain URLs
   defp get_featured_image_url(post, _version) do
     cond do

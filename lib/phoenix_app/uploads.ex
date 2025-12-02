@@ -181,6 +181,22 @@ defmodule PhoenixApp.Uploads do
         case File.cp(temp_path, dest_file) do
           :ok ->
             Logger.info("File uploaded successfully: #{url}")
+
+            # Best-effort background processing (thumbnail generation, transcode)
+            Task.start(fn ->
+              case get_file_type(entry.client_type) do
+                "image" ->
+                  thumb = Path.join(dest_dir, "thumb_#{filename}.png")
+                  PhoenixApp.MediaProcessor.generate_thumbnail(Path.join(dest_dir, filename), thumb)
+                "video" ->
+                  out = Path.join(dest_dir, "transcoded_#{filename}")
+                  PhoenixApp.MediaProcessor.transcode_video(Path.join(dest_dir, filename), out)
+                _ -> :ok
+              end
+            end)
+              # Best-effort moderation scan
+              Task.start(fn -> PhoenixApp.Moderation.scan_file(Path.join(dest_dir, filename)) end)
+
             {:ok, url}
           
           {:error, reason} ->
@@ -192,6 +208,15 @@ defmodule PhoenixApp.Uploads do
         Logger.error("Directory creation failed: #{inspect(reason)}")
         {:error, "mkdir_failed: #{inspect(reason)}"}
     end
+  end
+
+  @doc "Generate a signed URL for secure access to an uploaded file. Local fallback uses Phoenix.Token with a default TTL."
+  def signed_url_for(url_path, opts \\ []) when is_binary(url_path) do
+    expires_in = Keyword.get(opts, :expires_in, 3600)
+
+    token = Phoenix.Token.sign(PhoenixAppWeb.Endpoint, "uploads", url_path)
+    # Include expires_in in query so the server validates with the same TTL
+    Path.join(["/uploads/signed?token=", URI.encode(token), "&expires_in=", to_string(expires_in)])
   end
 
   @doc """

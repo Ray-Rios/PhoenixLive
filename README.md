@@ -68,3 +68,14 @@ npm ls glob rimraf inflight eslint
 ```
 
 Track future policy: treat new compiler warnings as CI failures; address or document intentional exceptions.
+
+## Redis-backed PubSub (cross-pod real-time)
+
+To enable Redis-backed pubsub bridging for cross-pod real-time event delivery, set these environment variables in your cluster (for example in a k8s ConfigMap):
+
+	ENABLE_REDIS=true
+	REDIS_URL=redis://redis:6379/0
+
+This project includes a small Redis PubSub bridge that subscribes to channel patterns (e.g. "channel:*", "presence:channel:*", "chat:channels") and forwards Redis messages into the local Phoenix.PubSub. When Redis is enabled the application will also publish messages into Redis so other pods receive them.
+
+Note: For higher durability/compatibility you can switch Phoenix.PubSub to a Redis adapter (install a compatible adapter library) and configure it in runtime.exs — the repo includes conditional helpers to enable bridging when Redis is present.

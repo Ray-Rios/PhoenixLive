@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: phoenix-mix-tests
+  namespace: phoenixapp
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mix-tests
+        image: hexpm/elixir:1.14.4-erlang-26.0.4-ubuntu-jammy
+        command: ["/bin/sh", "-c"]
+        args:
+          - export MIX_ENV=test; mix deps.get; mix ecto.create; mix ecto.migrate; mix test --color
+        env:
+          - name: DATABASE_URL
+            value: "postgresql://postgres:postgres@postgres:5432/phoenixapp_test"
+          - name: REDIS_URL
+            value: "redis://redis:6379/0"
+      backoffLimit: 0

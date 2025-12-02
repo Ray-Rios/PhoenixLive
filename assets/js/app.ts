@@ -132,6 +132,137 @@ const MessageReactions = {
   }
 };
 
+// Message list hook: only auto-scroll if user is at bottom, otherwise show a "New messages" notifier
+const MessageList = {
+  mounted() {
+    const el = this.el as HTMLElement;
+    let isAtBottom = true;
+    const THRESHOLD = 24; // pixels
+
+    // Create notifier element
+    const notifier = document.createElement('div');
+    notifier.className = 'fixed bottom-24 right-6 bg-blue-600 text-white px-3 py-1.5 rounded shadow cursor-pointer z-50 text-sm';
+    notifier.textContent = 'New messages';
+    notifier.style.display = 'none';
+    document.body.appendChild(notifier);
+
+    const updateIsAtBottom = () => {
+      const atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= THRESHOLD;
+      isAtBottom = atBottom;
+      if (isAtBottom) {
+        notifier.style.display = 'none';
+      }
+    };
+
+    // Initial scroll-to-bottom when mounted
+    setTimeout(() => {
+      el.scrollTop = el.scrollHeight;
+      updateIsAtBottom();
+    }, 50);
+
+    // Update relative time badges inside messages container
+    const formatRelative = (d) => {
+      const now = Date.now();
+      const then = new Date(d).getTime();
+      const diff = Math.floor((now - then) / 1000);
+      if (diff < 5) return 'just now';
+      if (diff < 60) return `${diff}s ago`;
+      const mins = Math.floor(diff / 60);
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    };
+
+    const updateTimes = () => {
+      Array.from(el.querySelectorAll('time[datetime]') as HTMLElement[]).forEach((t) => {
+        const dt = t.getAttribute('datetime');
+        if (!dt) return;
+        const rel = formatRelative(dt);
+        t.textContent = rel;
+        // Keep original hover text as full ISO timestamp
+        t.title = new Date(dt).toLocaleString();
+      });
+    };
+
+    updateTimes();
+    const timeInterval = setInterval(updateTimes, 30_000);
+
+    // Scroll listener to update at-bottom status
+    el.addEventListener('scroll', () => updateIsAtBottom());
+
+    // MutationObserver to detect appended messages
+    let loadingOlder = false;
+    const mo = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.addedNodes && m.addedNodes.length > 0) {
+          if (isAtBottom) {
+            // Auto-scroll
+            el.scrollTop = el.scrollHeight;
+            // Optionally mark as read
+            this.pushEvent('messages_read', {});
+          } else {
+            // Show notifier
+            notifier.style.display = 'block';
+          }
+        }
+      }
+    });
+
+    mo.observe(el, { childList: true, subtree: false });
+
+    // Top sentinel for loading older messages
+    const topSentinel = document.createElement('div');
+    topSentinel.style.width = '100%';
+    topSentinel.style.height = '1px';
+    topSentinel.id = 'load-older-sentinel';
+    // Insert sentinel at the top
+    if (el.firstChild) el.insertBefore(topSentinel, el.firstChild);
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && !loadingOlder) {
+          // Determine first message id
+          const firstMsg = el.querySelector(':scope > [id^="message-"]');
+          if (!firstMsg) return;
+          const id = firstMsg.id.replace('message-', '');
+          loadingOlder = true;
+          this.pushEvent('load_older', { before_id: id });
+
+          // Allow subsequent loads after short delay (server will respond with older messages)
+          setTimeout(() => (loadingOlder = false), 800);
+        }
+      });
+    }, { root: el, threshold: 0.1 });
+
+    io.observe(topSentinel);
+
+    notifier.addEventListener('click', () => {
+      el.scrollTop = el.scrollHeight;
+      notifier.style.display = 'none';
+      // Notify server that user has read the messages
+      this.pushEvent('messages_read', {});
+      updateIsAtBottom();
+    });
+
+    // Cleanup
+    this.destroy = () => {
+      mo.disconnect();
+      io.disconnect && io.disconnect();
+      notifier.remove();
+      topSentinel.remove();
+      clearInterval(timeInterval);
+    };
+  },
+  updated() {
+    // No-op here; MutationObserver handles appends
+  },
+  destroyed() {
+    if (typeof this.destroy === 'function') this.destroy();
+  }
+};
+
 // Desktop Window Hook (placeholder to prevent missing hook errors)
 export const DesktopWindow = {
   mounted() {
@@ -201,6 +332,7 @@ const Hooks = {
   CollaborativeQuill: CollaborativeQuillHook,
   // Chat
   MessageReactions,
+  MessageList,
   ChatInput,
   // Desktop
   DesktopWindow: (window as any).DesktopWindow,

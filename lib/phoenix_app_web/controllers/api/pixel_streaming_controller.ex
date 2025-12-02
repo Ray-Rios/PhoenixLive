@@ -66,6 +66,8 @@ defmodule PhoenixAppWeb.Api.PixelStreamingController do
       :system_message, 
       %{message: message, type: type, timestamp: DateTime.utc_now()}
     })
+    # Also publish to Redis so other pods receive it
+    PhoenixApp.RedisPubSub.publish("game:global", {:system_message, %{message: message, type: type, timestamp: DateTime.utc_now()}})
     
     json(conn, %{success: true, message: "Message broadcasted"})
   end

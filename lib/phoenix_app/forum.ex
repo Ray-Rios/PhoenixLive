@@ -1,3 +1,4 @@
+  
 defmodule PhoenixApp.Forum do
   @moduledoc """
   The Forum context for Discord-like messaging functionality.
@@ -53,7 +54,8 @@ defmodule PhoenixApp.Forum do
     |> Repo.insert()
     |> case do
       {:ok, channel} ->
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_created, channel})
+        pubsub_broadcast("chat:channels", {:channel_created, channel})
+        Task.start(fn -> PhoenixApp.Audit.log(channel.created_by_id || channel.owner_id, "create_channel", "channel", channel.id, %{name: channel.name}) end)
         {:ok, channel}
       error -> error
     end
@@ -65,7 +67,7 @@ defmodule PhoenixApp.Forum do
     |> Repo.update()
     |> case do
       {:ok, updated_channel} ->
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_updated, updated_channel})
+        pubsub_broadcast("chat:channels", {:channel_updated, updated_channel})
         {:ok, updated_channel}
       error -> error
     end
@@ -107,7 +109,8 @@ defmodule PhoenixApp.Forum do
         case Repo.delete(channel) do
           {:ok, deleted_channel} ->
             # 7. Broadcast channel deletion
-            Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "chat:channels", {:channel_deleted, deleted_channel.id})
+            pubsub_broadcast("chat:channels", {:channel_deleted, deleted_channel.id})
+            Task.start(fn -> PhoenixApp.Audit.log(nil, "delete_channel", "channel", deleted_channel.id, %{name: deleted_channel.name}) end)
             
             # 8. Queue background job to delete files and channel directories from filesystem
             Task.start(fn ->
@@ -220,7 +223,7 @@ defmodule PhoenixApp.Forum do
       "is_user_created" => true
     })
 
-    Repo.transaction(fn ->
+    case Repo.transaction(fn ->
       # Create the channel
       channel = case create_channel(attrs) do
         {:ok, channel} -> channel
@@ -239,7 +242,14 @@ defmodule PhoenixApp.Forum do
         {:ok, _member} -> channel
         {:error, changeset} -> Repo.rollback(changeset)
       end
-    end)
+    end) do
+      {:ok, channel} ->
+        Task.start(fn -> PhoenixApp.Audit.log(user.id, "create_user_channel", "channel", channel.id, %{name: channel.name}) end)
+        {:ok, channel}
+
+      other ->
+        other
+    end
   end
 
   # Messages
@@ -267,6 +277,50 @@ defmodule PhoenixApp.Forum do
     end)
     # messages are returned ordered oldest -> newest already (ascending inserted_at)
     |> Enum.map(& &1)
+  end
+
+  @doc "Cursor based pagination: load messages before a given message id (older messages)"
+  def list_messages_cursor(channel_id, opts \\ %{}) do
+    limit = opts[:limit] || 50
+    before_id = opts[:before]
+
+    base_query = from(m in Message,
+      join: u in assoc(m, :user),
+      where: m.channel_id == ^channel_id,
+      where: is_nil(u.role) or u.role != "banned",
+      preload: [:user, :reactions, :thread, attachments: :user]
+    )
+
+    query =
+      if before_id do
+        case Repo.get(Message, before_id) do
+          nil -> from(m in base_query, order_by: [asc: m.inserted_at], limit: ^limit)
+          %Message{inserted_at: ts} ->
+            from(m in base_query, where: m.inserted_at < ^ts, order_by: [desc: m.inserted_at], limit: ^limit)
+        end
+      else
+        from(m in base_query, order_by: [asc: m.inserted_at], limit: ^limit)
+      end
+
+    results = Repo.all(query)
+
+    results = case before_id do
+      nil -> results
+      _ -> Enum.reverse(results)
+    end
+
+    # Filter attachments uploaded by banned users identically to list_messages
+    Enum.map(results, fn m ->
+      filtered_attachments = Enum.filter(m.attachments || [], fn att ->
+        case att do
+          %{user_id: nil} -> true
+          %{user: u} when not is_nil(u) -> is_nil(u.role) or u.role != "banned"
+          _ -> true
+        end
+      end)
+
+      %{m | attachments: filtered_attachments}
+    end)
   end
 
   def list_messages_by_room(room_id, limit \\ 50) do
@@ -297,20 +351,43 @@ defmodule PhoenixApp.Forum do
 
   def create_message(user, channel_id, attrs \\ %{}) do
     # Defensive check - disallow banned users from creating messages
-    if user && Map.get(user, :role) == "banned" do
-      {:error, :banned}
+    result = cond do
+      user && Map.get(user, :role) == "banned" ->
+        {:error, :banned}
+
+      user && not (Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"]) ->
+        case PhoenixApp.RateLimiter.check_and_increment_rate("chat:messages:#{user.id}", 30, 60_000) do
+          :ok -> :ok
+          {:error, :rate_limited, _reset} -> {:error, :rate_limited}
+        end
+
+      true -> :ok
+    end
+
+    # Stop early on errors
+    if result != :ok do
+      result
     else
-      %Message{}
-      |> Message.changeset(attrs)
-      |> Ecto.Changeset.put_assoc(:user, user)
-      |> Ecto.Changeset.put_change(:channel_id, channel_id)
-      |> Repo.insert()
-      |> case do
-        {:ok, message} ->
-          message = Repo.preload(message, [:user, :reactions, :attachments])
-          Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{channel_id}", {:new_message, message})
-          {:ok, message}
-        error -> error
+      # Ensure user is allowed to post into the channel
+      channel = get_channel(channel_id)
+      if not can_post_in_channel?(user, channel) do
+        {:error, :forbidden}
+      else
+        # After checks, proceed to create message
+        %Message{}
+        |> Message.changeset(attrs)
+        |> Ecto.Changeset.put_assoc(:user, user)
+        |> Ecto.Changeset.put_change(:channel_id, channel_id)
+        |> Repo.insert()
+        |> case do
+          {:ok, message} ->
+            # Audit log: message created
+            Task.start(fn -> PhoenixApp.Audit.log(user.id, "create_message", "message", message.id, %{channel_id: channel_id}) end)
+            message = Repo.preload(message, [:user, :reactions, :attachments])
+            pubsub_broadcast("channel:#{channel_id}", {:new_message, message})
+            {:ok, message}
+          error -> error
+        end
       end
     end
   end
@@ -338,7 +415,7 @@ defmodule PhoenixApp.Forum do
     |> case do
       {:ok, updated_message} ->
         updated_message = Repo.preload(updated_message, [:user, :reactions, :attachments])
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{updated_message.channel_id}", {:message_updated, updated_message})
+        pubsub_broadcast("channel:#{updated_message.channel_id}", {:message_updated, updated_message})
         {:ok, updated_message}
       error -> error
     end
@@ -348,7 +425,8 @@ defmodule PhoenixApp.Forum do
     # Preload attachments so we can clean up files
     message = Repo.preload(message, [:attachments])
 
-    Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:message_deleted, message.id})
+    pubsub_broadcast("channel:#{message.channel_id}", {:message_deleted, message.id})
+    Task.start(fn -> PhoenixApp.Audit.log(nil, "delete_message", "message", message.id, %{channel_id: message.channel_id}) end)
 
     # Collect attachment paths for cleanup before deletion
     attachment_paths = message.attachments |> Enum.map(fn att -> att.file end) |> Enum.filter(& &1)
@@ -395,7 +473,7 @@ defmodule PhoenixApp.Forum do
       {:ok, attachment} ->
         # Broadcast message updated so clients can refresh attachments
         updated = get_message!(message.id)
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:message_updated, updated})
+        pubsub_broadcast("channel:#{message.channel_id}", {:message_updated, updated})
         {:ok, attachment}
       error -> error
     end
@@ -420,7 +498,7 @@ defmodule PhoenixApp.Forum do
     end
 
     if message do
-      Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:message_updated, get_message!(message.id)})
+      pubsub_broadcast("channel:#{message.channel_id}", {:message_updated, get_message!(message.id)})
     end
 
     result
@@ -435,7 +513,7 @@ defmodule PhoenixApp.Forum do
         |> Repo.insert()
         |> case do
           {:ok, reaction} ->
-            Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:reaction_added, reaction})
+            pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
             {:ok, reaction}
           error -> error
         end
@@ -448,7 +526,7 @@ defmodule PhoenixApp.Forum do
     case Repo.get_by(Reaction, message_id: message.id, user_id: user.id, emoji: emoji) do
       nil -> {:error, :not_found}
       reaction ->
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{message.channel_id}", {:reaction_removed, reaction})
+        pubsub_broadcast("channel:#{message.channel_id}", {:reaction_removed, reaction})
         Repo.delete(reaction)
     end
   end
@@ -554,6 +632,14 @@ defmodule PhoenixApp.Forum do
     member
     |> ChannelMember.changeset(attrs)
     |> Repo.update()
+  end
+
+  @doc "Mark messages read for a user in a channel (set last_read_message_id and last_seen_at)."
+  def mark_channel_messages_read(user_id, channel_id, last_message_id) do
+    case get_channel_member(channel_id, user_id) do
+      nil -> {:error, :not_member}
+      member -> update_channel_member(member, %{last_read_message_id: last_message_id, last_seen_at: DateTime.utc_now()})
+    end
   end
 
   def remove_channel_member(channel_id, user_id) do
@@ -890,7 +976,7 @@ defmodule PhoenixApp.Forum do
     |> Repo.insert()
     |> case do
       {:ok, session} ->
-        Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{session.channel_id}", {:stream_started, session})
+        pubsub_broadcast("channel:#{session.channel_id}", {:stream_started, session})
         {:ok, session}
       error -> error
     end
@@ -905,7 +991,7 @@ defmodule PhoenixApp.Forum do
         |> Repo.update()
         |> case do
           {:ok, updated_session} ->
-            Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "channel:#{session.channel_id}", :stream_ended)
+            pubsub_broadcast("channel:#{session.channel_id}", :stream_ended)
             {:ok, updated_session}
           error -> error
         end
@@ -939,5 +1025,15 @@ defmodule PhoenixApp.Forum do
       preload: [:streamer]
     )
     |> Repo.all()
+  end
+
+  # Wrapper to broadcast locally (Phoenix.PubSub) and to Redis-based pubsub when enabled
+  defp pubsub_broadcast(topic, message) do
+    Phoenix.PubSub.broadcast(PhoenixApp.PubSub, topic, message)
+    if Application.get_env(:phoenix_app, :enable_redis, false) do
+      PhoenixApp.RedisPubSub.publish(topic, message)
+    else
+      :ok
+    end
   end
 end

@@ -14,9 +14,12 @@ defmodule PhoenixApp.Application do
     # Create ETS table for Y.js collaborative editing documents
     :ets.new(:yjs_documents, [:set, :public, :named_table])
     
+    # Configure PubSub - just use standard adapter, Redis bridging is handled separately
+    pubsub_child = {Phoenix.PubSub, name: PhoenixApp.PubSub}
+
     children = [
       PhoenixApp.Repo,
-      {Phoenix.PubSub, name: PhoenixApp.PubSub},
+      pubsub_child,
       PhoenixAppWeb.Presence,
       {Finch, name: PhoenixApp.Finch},
       PhoenixApp.UserSession,
@@ -44,7 +47,9 @@ defmodule PhoenixApp.Application do
         %{
           id: Redix.PubSub,
           start: {Redix.PubSub, :start_link, [redis_url(), [name: :redix_pubsub]]}
-        }
+        },
+        # Start GenServer that listens for Redis pubsub messages and forwards into Phoenix.PubSub
+        PhoenixApp.RedisPubSub
       ]
     else
       []

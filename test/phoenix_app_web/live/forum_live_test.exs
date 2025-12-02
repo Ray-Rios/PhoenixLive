@@ -140,4 +140,54 @@ defmodule PhoenixAppWeb.ForumLiveTest do
     html2 = render(view2)
     refute html2 =~ "Delete"  # no delete offered for #general even for admin
   end
+
+  test "messages_read event updates channel_member last_read_message_id" do
+    {:ok, user} = Accounts.create_user(user_attrs("reader@example.com", "reader"))
+    {:ok, channel} = Forum.create_channel(%{"name" => "reading-room", "owner_id" => user.id, "created_by_id" => user.id})
+
+    # Ensure user is a member (owner) and create a message
+    {:ok, member} = Forum.create_channel_member(%{channel_id: channel.id, user_id: user.id, role: "owner"})
+
+    msg = %PhoenixApp.Forum.Message{content: "r1", user_id: user.id, channel_id: channel.id} |> Repo.insert!()
+
+    conn = build_conn() |> init_test_session(%{"user_id" => user.id})
+    {:ok, view, _} = live(conn, "/forum/#{channel.id}")
+
+    # Simulate client telling server it's read up to the last message
+    push_event(view, "messages_read", %{})
+
+    # Reload member from DB
+    updated = Forum.get_channel_member(channel.id, user.id)
+    assert updated.last_read_message_id == msg.id
+    assert not is_nil(updated.last_seen_at)
+  end
+
+  test "cursor pagination loads older messages" do
+    {:ok, user} = Accounts.create_user(user_attrs("pager@example.com", "pager"))
+    {:ok, channel} = Forum.create_channel(%{"name" => "paged-room", "owner_id" => user.id, "created_by_id" => user.id})
+
+    # Create 120 messages (so default 50 will show and older remain)
+    for i <- 1..120 do
+      %PhoenixApp.Forum.Message{content: "m#{i}", user_id: user.id, channel_id: channel.id, inserted_at: DateTime.add(~U[2025-12-01 00:00:00Z], i, :second)} |> Repo.insert!()
+    end
+
+    conn = build_conn() |> init_test_session(%{"user_id" => user.id})
+    {:ok, view, _} = live(conn, "/forum/#{channel.id}")
+
+    html = render(view)
+    # The initial set should include the most recent messages, ensure one of the newest exists
+    assert html =~ "m120"
+
+    # Find the first message rendered in the page (the oldest of the initial window)
+    # Simulate client requesting older messages with before_id as the first message id in the DOM
+    first_msg = Forum.list_messages(channel.id, 50) |> List.first()
+    assert first_msg != nil
+
+    # Ask server to load older messages
+    push_event(view, "load_older", %{"before_id" => first_msg.id})
+
+    # After loading older, the oldest message should be present
+    html2 = render(view)
+    assert html2 =~ "m1"
+  end
 end

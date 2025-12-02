@@ -38,7 +38,10 @@ defmodule PhoenixAppWeb.ForumLive do
         current_channel: default_channel,
         messages: Forum.list_messages(default_channel.id),
         current_message: "",
-        online_users: %{},
+        online_users: [],
+        # last read id and last seen timestamp used to display read markers
+        last_read_message_id: nil,
+        last_seen_at: nil,
         typing_users: MapSet.new(),
         show_create_channel_form: false,
         channel_form: to_form(Forum.change_channel(%Forum.Channel{})),
@@ -64,8 +67,17 @@ defmodule PhoenixAppWeb.ForumLive do
         auto_upload: false  # Manual upload control
       )
       
-      # Subscribe to the default channel
+      # Subscribe to the default channel and presence topic
       PubSub.subscribe(PhoenixApp.PubSub, "channel:#{default_channel.id}")
+      PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{default_channel.id}")
+
+      # Track presence for this LiveView process (connected sessions will be tracked)
+      if connected?(socket) and user do
+        PhoenixAppWeb.Presence.track(self(), "presence:channel:#{default_channel.id}", user.id, %{
+          name: user.name || user.email,
+          online_at: DateTime.utc_now()
+        })
+      end
 
       {:ok, socket}
     else
@@ -83,6 +95,11 @@ defmodule PhoenixAppWeb.ForumLive do
     
     if has_access do
       messages = Forum.list_messages(channel_id)
+      # populate last_read_message_id if we have a channel membership record
+      last_read = case Forum.get_channel_member(channel_id, user && user.id) do
+        %_{} = m -> m.last_read_message_id
+        _ -> nil
+      end
       active_stream = Forum.get_active_stream(channel_id)
       
       # Unsubscribe from previous channel
@@ -92,10 +109,19 @@ defmodule PhoenixAppWeb.ForumLive do
       
       # Subscribe to new channel
       PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel_id}")
+      PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel_id}")
+
+      if connected?(socket) and user do
+        PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel_id}", user.id, %{
+          name: user.name || user.email,
+          online_at: DateTime.utc_now()
+        })
+      end
       
       {:noreply, assign(socket,
         current_channel: channel,
         messages: messages,
+        last_read_message_id: last_read,
         active_stream: active_stream,
         page_title: "Chat - #{channel.name}"
       )}
@@ -116,10 +142,23 @@ defmodule PhoenixAppWeb.ForumLive do
       channel = socket.assigns.current_channel
       messages = Forum.list_messages(channel.id)
       
-      # Subscribe to channel updates
+      # Subscribe to channel updates and presence updates
       PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel.id}")
+      PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel.id}")
+
+      if connected?(socket) and socket.assigns.current_user do
+        PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel.id}", socket.assigns.current_user.id, %{
+          name: socket.assigns.current_user.name || socket.assigns.current_user.email,
+          online_at: DateTime.utc_now()
+        })
+      end
       
-      {:noreply, assign(socket, messages: messages)}
+      last_read = case Forum.get_channel_member(channel.id, socket.assigns.current_user && socket.assigns.current_user.id) do
+        %_{} = m -> m.last_read_message_id
+        _ -> nil
+      end
+
+      {:noreply, assign(socket, messages: messages, last_read_message_id: last_read)}
     else
       {:noreply, socket}
     end
@@ -161,6 +200,9 @@ defmodule PhoenixAppWeb.ForumLive do
             end)
 
             {:noreply, assign(socket, current_message: "")}
+
+          {:error, :rate_limited} ->
+            {:noreply, put_flash(socket, :error, "You're sending messages too quickly — slow down a bit.")}
 
           {:error, _changeset} ->
             {:noreply, put_flash(socket, :error, "Failed to send message")}
@@ -787,6 +829,33 @@ defmodule PhoenixAppWeb.ForumLive do
     {:noreply, socket}
   end
 
+  def handle_event("messages_read", _params, socket) do
+    user = socket.assigns.current_user
+    channel = socket.assigns.current_channel
+    last = List.last(socket.assigns.messages || [])
+
+    if user && channel && last do
+      _ = Forum.mark_channel_messages_read(user.id, channel.id, last.id)
+      {:noreply, assign(socket, :last_read_message_id, last.id)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("load_older", %{"before_id" => before_id}, socket) do
+    channel = socket.assigns.current_channel
+
+    if channel && before_id do
+      older = Forum.list_messages_cursor(channel.id, %{before: before_id, limit: 50})
+
+      # Merge older messages at beginning while preserving order and uniqueness
+      messages = (older ++ socket.assigns.messages) |> Enum.uniq_by(& &1.id)
+      {:noreply, assign(socket, messages: messages)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("cancel_edit", _params, socket) do
     {:noreply, assign(socket, editing_message_id: nil, editing_message_content: "")}
   end
@@ -911,6 +980,44 @@ defmodule PhoenixAppWeb.ForumLive do
     end
   end
 
+  def handle_info(%{event: "presence_diff", payload: _diff} = _msg, socket) do
+    # When presence changes, refresh the presence list for current channel
+    channel = socket.assigns.current_channel
+    topic = "presence:channel:#{channel.id}"
+    presences = PhoenixAppWeb.Presence.list(topic)
+
+    # Transform presences into a list of users with metadata
+    online_users =
+      presences
+      |> Enum.map(fn {user_id, meta} ->
+        # meta may have :metas list, take the most recent
+        metas = Map.get(meta, :metas, [])
+        latest = List.last(metas) || %{}
+        %{id: user_id, name: latest.name, online_at: latest.online_at}
+      end)
+
+    {:noreply, assign(socket, online_users: online_users)}
+  end
+
+  # Phoenix.Presence broadcasts may arrive wrapped as Socket.Broadcast structs
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff", topic: topic} = _b, socket) do
+    # Only handle presence changes for our current channel
+    if String.starts_with?(topic, "presence:channel:") do
+      presences = PhoenixAppWeb.Presence.list(topic)
+      online_users =
+        presences
+        |> Enum.map(fn {user_id, meta} ->
+          metas = Map.get(meta, :metas, [])
+          latest = List.last(metas) || %{}
+          %{id: user_id, name: latest.name, online_at: latest.online_at}
+        end)
+
+      {:noreply, assign(socket, online_users: online_users)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info({:stop_typing, user_id}, socket) do
     typing_users = MapSet.delete(socket.assigns.typing_users, user_id)
     {:noreply, assign(socket, typing_users: typing_users)}
@@ -938,7 +1045,7 @@ defmodule PhoenixAppWeb.ForumLive do
                 <div class="flex items-center justify-between mb-2">
                   <h2 class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Public Channels</h2>
                   <div class="flex items-center gap-2">
-                    <button phx-click={if @current_user && (Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin","gm","editor"], do: "show_create_channel", else: "show_create_user_channel")} class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                    <button phx-click={if @current_user && (Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin","gm","editor"]), do: "show_create_channel", else: "show_create_user_channel"} class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                       <span>Create new channel</span>
                     </button>
@@ -988,6 +1095,20 @@ defmodule PhoenixAppWeb.ForumLive do
               <%= if @current_channel.description do %>
                 <p class="text-sm text-gray-500 dark:text-gray-400 truncate"><%= @current_channel.description %></p>
               <% end %>
+                  <div class="mt-1 flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400">
+                  <div class="flex items-center gap-2">
+                  <svg class="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" /></svg>
+                  <span><%= Enum.count(assigns[:online_users] || []) %> online</span>
+                </div>
+                <div class="flex items-center -space-x-1">
+                  <%= for user <- Enum.take(assigns[:online_users] || [], 5) do %>
+                    <div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 border border-white text-[10px] flex items-center justify-center text-gray-800 dark:text-gray-200" title={user.name}><%= String.first(user.name || "?") %></div>
+                  <% end %>
+                  <%= if Enum.count(assigns[:online_users] || []) > 5 do %>
+                    <div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 border border-white text-[10px] flex items-center justify-center text-gray-800 dark:text-gray-200">+<%= Enum.count(assigns[:online_users] || []) - 5 %></div>
+                  <% end %>
+                </div>
+              </div>
             </div>
             
             <div class="flex items-center space-x-2 ml-4">
@@ -1028,7 +1149,7 @@ defmodule PhoenixAppWeb.ForumLive do
             </div>
           </div>
 
-        <div id="messages" class="flex-1 p-4 overflow-y-auto dark-glass" phx-update="append">
+        <div id="messages" class="flex-1 p-4 overflow-y-auto dark-glass" phx-hook="MessageList">
           <%= for message <- @messages do %>
             <div id={"message-#{message.id}"} class="flex items-start mb-4 group">
               <div class="mr-4">
@@ -1037,7 +1158,10 @@ defmodule PhoenixAppWeb.ForumLive do
               <div class="flex-1">
                 <div class="flex items-baseline">
                   <span class="font-bold text-gray-800 dark:text-gray-200 mr-2"><%= message.user.name || message.user.email %></span>
-                  <span class="text-xs text-gray-500 dark:text-gray-400"><%= Calendar.strftime(message.inserted_at, "%b %d %Y %I:%M %p") %></span>
+                  <time datetime={message.inserted_at} class="text-xs text-gray-500 dark:text-gray-400"><%= Calendar.strftime(message.inserted_at, "%b %d %Y %I:%M %p") %></time>
+                  <%= if assigns[:last_read_message_id] && message.id == assigns[:last_read_message_id] do %>
+                    <span class="text-xs text-green-500 ml-2">✓ read</span>
+                  <% end %>
                   
                   <%!-- Message actions (edit/delete) - visible on hover --%>
                   <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">

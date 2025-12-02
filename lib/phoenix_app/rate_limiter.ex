@@ -62,6 +62,28 @@ defmodule PhoenixApp.RateLimiter do
     GenServer.call(__MODULE__, :list_blocked)
   end
 
+  @doc "Check and increment a sliding-window counter stored in ETS for a given key. Returns :ok or {:error, :rate_limited, reset_time_ms}."
+  def check_and_increment_rate(key, max_attempts, window_ms) do
+    now = System.system_time(:millisecond)
+    case :ets.lookup(:rate_limit_table, key) do
+      [] ->
+        :ets.insert(:rate_limit_table, {key, [now]})
+        :ok
+      [{^key, timestamps}] ->
+        cutoff = now - window_ms
+        recent = Enum.filter(timestamps, &(&1 > cutoff))
+
+        if length(recent) >= max_attempts do
+          oldest = Enum.min(recent)
+          reset_time = oldest + window_ms
+          {:error, :rate_limited, reset_time}
+        else
+          :ets.insert(:rate_limit_table, {key, [now | recent]})
+          :ok
+        end
+    end
+  end
+
   # Server Callbacks
 
   @impl true

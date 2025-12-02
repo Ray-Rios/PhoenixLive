@@ -171,6 +171,7 @@ defmodule PhoenixAppWeb.Router do
     pipe_through :quiet_health
     
     get "/health", HealthController, :check
+    get "/uploads/signed", UploadController, :signed_download
   end
 
   # --------------------

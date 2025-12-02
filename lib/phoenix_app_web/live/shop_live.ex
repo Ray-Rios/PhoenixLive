@@ -78,15 +78,35 @@ defmodule PhoenixAppWeb.ShopLive do
     user = socket.assigns.current_user
     
     if user do
-      product = Commerce.get_product!(product_id)
+      # Support dummy in-memory products used for demo mode (ids like "1","2")
+      product = case Enum.find(socket.assigns.products || [], fn p -> to_string(p.id) == to_string(product_id) end) do
+        nil ->
+          # Try to only query the database when the product_id looks like a UUID
+          case Ecto.UUID.cast(product_id) do
+            {:ok, _uuid} ->
+              try do
+                Commerce.get_product!(product_id)
+              rescue
+                Ecto.Query.CastError -> nil
+                Ecto.NoResultsError -> nil
+              end
+            :error ->
+              nil
+          end
+        found -> found
+      end
       cart = Commerce.get_or_create_cart(user)
       
-      case Commerce.add_to_cart(cart, product) do
+      if product == nil do
+        {:noreply, put_flash(socket, :error, "Product not found")}
+      else
+        case Commerce.add_to_cart(cart, product) do
         {:ok, _cart_item} ->
           {:noreply, put_flash(socket, :info, "#{product.name} added to cart")}
         
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to add item to cart")}
+      end
       end
     else
       {:noreply, redirect(socket, to: "/login")}

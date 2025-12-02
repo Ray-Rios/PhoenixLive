@@ -13,6 +13,8 @@ defmodule PhoenixApp.Forum.ChannelMember do
     field :nickname, :string
     field :is_muted, :boolean, default: false
     field :is_banned, :boolean, default: false
+    field :last_read_message_id, :binary_id
+    field :last_seen_at, :utc_datetime
     field :joined_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
@@ -20,7 +22,7 @@ defmodule PhoenixApp.Forum.ChannelMember do
 
   def changeset(member, attrs) do
     member
-    |> cast(attrs, [:channel_id, :user_id, :role, :nickname, :is_muted, :is_banned, :joined_at])
+    |> cast(attrs, [:channel_id, :user_id, :role, :nickname, :is_muted, :is_banned, :joined_at, :last_read_message_id, :last_seen_at])
     |> validate_required([:channel_id, :user_id])
     |> validate_inclusion(:role, ["owner", "moderator", "member", "banned"])
     |> unique_constraint([:channel_id, :user_id])
