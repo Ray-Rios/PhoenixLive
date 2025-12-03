@@ -31,7 +31,8 @@ defmodule PhoenixApp.Forum.ChannelMember do
 
   defp maybe_set_joined_at(changeset) do
     if is_nil(get_field(changeset, :joined_at)) do
-      put_change(changeset, :joined_at, DateTime.utc_now())
+      # Truncate to seconds so Ecto's :utc_datetime field requirements are satisfied
+      put_change(changeset, :joined_at, DateTime.truncate(DateTime.utc_now(), :second))
     else
       changeset
     end

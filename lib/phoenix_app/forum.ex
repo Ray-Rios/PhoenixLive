@@ -638,7 +638,7 @@ defmodule PhoenixApp.Forum do
   def mark_channel_messages_read(user_id, channel_id, last_message_id) do
     case get_channel_member(channel_id, user_id) do
       nil -> {:error, :not_member}
-      member -> update_channel_member(member, %{last_read_message_id: last_message_id, last_seen_at: DateTime.utc_now()})
+      member -> update_channel_member(member, %{last_read_message_id: last_message_id, last_seen_at: DateTime.truncate(DateTime.utc_now(), :second)})
     end
   end
 
