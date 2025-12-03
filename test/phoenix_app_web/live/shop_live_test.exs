@@ -63,7 +63,7 @@ defmodule PhoenixAppWeb.ShopLiveTest do
       })
 
       conn = conn |> init_test_session(%{"user_id" => user.id})
-      {:ok, view, html} = live(conn, ~p"/shop/#{product.id}")
+      {:ok, view, html} = live(conn, ~p"/shop/product/#{product.id}")
 
       assert html =~ product.name
       assert html =~ product.description

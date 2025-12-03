@@ -16,11 +16,11 @@ spec:
           - name: MIX_ENV
             value: test
           - name: DATABASE_URL
-            value: "postgresql://postgres:postgres@postgres:5432/phoenixapp_test"
+            value: "postgresql://postgres:postgres@db:5432/phoenixapp_test"
           - name: REDIS_URL
             value: "redis://redis:6379/0"
           - name: DB_HOST
-            value: "postgres"
+            value: "db"
           - name: DB_PORT
             value: "5432"
           - name: DB_NAME
@@ -29,6 +29,13 @@ spec:
             value: "https://github.com/ray-rios/phoenixlive.git"
           - name: GIT_REF
             value: "master"
+          - name: SECRET_KEY_BASE
+            # Must be at least 64 bytes for cookie signing; tests rely on Phoenix session
+            value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          - name: LIVE_VIEW_SIGNING_SALT
+            value: "test_live_view_salt"
+          - name: GUARDIAN_SECRET_KEY
+            value: "test_guardian_secret"
         command: ["/bin/sh", "-lc"]
         args:
           - |
