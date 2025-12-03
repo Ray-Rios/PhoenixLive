@@ -1,18 +1,12 @@
 defmodule PhoenixAppWeb.ForumLiveTest do
-  use ExUnit.Case, async: false
+  use PhoenixAppWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
-  import Phoenix.ConnTest
 
   alias PhoenixApp.{Accounts, Forum, Repo}
 
   @endpoint PhoenixAppWeb.Endpoint
 
-  setup do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
-    Ecto.Adapters.SQL.Sandbox.mode(Repo, {:shared, self()})
-
-    :ok
-  end
+  # ConnCase already checks out the DB and sets up shared mode for non-async tests.
 
   defp user_attrs(email, name) do
     %{
