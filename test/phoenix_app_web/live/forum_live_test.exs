@@ -185,7 +185,8 @@ defmodule PhoenixAppWeb.ForumLiveTest do
     # Request older messages via the context helper and assert expected results
     older = Forum.list_messages_cursor(channel.id, %{before: first_msg.id, limit: 50})
 
-    # After loading older, the oldest message (m1) should be in the result set
-    assert Enum.any?(older, fn m -> m.content == "m1" end)
+    # After loading older from the latest window (m71..m120), we expect
+    # the previous page to include m21..m70, so assert that m21 is present.
+    assert Enum.any?(older, fn m -> m.content == "m21" end)
   end
 end
