@@ -40,11 +40,14 @@ defmodule PhoenixAppWeb.Api.ApiAuthControllerTest do
     test "returns conflict when email already exists", %{conn: conn} do
       email = "duplicate#{System.unique_integer([:positive])}@example.com"
       
-      {:ok, _user} = Accounts.create_user(%{
+      {:ok, user} = Accounts.create_user(%{
         email: email,
         name: "First User",
         password: "Pass123!"
       })
+
+      # Verify the existing account so the registration endpoint should return conflict
+      {:ok, _verified} = Accounts.verify_user_email_direct(user)
 
       params = %{"email" => email, "password" => "Pass123!", "name" => "Second User"}
       conn = post(conn, ~p"/api/auth/register", params)
