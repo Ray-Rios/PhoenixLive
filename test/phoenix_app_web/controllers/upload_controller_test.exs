@@ -1,5 +1,5 @@
 defmodule PhoenixAppWeb.UploadControllerTest do
-  use Phoenix.ConnTest, async: true
+  use PhoenixAppWeb.ConnCase, async: true
   alias PhoenixApp.Uploads
   alias PhoenixApp.Accounts
 
