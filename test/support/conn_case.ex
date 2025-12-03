@@ -20,11 +20,14 @@ defmodule PhoenixAppWeb.ConnCase do
       import Ecto.Changeset
       import Ecto.Query
 
-      # In older Phoenix versions tests imported Router.Helpers or aliased Routes.
-      # This project uses Phoenix.VerifiedRoutes / `helpers: false` in the router
-      # so the generated Router.Helpers module may not exist at compile time.
-      # Tests should prefer the ~p sigil or use explicit paths instead of
-      # importing a missing Router.Helpers module here.
+      # Provide LiveView testing helpers automatically for ConnCase users
+      import Phoenix.LiveViewTest
+
+      # Include VerifiedRoutes so tests can use the ~p sigil and Routes without
+      # relying on a generated Router.Helpers module. This mirrors the app
+      # setup (unquote(verified_routes())) so tests and app code use the same
+      # route helpers.
+      unquote(PhoenixAppWeb.verified_routes())
 
       @endpoint PhoenixAppWeb.Endpoint
     end
