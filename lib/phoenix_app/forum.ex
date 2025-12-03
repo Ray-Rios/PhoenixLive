@@ -258,7 +258,10 @@ defmodule PhoenixApp.Forum do
       join: u in assoc(m, :user),
       where: m.channel_id == ^channel_id,
       where: is_nil(u.role) or u.role != "banned",
-      order_by: [asc: m.inserted_at],
+      # Load the most recent N messages (desc), then reverse so callers receive
+      # chronological order (oldest -> newest). This makes the initial view
+      # show the latest window of messages while preserving ascending ordering
+      order_by: [desc: m.inserted_at],
       limit: ^limit,
       preload: [:user, :reactions, :thread, attachments: :user]
     )
@@ -424,7 +427,7 @@ defmodule PhoenixApp.Forum do
   def delete_message(%Message{} = message) do
     # Preload attachments so we can clean up files
     message = Repo.preload(message, [:attachments])
-
+    # Repo.all returns the results newest -> oldest (desc), reverse to oldest -> newest
     pubsub_broadcast("channel:#{message.channel_id}", {:message_deleted, message.id})
     Task.start(fn -> PhoenixApp.Audit.log(nil, "delete_message", "message", message.id, %{channel_id: message.channel_id}) end)
 

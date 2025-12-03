@@ -19,7 +19,7 @@ defmodule PhoenixAppWeb.ForumLive do
       
       # For private channels, filter to only those the user can access
       visible_private_channels = Enum.filter(all_private_channels_unfiltered, fn ch ->
-        can_access_channel?(user, ch)
+        can_access_channel?(ch, user)
       end)
       
       # Sort channels
@@ -505,7 +505,7 @@ defmodule PhoenixAppWeb.ForumLive do
           # Refresh channel lists
           all_channels = Forum.list_channels()
           {public_channels, all_private_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
-          private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(user, ch) end)
+          private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(ch, user) end)
 
           socket = assign(socket,
             public_channels: public_channels,
@@ -747,7 +747,7 @@ defmodule PhoenixAppWeb.ForumLive do
         # Refresh channel lists
         all_channels = Forum.list_channels()
         {public_channels, all_private_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
-        private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(user, ch) end)
+        private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(ch, user) end)
         
         {:noreply,
          socket

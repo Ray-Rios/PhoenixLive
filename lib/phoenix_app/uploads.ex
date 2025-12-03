@@ -215,8 +215,10 @@ defmodule PhoenixApp.Uploads do
     expires_in = Keyword.get(opts, :expires_in, 3600)
 
     token = Phoenix.Token.sign(PhoenixAppWeb.Endpoint, "uploads", url_path)
-    # Include expires_in in query so the server validates with the same TTL
-    Path.join(["/uploads/signed?token=", URI.encode(token), "&expires_in=", to_string(expires_in)])
+
+    # Build a proper URL query (do not use Path.join for query strings).
+    # Use URI.encode_www_form/1 so token characters are safely encoded for query params.
+    "/uploads/signed?token=" <> URI.encode_www_form(token) <> "&expires_in=" <> to_string(expires_in)
   end
 
   @doc """
