@@ -278,8 +278,8 @@ defmodule PhoenixApp.Forum do
 
       %{m | attachments: filtered_attachments}
     end)
-    # messages are returned ordered oldest -> newest already (ascending inserted_at)
-    |> Enum.map(& &1)
+    # Reverse to get chronological order (oldest -> newest)
+    |> Enum.reverse()
   end
 
   @doc "Cursor based pagination: load messages before a given message id (older messages)"

@@ -44,6 +44,7 @@ defmodule PhoenixAppWeb.ForumLive do
         last_seen_at: nil,
         typing_users: MapSet.new(),
         show_create_channel_form: false,
+        creating_user_channel: false,
         channel_form: to_form(Forum.change_channel(%Forum.Channel{})),
         page_title: "Forum - #{default_channel.name}",
         show_channel_modal: false,
@@ -874,6 +875,11 @@ defmodule PhoenixAppWeb.ForumLive do
   end
 
   def handle_event("stop_propagation", _params, socket) do
+    {:noreply, socket}
+  end
+
+  # Ignore desktop window manager events in ForumLive
+  def handle_event("update_window_position", _params, socket) do
     {:noreply, socket}
   end
 
