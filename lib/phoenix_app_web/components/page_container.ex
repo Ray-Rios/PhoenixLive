@@ -58,10 +58,13 @@ defmodule PhoenixAppWeb.Components.PageContainer do
 
   def fullscreen_container(assigns) do
     ~H"""
+    <script>document.documentElement.classList.add('no-scroll');document.body.classList.add('no-scroll');</script>
     <div 
       data-responsive-content 
-      class={["flex flex-col h-screen transition-all duration-300", @class]} 
-      style="padding-top: 30px; padding-bottom: 48px;"
+      phx-hook="FullscreenContainer"
+      id="fullscreen-container"
+      class={["fixed inset-0 flex flex-col overflow-hidden transition-all duration-300", @class]} 
+      style="top: 30px; bottom: 35px;"
     >
       <%= render_slot(@inner_block) %>
     </div>

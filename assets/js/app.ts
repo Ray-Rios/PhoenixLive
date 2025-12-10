@@ -28,6 +28,7 @@ import { ProfileSettings } from "./profile_settings";
 import { ColorPicker, OpacitySlider } from "./color_picker";
 import QuillEditorHook from "./quill_editor_hook";
 import CollaborativeQuillHook from "./collaborative_quill_hook";
+import { AudioHook } from "./audio";
 
 // Import Desktop hooks
 import "./desktop";
@@ -64,7 +65,7 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
 // AutoDismissFlash Hook for individual flash management
 const AutoDismissFlash = {
-  mounted(this: { el: HTMLElement }) {
+  mounted(this: { el: HTMLElement, pushEvent: (event: string, payload: any) => void }) {
     const el = this.el;
     const delay = parseInt(el.dataset.autoDismiss || '3000');
     
@@ -81,6 +82,10 @@ const AutoDismissFlash = {
       // Fade out
       el.style.opacity = '0';
       setTimeout(() => {
+        // Push event to server to clear flash from assigns
+        if (el.dataset.key) {
+          this.pushEvent("lv:clear-flash", { key: el.dataset.key });
+        }
         // Remove from DOM
         el.remove();
       }, 300);
@@ -89,7 +94,7 @@ const AutoDismissFlash = {
     el.dataset.dismissTimeout = timeoutId.toString();
   },
   
-  updated(this: { el: HTMLElement }) {
+  updated(this: { el: HTMLElement, pushEvent: (event: string, payload: any) => void }) {
     // Reset timeout when flash content changes
     const el = this.el;
     const delay = parseInt(el.dataset.autoDismiss || '3000');
@@ -105,6 +110,10 @@ const AutoDismissFlash = {
       el.style.transform = 'translateX(120%)';
       el.style.opacity = '0';
       setTimeout(() => {
+        // Push event to server to clear flash from assigns
+        if (el.dataset.key) {
+          this.pushEvent("lv:clear-flash", { key: el.dataset.key });
+        }
         // Remove from DOM
         el.remove();
       }, 300);
@@ -132,33 +141,104 @@ const MessageReactions = {
   }
 };
 
-// Message list hook: only auto-scroll if user is at bottom, otherwise show a "New messages" notifier
+// Message list hook: auto-scroll behavior
 const MessageList = {
+  autoScrollEnabled: false,
+
   mounted() {
     const el = this.el as HTMLElement;
-    let isAtBottom = true;
-    const THRESHOLD = 24; // pixels
+    const THRESHOLD = 50; // pixels
+    this.autoScrollEnabled = el.dataset.autoScroll === "true";
+    console.log("MessageList mounted, autoScroll:", this.autoScrollEnabled);
 
-    // Create notifier element
-    const notifier = document.createElement('div');
-    notifier.className = 'fixed bottom-24 right-6 bg-blue-600 text-white px-3 py-1.5 rounded shadow cursor-pointer z-50 text-sm';
-    notifier.textContent = 'New messages';
-    notifier.style.display = 'none';
-    document.body.appendChild(notifier);
+    // Find existing elements
+    const toggleBtn = document.getElementById('auto-scroll-toggle');
+    const notifier = document.getElementById('new-messages-notifier');
 
-    const updateIsAtBottom = () => {
-      const atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= THRESHOLD;
-      isAtBottom = atBottom;
-      if (isAtBottom) {
-        notifier.style.display = 'none';
+    const scrollToBottom = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+
+    const updateButtonState = () => {
+      if (!toggleBtn) return;
+      
+      // Base classes for dark-glass look
+      const baseClasses = ['absolute', 'bottom-4', 'right-4', 'z-50', 'w-[30px]', 'h-[30px]', 'rounded-full', 'shadow-lg', 'transition-all', 'duration-300', 'flex', 'items-center', 'justify-center', 'bg-black/50', 'backdrop-blur-md', 'border', 'border-white/10', 'text-white', 'hover:bg-black/70'];
+      
+      // Reset classes
+      toggleBtn.className = baseClasses.join(' ');
+
+      if (this.autoScrollEnabled) {
+        // Locked state - Lock icon
+        toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>`;
+        toggleBtn.title = "Auto-scroll ON (Locked to bottom)";
+        // Add a subtle green glow or indicator if desired, but user asked for dark-glass lock
+        toggleBtn.classList.add('text-green-400'); 
+      } else {
+        // Unlocked state - Down Arrow
+        toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>`;
+        toggleBtn.title = "Scroll to bottom";
+        toggleBtn.classList.remove('text-green-400');
       }
     };
 
+    // Initialize button state
+    updateButtonState();
+
+    if (toggleBtn) {
+      // Remove old listeners to prevent duplicates if re-mounted (though mounted runs once per element)
+      const newBtn = toggleBtn.cloneNode(true) as HTMLElement;
+      toggleBtn.parentNode?.replaceChild(newBtn, toggleBtn);
+      
+      newBtn.addEventListener('click', () => {
+        if (this.autoScrollEnabled) {
+           // If locked, clicking unlocks it (and stays at current position)
+           this.autoScrollEnabled = false;
+           // Push event to server to update state
+           this.pushEvent("toggle_auto_scroll", { enabled: false });
+        } else {
+           // If unlocked, clicking scrolls to bottom and locks it
+           this.autoScrollEnabled = true;
+           scrollToBottom();
+           if (notifier) notifier.classList.add('hidden');
+           // Push event to server to update state
+           this.pushEvent("toggle_auto_scroll", { enabled: true });
+        }
+        updateButtonState();
+      });
+    }
+
+    if (notifier) {
+      notifier.addEventListener('click', () => {
+        scrollToBottom();
+        notifier.classList.add('hidden');
+        // Mark read
+        const lastMsg = el.querySelector(':scope > [id^="message-"]:last-child');
+        if (lastMsg) {
+           const id = lastMsg.id.replace('message-', '');
+           this.pushEvent('messages_read', { last_read_id: id });
+        }
+      });
+    }
+
     // Initial scroll-to-bottom when mounted
+    // Use requestAnimationFrame to ensure layout is ready
+    requestAnimationFrame(() => {
+      if (this.autoScrollEnabled) {
+        scrollToBottom();
+      }
+    });
+
+    // Also try again after a short delay for images
     setTimeout(() => {
-      el.scrollTop = el.scrollHeight;
-      updateIsAtBottom();
-    }, 50);
+      if (this.autoScrollEnabled) {
+        scrollToBottom();
+      }
+    }, 300);
 
     // Update relative time badges inside messages container
     const formatRelative = (d) => {
@@ -189,48 +269,72 @@ const MessageList = {
     updateTimes();
     const timeInterval = setInterval(updateTimes, 30_000);
 
-    // Scroll listener to update at-bottom status
-    el.addEventListener('scroll', () => updateIsAtBottom());
-
-    // MutationObserver to detect appended messages
-    let loadingOlder = false;
-    const mo = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.addedNodes && m.addedNodes.length > 0) {
-          if (isAtBottom) {
-            // Auto-scroll
-            el.scrollTop = el.scrollHeight;
-            // Optionally mark as read
-            this.pushEvent('messages_read', {});
-          } else {
-            // Show notifier
-            notifier.style.display = 'block';
+    // Scroll listener to mark messages as read
+    let scrollTimeout;
+    el.addEventListener('scroll', () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        const atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= THRESHOLD;
+        
+        // If user scrolls up, disable auto-scroll
+        if (!atBottom && this.autoScrollEnabled) {
+          this.autoScrollEnabled = false;
+          this.pushEvent("toggle_auto_scroll", { enabled: false });
+          updateButtonState();
+        }
+        
+        // If user scrolls to bottom, enable auto-scroll
+        if (atBottom && !this.autoScrollEnabled) {
+          this.autoScrollEnabled = true;
+          this.pushEvent("toggle_auto_scroll", { enabled: true });
+          updateButtonState();
+          
+          if (notifier) notifier.classList.add('hidden');
+          const lastMsg = el.querySelector(':scope > [id^="message-"]:last-child');
+          if (lastMsg) {
+             const id = lastMsg.id.replace('message-', '');
+             this.pushEvent('messages_read', { last_read_id: id });
           }
+        }
+      }, 200);
+    });
+
+    // MutationObserver to detect appended messages and auto-scroll
+    const mo = new MutationObserver((mutations) => {
+      // Only auto-scroll if a new MESSAGE was added, not just a status update
+      const hasNewMessages = mutations.some(m => {
+        return Array.from(m.addedNodes).some((n: any) => {
+             return n.nodeType === 1 && n.id && n.id.startsWith('message-');
+        });
+      });
+
+      if (hasNewMessages) {
+        if (this.autoScrollEnabled) {
+          scrollToBottom();
+        } else {
+           if (notifier) notifier.classList.remove('hidden');
         }
       }
     });
 
-    mo.observe(el, { childList: true, subtree: false });
+    mo.observe(el, { childList: true, subtree: true });
 
     // Top sentinel for loading older messages
     const topSentinel = document.createElement('div');
     topSentinel.style.width = '100%';
     topSentinel.style.height = '1px';
     topSentinel.id = 'load-older-sentinel';
-    // Insert sentinel at the top
     if (el.firstChild) el.insertBefore(topSentinel, el.firstChild);
 
+    let loadingOlder = false;
     const io = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting && !loadingOlder) {
-          // Determine first message id
           const firstMsg = el.querySelector(':scope > [id^="message-"]');
           if (!firstMsg) return;
           const id = firstMsg.id.replace('message-', '');
           loadingOlder = true;
           this.pushEvent('load_older', { before_id: id });
-
-          // Allow subsequent loads after short delay (server will respond with older messages)
           setTimeout(() => (loadingOlder = false), 800);
         }
       });
@@ -238,28 +342,15 @@ const MessageList = {
 
     io.observe(topSentinel);
 
-    notifier.addEventListener('click', () => {
-      el.scrollTop = el.scrollHeight;
-      notifier.style.display = 'none';
-      // Notify server that user has read the messages
-      this.pushEvent('messages_read', {});
-      updateIsAtBottom();
-    });
-
     // Cleanup
-    this.destroy = () => {
+    this.destroyed = () => {
       mo.disconnect();
       io.disconnect && io.disconnect();
-      notifier.remove();
-      topSentinel.remove();
       clearInterval(timeInterval);
     };
   },
   updated() {
-    // No-op here; MutationObserver handles appends
-  },
-  destroyed() {
-    if (typeof this.destroy === 'function') this.destroy();
+    // No-op
   }
 };
 
@@ -279,16 +370,32 @@ export const DesktopWindow = {
 // ChatInput Hook - Handle Enter key to submit, Shift+Enter for newline
 const ChatInput = {
   mounted(this: any) {
+    // Handle Enter key
     this.el.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        // Find the parent form and submit it
         const form = this.el.closest('form');
         if (form) {
-          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-          form.dispatchEvent(submitEvent);
+          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         }
       }
+    });
+
+    // Handle custom insert-text event (for emoji picker)
+    this.el.addEventListener('insert-text', (e: CustomEvent) => {
+      const text = e.detail.text;
+      if (!text) return;
+      
+      const start = this.el.selectionStart;
+      const end = this.el.selectionEnd;
+      const value = this.el.value;
+      
+      this.el.value = value.substring(0, start) + text + value.substring(end);
+      this.el.selectionStart = this.el.selectionEnd = start + text.length;
+      this.el.focus();
+      
+      // Trigger input event for LiveView binding
+      this.el.dispatchEvent(new Event('input', { bubbles: true }));
     });
   },
   updated() {},
@@ -306,6 +413,149 @@ const ReloadPage = {
   }
 };
 
+// FullscreenContainer hook - prevents body scrolling on fullscreen pages
+const FullscreenContainer = {
+  mounted() {
+    // Immediately add no-scroll to prevent any page scrolling
+    document.documentElement.classList.add('no-scroll');
+    document.body.classList.add('no-scroll');
+    
+    // Ensure proper positioning based on navbar/taskbar state
+    const navbar = document.getElementById('main-navbar');
+    const isHidden = navbar?.style.transform === 'translateY(-100%)';
+    
+    if (isHidden) {
+      this.el.style.top = '0';
+      this.el.style.bottom = '0';
+    } else {
+      this.el.style.top = '30px';
+      this.el.style.bottom = '35px';
+    }
+  },
+  destroyed() {
+    document.documentElement.classList.remove('no-scroll');
+    document.body.classList.remove('no-scroll');
+  }
+};
+
+// Sidebar Resizer Hook
+const SidebarResizer = {
+  mounted() {
+    const el = this.el as HTMLElement;
+    const handle = el.querySelector('.resize-handle') as HTMLElement;
+    const content = el.querySelector('.sidebar-content') as HTMLElement;
+    
+    if (!handle) return;
+
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    let lastWidth = 256; // Default width
+    let isCollapsed = false;
+    let clickThreshold = 5; // Pixels to distinguish click from drag
+
+    // Restore state from localStorage
+    const savedWidth = localStorage.getItem('forum_sidebar_width');
+    const savedCollapsed = localStorage.getItem('forum_sidebar_collapsed');
+
+    if (savedWidth) {
+      lastWidth = parseInt(savedWidth);
+      if (!savedCollapsed || savedCollapsed === 'false') {
+        el.style.width = `${lastWidth}px`;
+      }
+    }
+
+    if (savedCollapsed === 'true') {
+      isCollapsed = true;
+      el.style.width = '10px'; // Collapsed width
+      if (content) content.style.display = 'none';
+    }
+
+    const onMouseDown = (e: MouseEvent) => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = el.offsetWidth;
+      
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      
+      // Prevent text selection during drag
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const dx = e.clientX - startX;
+      let newWidth = startWidth + dx;
+      
+      // Constraints
+      if (newWidth < 100) newWidth = 10; // Snap to collapse
+      if (newWidth > 600) newWidth = 600; // Max width
+      
+      if (newWidth <= 10) {
+        if (content) content.style.display = 'none';
+      } else {
+        if (content) content.style.display = 'block';
+      }
+      
+      el.style.width = `${newWidth}px`;
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const dx = Math.abs(e.clientX - startX);
+      isResizing = false;
+      
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+
+      // Check if it was a click (toggle)
+      if (dx < clickThreshold) {
+        toggleSidebar();
+      } else {
+        // It was a drag, save the new state
+        const currentWidth = el.offsetWidth;
+        if (currentWidth <= 10) {
+          isCollapsed = true;
+          localStorage.setItem('forum_sidebar_collapsed', 'true');
+        } else {
+          isCollapsed = false;
+          lastWidth = currentWidth;
+          localStorage.setItem('forum_sidebar_width', lastWidth.toString());
+          localStorage.setItem('forum_sidebar_collapsed', 'false');
+        }
+      }
+    };
+
+    const toggleSidebar = () => {
+      if (isCollapsed) {
+        // Expand
+        isCollapsed = false;
+        el.style.width = `${lastWidth}px`;
+        if (content) content.style.display = 'block';
+        localStorage.setItem('forum_sidebar_collapsed', 'false');
+      } else {
+        // Collapse
+        isCollapsed = true;
+        lastWidth = el.offsetWidth; // Save current width before collapsing
+        if (lastWidth < 150) lastWidth = 256; // Ensure reasonable restore width
+        localStorage.setItem('forum_sidebar_width', lastWidth.toString());
+        
+        el.style.width = '10px';
+        if (content) content.style.display = 'none';
+        localStorage.setItem('forum_sidebar_collapsed', 'true');
+      }
+    };
+
+    handle.addEventListener('mousedown', onMouseDown);
+  }
+};
+
 // Hooks object - register all hooks referenced in templates
 const Hooks = {
   // Core/site
@@ -316,6 +566,9 @@ const Hooks = {
   BackgroundUpdater,          // Background customization
   ColorPicker,                // Color input handler for LiveView
   OpacitySlider,              // Opacity slider for avatar border
+  AudioHook,                  // Audio notification system
+  FullscreenContainer,        // Prevents body scrolling on fullscreen pages
+  SidebarResizer,             // Handles sidebar resizing and toggling
   // Background Scenes
   HomeGalaxyScene,            // Default galaxy background
   NebulaScene,                // Colorful nebula with gas clouds
@@ -381,8 +634,25 @@ const initializeStaticScenes = () => {
         return;
       }
 
-  // If this element was already initialized, skip
-  if ((el as any)._threeJSHook) return;
+  // If this element was already initialized
+  if ((el as any)._threeJSHook) {
+    // Check if the scene has changed
+    if ((el as any)._currentSceneName === sceneName) {
+      return;
+    }
+    
+    // Scene changed, destroy old one
+    console.log('🔄 Switching static scene to:', sceneName);
+    const oldHook = (el as any)._threeJSHook;
+    if (typeof oldHook.destroyed === 'function') {
+      try {
+        oldHook.destroyed.call(oldHook);
+      } catch (e) {
+        console.error('Error destroying old scene:', e);
+      }
+    }
+    (el as any)._threeJSHook = null;
+  }
 
       // Create a minimal hook-like context and call mounted()
       try {
@@ -392,6 +662,7 @@ const initializeStaticScenes = () => {
           instance.mounted.call(instance);
           // Mark the element as initialized and store instance
           (el as any)._threeJSHook = instance;
+          (el as any)._currentSceneName = sceneName;
           console.log('✅ Initialized static scene:', sceneName, 'on', el.id || el.tagName);
         }
       } catch (err) {
@@ -420,6 +691,12 @@ window.addEventListener('phx:page-loading-stop', () => {
 try {
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
+      // Handle attribute changes (scene switching)
+      if (m.type === 'attributes' && m.attributeName === 'data-static-scene') {
+        setTimeout(() => initializeStaticScenes(), 50);
+        return;
+      }
+
       if (m.type === 'childList' && m.addedNodes.length > 0) {
         for (const node of Array.from(m.addedNodes)) {
           if (!(node instanceof HTMLElement)) continue;
@@ -437,7 +714,12 @@ try {
     }
   });
 
-  observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  observer.observe(document.documentElement || document.body, { 
+    childList: true, 
+    subtree: true, 
+    attributes: true, 
+    attributeFilter: ['data-static-scene'] 
+  });
 } catch {
   // ignore mutation observer failures
 }

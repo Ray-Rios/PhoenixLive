@@ -160,6 +160,14 @@ defmodule PhoenixAppWeb.Components.Window do
           
           <!-- View Options -->
           <div class="flex items-center space-x-2">
+            <form phx-change="validate_upload" phx-submit="save_upload" phx-target={@target} class="flex items-center">
+              <label class="cursor-pointer p-2 hover:bg-gray-700 rounded text-white flex items-center gap-2" title="Upload Files">
+                <span>⬆️</span>
+                <.live_file_input upload={@uploads.files} class="hidden" />
+              </label>
+              <input type="hidden" name="window_id" value={@window.id} />
+            </form>
+            
             <button 
               type="button"
               phx-click="change_view_mode" 
@@ -185,7 +193,7 @@ defmodule PhoenixAppWeb.Components.Window do
       </div>
       
       <!-- File/Drive Area -->
-      <div class="flex-1 overflow-auto p-4 bg-gray-900">
+      <div class="flex-1 overflow-auto p-4 bg-gray-900 relative" phx-drop-target={@uploads.files.ref}>
         <%= if @window.current_path == "/" do %>
           <!-- Drive Selection View -->
           <div class="grid grid-cols-2 gap-6 max-w-2xl mx-auto mt-8">
@@ -273,11 +281,32 @@ defmodule PhoenixAppWeb.Components.Window do
               • <%= @window.current_path %>
             <% end %>
           </div>
+          
+          <!-- Upload Progress -->
+          <div class="flex flex-col gap-1 items-end">
+            <%= for entry <- @uploads.files.entries do %>
+              <div class="flex items-center gap-2">
+                <div class="text-xs truncate max-w-[100px]"><%= entry.client_name %></div>
+                <div class="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div class="h-full bg-blue-500" style={"width: #{entry.progress}%"}></div>
+                </div>
+                <button type="button" phx-click="cancel_upload" phx-value-ref={entry.ref} phx-target={@target} class="text-red-400 hover:text-red-300 text-xs">×</button>
+              </div>
+              <%= for err <- upload_errors(@uploads.files, entry) do %>
+                <div class="text-red-500 text-xs"><%= error_to_string(err) %></div>
+              <% end %>
+            <% end %>
+          </div>
         </div>
       </div>
     </div>
     """
   end
+
+  defp error_to_string(:too_large), do: "Too large"
+  defp error_to_string(:too_many_files), do: "Too many files"
+  defp error_to_string(:external_client_failure), do: "External client failure"
+  defp error_to_string(_), do: "Error"
 
   # Helper functions
   defp get_app_icon(app) do

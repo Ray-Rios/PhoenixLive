@@ -27,7 +27,7 @@ defmodule PhoenixApp.UserFileUpload do
   end
 
   def storage_dir(_version, {_file, scope}) do
-    "uploads/user_files/#{scope.user_id}"
+    "uploads/#{scope.user_id}/files"
   end
 
   def default_url(:thumb) do

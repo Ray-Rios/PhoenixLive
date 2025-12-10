@@ -82,10 +82,22 @@ export const BackgroundUpdater = {
     }
   },
 
-  cleanup3DScene(_canvas: HTMLElement) {
+  cleanup3DScene(canvas: HTMLElement) {
     // Clean up any existing Three.js scene
-    // This is handled by the existing static scene system
-    console.log('Cleaning up existing 3D scene');
+    if ((canvas as any)._threeJSHook) {
+      const hook = (canvas as any)._threeJSHook;
+      console.log('🧹 Cleaning up 3D scene:', (canvas as any)._currentSceneName);
+      
+      if (typeof hook.destroyed === 'function') {
+        try {
+          hook.destroyed.call(hook);
+        } catch (e) {
+          console.error('Error destroying scene:', e);
+        }
+      }
+      (canvas as any)._threeJSHook = null;
+      (canvas as any)._currentSceneName = null;
+    }
   },
 
   ensureCameraControlCanvas() {

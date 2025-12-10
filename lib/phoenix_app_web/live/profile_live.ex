@@ -16,6 +16,12 @@ defmodule PhoenixAppWeb.ProfileLive do
       custom_data = current_user.background_custom_data || %{}
       avatar_opacity = Map.get(current_user, :avatar_opacity) || 100
 
+      # Load blocked users
+      blocked_users = Accounts.list_blocked_users(current_user.id)
+
+      # Load previous avatars
+      previous_avatars = PhoenixApp.Uploads.list_user_uploads(current_user.id, "avatar")
+
       socket = 
         assign(socket,
           page_title: "Profile Settings",
@@ -26,12 +32,14 @@ defmodule PhoenixAppWeb.ProfileLive do
           active_tab: "profile",
           selected_background: current_user.background_preference || "galaxy",
           custom_data: custom_data,
-          avatar_opacity: avatar_opacity
+          avatar_opacity: avatar_opacity,
+          blocked_users: blocked_users,
+          previous_avatars: previous_avatars
         )
         |> allow_upload(:avatar, 
           accept: ~w(.jpg .jpeg .png .gif .webp image/jpeg image/png image/gif image/webp), 
           max_entries: 1, 
-          max_file_size: 5_000_000,
+          max_file_size: 1_000_000,
           auto_upload: true,
           progress: &handle_progress/3
         )
@@ -81,8 +89,15 @@ defmodule PhoenixAppWeb.ProfileLive do
 
   @impl true
   def handle_event("validate_avatar", _params, socket) do
-    # This handler allows the upload to be processed
-    {:noreply, socket}
+    # Check if user has reached the limit of 10 avatars
+    if length(socket.assigns.previous_avatars) >= 10 do
+      {:noreply, 
+       socket 
+       |> put_flash(:error, "You have reached the maximum limit of 10 avatars. Please delete some before uploading new ones.")
+       |> cancel_upload(:avatar, List.first(socket.assigns.uploads.avatar.entries).ref)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -418,6 +433,82 @@ defmodule PhoenixAppWeb.ProfileLive do
     end
   end
 
+  # Privacy Settings Event Handlers
+
+  @impl true
+  def handle_event("toggle_invites", _params, socket) do
+    new_value = !socket.assigns.user.allow_channel_invites
+
+    case Accounts.update_invite_preferences(socket.assigns.user, %{allow_channel_invites: new_value}) do
+      {:ok, updated_user} ->
+        {:noreply,
+         socket
+         |> assign(user: updated_user)
+         |> put_flash(:info, "Invite preferences updated")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update preferences")}
+    end
+  end
+
+  @impl true
+  def handle_event("unblock_user", %{"user_id" => user_id_str}, socket) do
+    user_id = String.to_integer(user_id_str)
+
+    case Accounts.unblock_user(socket.assigns.user, user_id) do
+      {:ok, updated_user} ->
+        blocked_users = Accounts.list_blocked_users(updated_user.id)
+
+        {:noreply,
+         socket
+         |> assign(user: updated_user, blocked_users: blocked_users)
+         |> put_flash(:info, "User unblocked")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to unblock user")}
+    end
+  end
+
+  @impl true
+  def handle_event("select_previous_avatar", %{"url" => url}, socket) do
+    case Accounts.update_user_profile(socket.assigns.user, %{avatar_url: url}) do
+      {:ok, updated_user} ->
+        {:noreply,
+         socket
+         |> assign(user: updated_user)
+         |> put_flash(:info, "Avatar updated successfully!")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update avatar")}
+    end
+  end
+
+  @impl true
+  def handle_event("delete_previous_avatar", %{"url" => url}, socket) do
+    case PhoenixApp.Uploads.delete_file(url) do
+      :ok ->
+        # If current avatar is the deleted one, remove it from profile
+        socket = 
+          if socket.assigns.user.avatar_url == url do
+             {:ok, updated_user} = Accounts.update_user_profile(socket.assigns.user, %{avatar_url: nil})
+             assign(socket, user: updated_user)
+          else
+             socket
+          end
+
+        # Refresh list
+        previous_avatars = PhoenixApp.Uploads.list_user_uploads(socket.assigns.user.id, "avatar")
+        
+        {:noreply, 
+         socket 
+         |> assign(previous_avatars: previous_avatars)
+         |> put_flash(:info, "Avatar deleted")}
+         
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete file")}
+    end
+  end
+
   # Handle progress updates from auto-upload
   def handle_progress(:avatar, entry, socket) when entry.done? do
     # File is fully uploaded, now process it
@@ -433,9 +524,12 @@ defmodule PhoenixAppWeb.ProfileLive do
       avatar_url when is_binary(avatar_url) ->
         case Accounts.update_user_profile(socket.assigns.user, %{avatar_url: avatar_url}) do
           {:ok, updated_user} ->
+            # Refresh list
+            previous_avatars = PhoenixApp.Uploads.list_user_uploads(updated_user.id, "avatar")
+
             {:noreply,
              socket
-             |> assign(user: updated_user)
+             |> assign(user: updated_user, previous_avatars: previous_avatars)
              |> assign(form: to_form(Accounts.change_user_profile(updated_user, %{})))
              |> put_flash(:info, "Avatar updated successfully!")}
 
@@ -461,7 +555,7 @@ defmodule PhoenixAppWeb.ProfileLive do
     ~H"""
     <div phx-hook="ProfileSettings" id="profile-container">
     <PhoenixAppWeb.Components.PageContainer.page_container max_width="max-w-[85%]">
-        <div class="max-w-4xl mx-auto">
+        <div class="max-w-4xl mx-auto" phx-hook="AudioHook" id="profile-audio-hook">
           <div class="mb-8">
             <h1 class="text-3xl font-bold text-white mb-2">Profile Settings</h1>
             <p class="text-gray-400">Manage your account settings and preferences</p>
@@ -517,6 +611,10 @@ defmodule PhoenixAppWeb.ProfileLive do
                           class={"px-6 py-4 text-sm font-medium border-b-2 transition-colors #{if @active_tab == "email", do: "text-blue-400 border-blue-400 bg-gray-750", else: "text-gray-400 border-transparent hover:text-white"}"}>
                     Email Settings
                   </button>
+                  <button phx-click="switch_tab" phx-value-tab="privacy" 
+                          class={"px-6 py-4 text-sm font-medium border-b-2 transition-colors #{if @active_tab == "privacy", do: "text-blue-400 border-blue-400 bg-gray-750", else: "text-gray-400 border-transparent hover:text-white"}"}>
+                    Privacy
+                  </button>
                 </div>
               </div>
 
@@ -529,11 +627,11 @@ defmodule PhoenixAppWeb.ProfileLive do
                   <.form for={@form} phx-submit="save" phx-change="validate" class="space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <.input field={@form[:name]} label="Display Name" placeholder="Enter your name..." />
+                        <.input field={@form[:name]} label="Display Name" placeholder="Enter your name..." label_class="text-white" />
                       </div>
                       
                       <div>
-                        <.input field={@form[:email]} label="Email Address" placeholder="your@email.com" />
+                        <.input field={@form[:email]} label="Email Address" placeholder="your@email.com" label_class="text-white" />
                       </div>
                     </div>
 
@@ -576,7 +674,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                                   </label>
                                   <.live_file_input upload={@uploads.avatar} class="sr-only" />
                                 </div>
-                                <p class="text-xs text-gray-500 mt-2">PNG, JPG, GIF, WEBP up to 5MB</p>
+                                <p class="text-xs text-gray-500 mt-2">PNG, JPG, GIF, WEBP up to 1MB</p>
                               </div>
                               
                               <!-- Upload Progress -->
@@ -604,6 +702,27 @@ defmodule PhoenixAppWeb.ProfileLive do
                         </.form>
                       </div>
                     </div>
+
+                    <!-- Previous Avatars -->
+                    <%= if length(@previous_avatars) > 0 do %>
+                      <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-300 mb-3">Previous Avatars</label>
+                        <div class="grid grid-cols-4 sm:grid-cols-5 gap-4">
+                          <%= for avatar <- @previous_avatars do %>
+                            <div class="relative group">
+                              <button type="button" phx-click="select_previous_avatar" phx-value-url={avatar.url} class={"w-full aspect-square rounded-lg overflow-hidden border-2 transition-all " <> if(@user.avatar_url == avatar.url, do: "border-blue-500 ring-2 ring-blue-500/50", else: "border-transparent hover:border-blue-500")}>
+                                <img src={avatar.url} class="w-full h-full object-cover" />
+                              </button>
+                              <button type="button" phx-click="delete_previous_avatar" phx-value-url={avatar.url} class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-700" title="Delete" data-confirm="Are you sure you want to delete this avatar?">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                              </button>
+                            </div>
+                          <% end %>
+                        </div>
+                      </div>
+                    <% end %>
 
                     <div>
                       <label class="block text-sm font-medium text-gray-300 mb-3">Avatar Border Color</label>
@@ -723,7 +842,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                             </div>
                           <% end %>
                           <%= if @selected_background == "starfield" do %>
-                            <div class="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold z-10">
+                            <div class="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold">
                               ✓ Active
                             </div>
                           <% end %>
@@ -749,7 +868,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                             </div>
                           <% end %>
                           <%= if @selected_background == "void" do %>
-                            <div class="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold z-10">
+                            <div class="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold">
                               ✓ Active
                             </div>
                           <% end %>
@@ -857,75 +976,11 @@ defmodule PhoenixAppWeb.ProfileLive do
                       <p class="text-gray-400">Customize the appearance of panels, navbar, and taskbar. Changes apply instantly.</p>
                     </div>
 
-                    <!-- Glass Color Theme Selection -->
-                    <div>
-                      <label class="block text-sm text-gray-400 mb-4">Glass Color Theme</label>
-                      <div class="grid grid-cols-4 gap-3">
-                        <%= for {theme, _color} <- [
-                          {"dark", "#111827"}, 
-                          {"blue", "#3B82F6"}, 
-                          {"purple", "#9333EA"}, 
-                          {"green", "#22C55E"},
-                          {"red", "#EF4444"}, 
-                          {"amber", "#F59E0B"}, 
-                          {"teal", "#14B8A6"}, 
-                          {"light", "#F9FAFB"}
-                        ] do %>
-                          <button
-                            type="button"
-                            phx-click="update_glass_theme"
-                            phx-value-theme={theme}
-                            class={"w-full h-16 rounded-lg border-2 transition-all #{if get_in(@custom_data, ["glass_theme"]) == theme, do: "border-white ring-2 ring-blue-500", else: "border-gray-600 hover:border-gray-400"} glass-#{theme} flex items-center justify-center"}
-                          >
-                            <span class="text-white text-sm font-medium"><%= String.capitalize(theme) %></span>
-                          </button>
-                        <% end %>
-                      </div>
-                    </div>
-
                     <!-- Glass Settings Form - Real-time updates -->
                     <form phx-change="update_glass_setting" class="space-y-6">
-                <div>
-                  <label class="block text-sm text-gray-400 mb-3">Glass Opacity</label>
-                  <input
-                    type="range"
-                    min="0.05"
-                    max="0.9"
-                    step="0.05"
-                    name="glass_opacity"
-                    id={"glass-opacity-#{get_in(@custom_data, ["glass_opacity"]) || "0.4"}"}
-                    value={get_in(@custom_data, ["glass_opacity"]) || "0.4"}
-                    phx-debounce="300"
-                    class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
-                  />
-                  <div class="flex justify-between text-xs text-gray-500 mt-2">
-                    <span>More Transparent</span>
-                    <span class="text-center">Current: <%= get_in(@custom_data, ["glass_opacity"]) || "0.4" %></span>
-                    <span>More Opaque</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label class="block text-sm text-gray-400 mb-3">Blur Intensity</label>
-                  <input
-                    type="range"
-                    min="5"
-                    max="25"
-                    step="5"
-                    name="glass_blur"
-                    id={"glass-blur-#{get_in(@custom_data, ["glass_blur"]) || "15"}"}
-                    value={get_in(@custom_data, ["glass_blur"]) || "15"}
-                    phx-debounce="300"
-                    class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
-                  />
-                  <div class="flex justify-between text-xs text-gray-500 mt-2">
-                    <span>Less Blur</span>
-                    <span class="text-center">Current: <%= get_in(@custom_data, ["glass_blur"]) || "15" %>px</span>
-                    <span>More Blur</span>
-                  </div>
-                </div>                      <!-- Custom Color Picker for Glass -->
+                      <!-- Custom Color Picker for Glass -->
                       <div>
-                        <label class="block text-sm text-gray-400 mb-3">Custom Glass Color</label>
+                        <label class="block text-sm text-gray-400 mb-3">Glass Tint Color</label>
                         <div class="flex items-center space-x-4">
                           <input
                             type="color"
@@ -936,9 +991,48 @@ defmodule PhoenixAppWeb.ProfileLive do
                             class="w-20 h-16 rounded-lg cursor-pointer border border-gray-600"
                           />
                           <div class="flex-1">
-                            <p class="text-sm text-gray-300">Choose a custom color for your glass panels</p>
-                            <p class="text-xs text-gray-500 mt-1">This will override the selected theme color above</p>
+                            <p class="text-sm text-gray-300">Choose a custom tint color for your glass panels</p>
                           </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label class="block text-sm text-gray-400 mb-3">Glass Opacity</label>
+                        <input
+                          type="range"
+                          min="0.05"
+                          max="0.9"
+                          step="0.05"
+                          name="glass_opacity"
+                          id={"glass-opacity-#{get_in(@custom_data, ["glass_opacity"]) || "0.4"}"}
+                          value={get_in(@custom_data, ["glass_opacity"]) || "0.4"}
+                          phx-debounce="300"
+                          class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
+                        />
+                        <div class="flex justify-between text-xs text-gray-500 mt-2">
+                          <span>More Transparent</span>
+                          <span class="text-center">Current: <%= get_in(@custom_data, ["glass_opacity"]) || "0.4" %></span>
+                          <span>More Opaque</span>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label class="block text-sm text-gray-400 mb-3">Blur Intensity</label>
+                        <input
+                          type="range"
+                          min="5"
+                          max="25"
+                          step="5"
+                          name="glass_blur"
+                          id={"glass-blur-#{get_in(@custom_data, ["glass_blur"]) || "15"}"}
+                          value={get_in(@custom_data, ["glass_blur"]) || "15"}
+                          phx-debounce="300"
+                          class="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-blue"
+                        />
+                        <div class="flex justify-between text-xs text-gray-500 mt-2">
+                          <span>Less Blur</span>
+                          <span class="text-center">Current: <%= get_in(@custom_data, ["glass_blur"]) || "15" %>px</span>
+                          <span>More Blur</span>
                         </div>
                       </div>
                     </form>
@@ -989,7 +1083,7 @@ defmodule PhoenixAppWeb.ProfileLive do
                     <% else %>
                       <div class="flex items-center space-x-2 text-yellow-400 mb-4">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L5.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                         </svg>
                         <span>Two-factor authentication is disabled</span>
                       </div>
@@ -1054,6 +1148,92 @@ defmodule PhoenixAppWeb.ProfileLive do
                           <input type="checkbox" class="rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-2">
                           <span class="ml-2 text-gray-300">Marketing emails</span>
                         </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+
+              <%= if @active_tab == "privacy" do %>
+                <!-- Privacy Settings -->
+                <div class="glass-dark rounded-b-lg rounded-tr-lg p-6 border border-gray-700">
+                  <h2 class="text-lg font-semibold text-white mb-6">Privacy Settings</h2>
+
+                  <div class="space-y-6">
+                    <!-- Invite Privacy -->
+                    <div>
+                      <h3 class="text-lg font-medium text-white mb-4 flex items-center gap-2">
+                        <span>🔒</span>
+                        <span>Channel Invites</span>
+                      </h3>
+                      
+                      <div class="space-y-4">
+                        <label class="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
+                          <div class="flex-1">
+                            <span class="text-gray-200 font-medium">Allow channel invites</span>
+                            <p class="text-sm text-gray-400 mt-1">When disabled, you won't receive any channel invitations</p>
+                          </div>
+                          <label class="relative inline-flex items-center cursor-pointer ml-4">
+                            <input type="checkbox" 
+                                   phx-click="toggle_invites" 
+                                   checked={@user.allow_channel_invites}
+                                   class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </label>
+
+                        <!-- Blocked Users -->
+                        <div class="p-4 bg-gray-800/50 rounded-lg">
+                          <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-gray-200 font-medium">Blocked Users</h4>
+                            <span class="text-sm text-gray-400"><%= length(@blocked_users) %> blocked</span>
+                          </div>
+                          <p class="text-sm text-gray-400 mb-4">These users cannot send you channel invites</p>
+                          
+                          <%= if Enum.empty?(@blocked_users) do %>
+                            <div class="text-center py-6 text-gray-500">
+                              <p class="text-sm">No blocked users</p>
+                            </div>
+                          <% else %>
+                            <div class="space-y-2 max-h-64 overflow-y-auto">
+                              <%= for blocked <- @blocked_users do %>
+                                <div class="flex items-center justify-between p-3 bg-gray-700/50 rounded">
+                                  <div class="flex items-center gap-3">
+                                    <%= if blocked.avatar_url do %>
+                                      <img src={blocked.avatar_url} class="w-8 h-8 rounded-full" alt="" />
+                                    <% else %>
+                                      <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-white text-sm">
+                                        <%= String.first(blocked.name || blocked.email) |> String.upcase() %>
+                                      </div>
+                                    <% end %>
+                                    <div>
+                                      <p class="text-white text-sm font-medium"><%= blocked.name || "User" %></p>
+                                      <p class="text-gray-400 text-xs"><%= blocked.email %></p>
+                                    </div>
+                                  </div>
+                                  <button 
+                                    phx-click="unblock_user" 
+                                    phx-value-user_id={blocked.id}
+                                    class="px-3 py-1 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors"
+                                  >
+                                    Unblock
+                                  </button>
+                                </div>
+                              <% end %>
+                            </div>
+                          <% end %>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Info about audio controls -->
+                    <div class="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                      <div class="flex items-start gap-3">
+                        <span class="text-2xl">🔊</span>
+                        <div>
+                          <h4 class="text-blue-300 font-medium mb-1">Audio Settings</h4>
+                          <p class="text-sm text-gray-400">Volume and notification sound controls are available in the taskbar speaker icon (🔊) at the bottom right of your screen.</p>
+                        </div>
                       </div>
                     </div>
                   </div>

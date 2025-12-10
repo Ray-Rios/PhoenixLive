@@ -14,6 +14,8 @@
   <body class="bg-black antialiased" phx-hook="GlobalHooks" id="global-glass-theme">
     <!-- Mount Global Camera Controller separately (phx-hook accepts a single hook) -->
     <div id="global-camera-hook" phx-hook="GlobalCameraController" class="hidden" aria-hidden="true"></div>
+    <div id="glass-theme-hook" phx-hook="GlassTheme" class="hidden" aria-hidden="true"></div>
+    <div id="background-updater-hook" phx-hook="BackgroundUpdater" class="hidden" aria-hidden="true"></div>
     <!-- Global background canvas (outside LiveView-managed @inner_content to avoid being patched) -->
     <%!-- Determine user's background preference and render either a Three.js scene hook or a CSS overlay for gradient/solid --%>
     <% bg_pref = (assigns[:current_user] && assigns[:current_user].background_preference) || "galaxy" %>
@@ -26,7 +28,8 @@
           <%= Phoenix.HTML.raw(Jason.encode!(%{
             glass_theme: get_in(custom, ["glass_theme"]) || "dark",
             glass_opacity: get_in(custom, ["glass_opacity"]) || "0.15", 
-            glass_blur: get_in(custom, ["glass_blur"]) || "15"
+            glass_blur: get_in(custom, ["glass_blur"]) || "15",
+            glass_custom_color: get_in(custom, ["glass_custom_color"])
           })) %>
         <% else %>
           <%= Phoenix.HTML.raw(Jason.encode!(%{
@@ -48,7 +51,33 @@
           'teal': { bg: 'rgba(20, 184, 166, OPACITY)', border: 'rgba(20, 184, 166, 0.3)' }
         };
         
-        const theme = themeColors[user.glass_theme] || themeColors.dark;
+        // Helper to convert hex to rgb
+        const hexToRgb = (hex) => {
+          if (!hex) return null;
+          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+          return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+          } : null;
+        };
+
+        let theme = themeColors[user.glass_theme];
+        
+        // Handle custom color - apply if it exists and is not the default black
+        if (user.glass_custom_color && user.glass_custom_color !== '#000000') {
+           const rgb = hexToRgb(user.glass_custom_color);
+           if (rgb) {
+             theme = {
+               bg: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, OPACITY)`,
+               border: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`
+             };
+           }
+        }
+        
+        // Fallback to dark theme if invalid
+        if (!theme) theme = themeColors.dark;
+
         const opacity = user.glass_opacity || "0.05";
         const blur = user.glass_blur || "15";
         
@@ -58,7 +87,7 @@
         root.style.setProperty('--glass-blur', blur + 'px');
         root.style.setProperty('--glass-saturation', '120%');
         
-        console.log('Global glass theme initialized:', {theme: user.glass_theme, opacity, blur});
+        console.log('Global glass theme initialized:', {theme: user.glass_theme, opacity, blur, custom_color: user.glass_custom_color});
       });
     </script>
 

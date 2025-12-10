@@ -126,10 +126,20 @@ defmodule PhoenixAppWeb.Components.Navigation do
           icon.style.transform = 'rotate(0deg)';
           if (pageContent) pageContent.classList.remove('navbar-hidden');
           
-          // Reset padding for all responsive containers
+          // Reset padding/positioning for all responsive containers
           responsiveContainers.forEach(container => {
-            container.style.paddingTop = '30px';
-            container.style.paddingBottom = '48px';
+            const isFixed = window.getComputedStyle(container).position === 'fixed';
+            if (isFixed) {
+              container.style.top = '30px';
+              container.style.bottom = '35px';
+              container.style.paddingTop = '';
+              container.style.paddingBottom = '';
+            } else {
+              container.style.paddingTop = '30px';
+              container.style.paddingBottom = '48px';
+              container.style.top = '';
+              container.style.bottom = '';
+            }
           });
         } else {
           // Hide navbar and taskbar
@@ -138,10 +148,20 @@ defmodule PhoenixAppWeb.Components.Navigation do
           icon.style.transform = 'rotate(180deg)';
           if (pageContent) pageContent.classList.add('navbar-hidden');
           
-          // Remove padding when hidden
+          // Remove padding/positioning when hidden
           responsiveContainers.forEach(container => {
-            container.style.paddingTop = '0';
-            container.style.paddingBottom = '0';
+            const isFixed = window.getComputedStyle(container).position === 'fixed';
+            if (isFixed) {
+              container.style.top = '0';
+              container.style.bottom = '0';
+              container.style.paddingTop = '';
+              container.style.paddingBottom = '';
+            } else {
+              container.style.paddingTop = '0';
+              container.style.paddingBottom = '0';
+              container.style.top = '';
+              container.style.bottom = '';
+            }
           });
         }
       }
@@ -152,11 +172,21 @@ defmodule PhoenixAppWeb.Components.Navigation do
         const pageContent = document.querySelector('.page-content');
         if (pageContent) pageContent.classList.remove('navbar-hidden');
         
-        // Initialize padding for all responsive containers
+        // Initialize padding/positioning for all responsive containers
         const responsiveContainers = document.querySelectorAll('[data-responsive-content]');
         responsiveContainers.forEach(container => {
-          container.style.paddingTop = '30px';
-          container.style.paddingBottom = '48px';
+          const isFixed = window.getComputedStyle(container).position === 'fixed';
+          if (isFixed) {
+            container.style.top = '30px';
+            container.style.bottom = '35px';
+            container.style.paddingTop = '';
+            container.style.paddingBottom = '';
+          } else {
+            container.style.paddingTop = '30px';
+            container.style.paddingBottom = '48px';
+            container.style.top = '';
+            container.style.bottom = '';
+          }
         });
       });
     </script>

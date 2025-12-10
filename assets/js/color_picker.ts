@@ -6,13 +6,18 @@ export const ColorPicker = {
     
     console.log('✅ ColorPicker hook mounted for event:', eventName);
     
+    // Debounce to avoid too many events
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
     // Listen for color changes
     input.addEventListener('input', (e) => {
       const color = (e.target as HTMLInputElement).value;
-      console.log('🎨 ColorPicker: Color changed to', color, 'sending event:', eventName);
       
-      // Push event to LiveView with the color value
-      this.pushEvent(eventName, { color: color });
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        console.log('🎨 ColorPicker: Color changed to', color, 'sending event:', eventName);
+        this.pushEvent(eventName, { color: color });
+      }, 200);
     });
   },
   

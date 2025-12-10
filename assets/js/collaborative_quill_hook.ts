@@ -11,6 +11,7 @@
 import Quill from 'quill';
 import QuillCursors from 'quill-cursors';
 import * as Y from 'yjs';
+import { Socket } from "phoenix";
 // Quill CSS is imported via PostCSS in assets/css/app.css (@import "quill/dist/quill.snow.css"),
 // so it should not be imported in TS files. esbuild may otherwise produce runtime require calls
 // which are not supported in the browser and will throw an error preventing JS execution.
@@ -119,8 +120,17 @@ const CollaborativeQuillHook = {
   },
 
   connectChannel(this: any, config: CollaborativeEditorConfig) {
+    // Create a dedicated socket connection for collaborative editing
+    // This avoids multiplexing over the LiveView socket which can cause issues
+    // and ensures we use the authenticated UserSocket
+    const socket = new Socket("/socket", {
+      params: { token: this.el.dataset.userToken }
+    });
+    socket.connect();
+    this.socket = socket;
+
     // Join Phoenix Channel
-    this.channel = (window as any).liveSocket.channel(config.channelTopic, {
+    this.channel = socket.channel(config.channelTopic, {
       user_id: config.userId
     });
 
@@ -302,6 +312,9 @@ const CollaborativeQuillHook = {
   destroyed(this: any) {
     if (this.channel) {
       this.channel.leave();
+    }
+    if (this.socket) {
+      this.socket.disconnect();
     }
     if (this.quill) {
       this.quill = null;

@@ -16,8 +16,9 @@ defmodule PhoenixApp.MixProject do
       build_embedded: Mix.env() == :prod,
       compilers: Mix.compilers(),
       # Suppress warnings from dependencies (not our code)
+      # Only treat warnings as errors in dev/test, not in prod builds
       elixirc_options: [
-        warnings_as_errors: true
+        warnings_as_errors: Mix.env() in [:dev, :test]
       ]
     ]
   end
@@ -79,8 +80,9 @@ defmodule PhoenixApp.MixProject do
       {:tz, "~> 0.24"},
       {:httpoison, "~> 2.0"},
   {:csv, "~> 3.0"},
+      {:libcluster, "~> 3.3"},
 
-  # Linting and security tools
+      # Linting and security tools
   {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
   {:sobelow, "~> 0.12", only: :dev, runtime: false},
   {:dialyxir, "~> 1.2", only: [:dev, :test], runtime: false}

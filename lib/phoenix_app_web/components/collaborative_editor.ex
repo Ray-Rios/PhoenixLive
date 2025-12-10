@@ -46,6 +46,10 @@ defmodule PhoenixAppWeb.Components.CollaborativeEditor do
   attr :class, :string, default: ""
 
   def collaborative_editor(assigns) do
+    # Generate auth token for the socket connection
+    token = PhoenixAppWeb.AuthToken.generate(assigns.current_user)
+    assigns = assign(assigns, :user_token, token)
+
     # If field is provided, use it; otherwise use value
     assigns = 
       if assigns.field do
@@ -92,6 +96,7 @@ defmodule PhoenixAppWeb.Components.CollaborativeEditor do
         phx-update="ignore"
         data-document-id={@document_id}
         data-user-id={@current_user.id}
+        data-user-token={@user_token}
         data-user-name={@current_user.name || @current_user.email}
         data-user-color={@current_user.avatar_color || "#3B82F6"}
         data-placeholder={@placeholder}

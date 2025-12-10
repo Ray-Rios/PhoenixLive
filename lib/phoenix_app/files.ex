@@ -6,6 +6,7 @@ defmodule PhoenixApp.Files do
   import Ecto.Query, warn: false
   alias PhoenixApp.Repo
   alias PhoenixApp.Files.UserFile
+  alias PhoenixApp.Forum.MessageAttachment
 
   # User file operations
   def list_user_files(user) do
@@ -22,14 +23,21 @@ defmodule PhoenixApp.Files do
     # Handle Base64 data from JavaScript
     attrs = prepare_file_attrs(attrs)
     
-    # Ensure uploads directory exists
-    ensure_uploads_directory(user)
-    
-    changeset = %UserFile{}
-    |> UserFile.changeset(attrs)
-    |> Ecto.Changeset.put_assoc(:user, user)
-    
-    Repo.insert(changeset)
+    # Check storage limit
+    file_size = attrs["file_size"] || 0
+    case check_storage_limit(user, file_size) do
+      :ok ->
+        # Ensure uploads directory exists
+        ensure_uploads_directory(user)
+        
+        changeset = %UserFile{}
+        |> UserFile.changeset(attrs)
+        |> Ecto.Changeset.put_assoc(:user, user)
+        
+        Repo.insert(changeset)
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def update_user_file(%UserFile{} = user_file, attrs) do
@@ -103,18 +111,49 @@ defmodule PhoenixApp.Files do
     # Get total size from UserMedia uploads
     user_media_size = from(m in PhoenixApp.Content.UserMedia, where: m.user_id == ^user_id, select: sum(m.file_size)) |> Repo.one() || 0
 
+    # Get total size from MessageAttachment uploads
+    message_attachments_size = from(m in MessageAttachment, where: m.user_id == ^user_id, select: sum(m.file_size)) |> Repo.one() || 0
+
     # Get count of files
     user_files_count = from(f in UserFile, where: f.user_id == ^user_id, select: count()) |> Repo.one() || 0
     user_media_count = from(m in PhoenixApp.Content.UserMedia, where: m.user_id == ^user_id, select: count()) |> Repo.one() || 0
+    message_attachments_count = from(m in MessageAttachment, where: m.user_id == ^user_id, select: count()) |> Repo.one() || 0
+
+    total_size = user_files_size + user_media_size + message_attachments_size
+    total_count = user_files_count + user_media_count + message_attachments_count
 
     %{
-      total_size_bytes: user_files_size + user_media_size,
-      total_files: user_files_count + user_media_count,
+      total_size_bytes: total_size,
+      total_files: total_count,
       user_files_size: user_files_size,
       user_media_size: user_media_size,
+      message_attachments_size: message_attachments_size,
       user_files_count: user_files_count,
-      user_media_count: user_media_count
+      user_media_count: user_media_count,
+      message_attachments_count: message_attachments_count,
+      limit: get_storage_limit(user_id)
     }
+  end
+
+  def get_storage_limit(user_id) do
+    user = PhoenixApp.Accounts.get_user!(user_id)
+    case user.role do
+      "admin" -> 100 * 1024 * 1024 * 1024 # 100 GB
+      "gm" -> 50 * 1024 * 1024 * 1024 # 50 GB
+      "editor" -> 10 * 1024 * 1024 * 1024 # 10 GB
+      "moderator" -> 5 * 1024 * 1024 * 1024 # 5 GB
+      "member" -> 1 * 1024 * 1024 * 1024 # 1 GB
+      _ -> 500 * 1024 * 1024 # 500 MB
+    end
+  end
+
+  def check_storage_limit(user, new_file_size) do
+    usage = get_user_data_usage(user.id)
+    if usage.total_size_bytes + new_file_size > usage.limit do
+      {:error, "Storage limit exceeded"}
+    else
+      :ok
+    end
   end
 
   def get_all_users_data_usage do
@@ -230,10 +269,9 @@ defmodule PhoenixApp.Files do
   end
   
   defp ensure_uploads_directory(user) do
-    base_dir = "uploads"
-    user_dir = Path.join([base_dir, "user_files", to_string(user.id)])
-    
-    File.mkdir_p!(base_dir)
+    # Use PhoenixApp.Uploads to get the path
+    # This ensures consistency with other uploads
+    user_dir = PhoenixApp.Uploads.user_dir(user.id, context: "files")
     File.mkdir_p!(user_dir)
   end
 end

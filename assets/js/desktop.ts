@@ -163,20 +163,16 @@ const ResizeHandle: any = {
         const top = parseInt(this.window.style.top || '0', 10) || 0;
         try {
           if ((this as any).pushEvent && this.windowId) {
-            (this as any).pushEvent('update_window_size', {
+            (this as any).pushEvent('update_window_layout', {
               window_id: this.windowId,
               width,
-              height
-            });
-            // Also persist the final position when resizing from N/W edges
-            (this as any).pushEvent('update_window_position', {
-              window_id: this.windowId,
+              height,
               x: left,
               y: top
             });
           }
         } catch (e) {
-          console.error('Failed to push window size/position update', e);
+          console.error('Failed to push window layout update', e);
         }
       }
       this.isResizing = false; 
@@ -225,12 +221,18 @@ const initTaskbarClock = () => {
     const update = () => {
       const now = new Date();
       const hhmm = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const mmdd = String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0');
+      // Full date: "December 7, 2025"
+      const fullDate = now.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
 
       const timeEl = el.querySelector('.time');
-      const dateEl = el.querySelector('.date');
       if (timeEl) (timeEl as HTMLElement).textContent = hhmm;
-      if (dateEl) (dateEl as HTMLElement).textContent = mmdd;
+      
+      // Update tooltip and calendar header
+      const dateFullEls = document.querySelectorAll('.date-full');
+      dateFullEls.forEach(el => (el as HTMLElement).textContent = fullDate);
+
+      const dateHeaderEls = document.querySelectorAll('.date-full-header');
+      dateHeaderEls.forEach(el => (el as HTMLElement).textContent = fullDate);
     };
 
     // Run immediately then every 1s

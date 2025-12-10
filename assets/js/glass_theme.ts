@@ -46,8 +46,8 @@ export const GlassTheme = {
     const opacity = parseFloat(data.opacity?.toString() || '0.15');
     const blur = parseInt(data.blur?.toString() || '15', 10);
 
-    // Check if custom color is provided
-    if (data.custom_color && data.custom_color !== '') {
+    // Check if custom color is provided - prioritize it over theme selection
+    if (data.custom_color && data.custom_color !== '' && data.custom_color !== '#000000') {
       // Convert hex to rgba with custom opacity
       const hex = data.custom_color.replace('#', '');
       const r = parseInt(hex.substr(0, 2), 16);

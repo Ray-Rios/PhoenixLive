@@ -71,6 +71,21 @@
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out forwards;
+}
+
 /* Desktop Environment Styles */
 .desktop-window {
   position: absolute;
@@ -592,17 +607,17 @@ html, body {
 }
 
 .glass-dark {
-  background: rgba(0, 0, 0, 0.15);
-  -webkit-backdrop-filter: blur(15px) saturate(120%);
-  backdrop-filter: blur(15px) saturate(120%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid var(--glass-border);
 }
 
 .dark-glass {
-  background: rgba(15, 23, 42, 0.7);
-  -webkit-backdrop-filter: blur(12px) saturate(120%);
-  backdrop-filter: blur(12px) saturate(120%);
-  border: 1px solid rgba(6, 182, 212, 0.2);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid var(--glass-border);
 }
 
 .glass-blue {

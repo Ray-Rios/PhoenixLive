@@ -17,7 +17,12 @@ defmodule PhoenixApp.Application do
     # Configure PubSub - just use standard adapter, Redis bridging is handled separately
     pubsub_child = {Phoenix.PubSub, name: PhoenixApp.PubSub}
 
+    # Get libcluster topologies
+    topologies = Application.get_env(:libcluster, :topologies) || []
+
     children = [
+      # Start the Cluster Supervisor
+      {Cluster.Supervisor, [topologies, [name: PhoenixApp.ClusterSupervisor]]},
       PhoenixApp.Repo,
       pubsub_child,
       PhoenixAppWeb.Presence,

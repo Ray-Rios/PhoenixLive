@@ -8,7 +8,9 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   url: [host: System.get_env("PHOENIX_HOST") || "phxlive.net", port: 443, scheme: "https"],
   check_origin: [
     "https://phxlive.net",
-    "https://www.phxlive.net"
+    "https://www.phxlive.net",
+    "//localhost",
+    "//127.0.0.1"
   ],
   force_ssl: [rewrite_on: [:x_forwarded_proto], log: false, exclude: ["health"]],
   server: true,

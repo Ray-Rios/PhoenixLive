@@ -191,11 +191,12 @@ defmodule PhoenixAppWeb.FileManagerComponent do
             <div class="mt-4">
               <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Storage</div>
               <div class="mt-2 p-2 glass-dark rounded">
-                <div class="text-xs text-gray-300">
-                  <%= Files.format_file_size(@stats.total_size) %> used
+                <div class="flex justify-between text-xs text-gray-300 mb-1">
+                  <span><%= Files.format_file_size(@usage.total_size_bytes) %> used</span>
+                  <span><%= Files.format_file_size(@usage.limit) %></span>
                 </div>
-                <div class="w-full bg-gray-700 rounded-full h-1 mt-1">
-                  <div class="bg-blue-600 h-1 rounded-full" style={"width: #{min((@stats.total_size / (1024 * 1024 * 1024)) * 100, 100)}%"}></div>
+                <div class="w-full bg-gray-700 rounded-full h-1.5">
+                  <div class="bg-blue-600 h-1.5 rounded-full transition-all duration-500" style={"width: #{min((@usage.total_size_bytes / @usage.limit) * 100, 100)}%"}></div>
                 </div>
               </div>
             </div>
@@ -540,9 +541,12 @@ defmodule PhoenixAppWeb.FileManagerComponent do
         }
     end
 
+    usage = Files.get_user_data_usage(user.id)
+
     socket
     |> assign(:files, filtered_files)
     |> assign(:stats, stats)
+    |> assign(:usage, usage)
   end
 
   defp update_current_path(socket) do

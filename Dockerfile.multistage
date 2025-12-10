@@ -118,8 +118,8 @@ COPY priv/static/favicon.ico ./priv/static/
 COPY priv/static/robots.txt ./priv/static/
 COPY priv/static/sitemap.xml ./priv/static/
 
-# Compile application
-RUN mix compile
+# Compile application (ignore unavailable optional dependencies)
+RUN mix do deps.loadpaths --no-deps-check, compile
 
 # Digest assets for production
 RUN mix phx.digest

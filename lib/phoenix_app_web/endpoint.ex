@@ -13,10 +13,10 @@ defmodule PhoenixAppWeb.Endpoint do
     websocket: true,
     longpoll: false
 
-  # Serve user uploads from mounted PVC (/app/uploads)
+  # Serve user uploads from mounted PVC (/app/uploads) or local uploads folder
   plug Plug.Static,
     at: "/uploads",
-    from: "/app/uploads",
+    from: if(File.exists?("/app/uploads"), do: "/app/uploads", else: "uploads"),
     gzip: false,
     cache_control_for_etags: "public, max-age=31536000"
 

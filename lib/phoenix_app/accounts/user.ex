@@ -33,6 +33,12 @@ defmodule PhoenixApp.Accounts.User do
     field :background_preference, :string, default: "galaxy"
     field :background_custom_data, :map, default: %{}
 
+    # Invite & notification preferences
+    field :allow_channel_invites, :boolean, default: true
+    field :blocked_user_ids, {:array, :binary_id}, default: []
+    field :notification_sound_enabled, :boolean, default: true
+    field :master_volume, :float, default: 0.7
+
     # Email verification & security fields
     field :email_verified_at, :utc_datetime
     field :email_verification_token, :string

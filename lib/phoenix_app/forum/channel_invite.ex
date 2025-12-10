@@ -55,10 +55,12 @@ defmodule PhoenixApp.Forum.ChannelInvite do
   end
 
   def revoke(invite) do
-    Ecto.Changeset.change(invite, %{is_revoked: true, revoked_at: DateTime.utc_now()})
+    # Truncate to :second to match Ecto :utc_datetime expectations
+    Ecto.Changeset.change(invite, %{is_revoked: true, revoked_at: DateTime.truncate(DateTime.utc_now(), :second)})
   end
 
   def accept(invite) do
-    Ecto.Changeset.change(invite, %{accepted_at: DateTime.utc_now()})
+    # Truncate to :second to match Ecto :utc_datetime expectations
+    Ecto.Changeset.change(invite, %{accepted_at: DateTime.truncate(DateTime.utc_now(), :second)})
   end
 end

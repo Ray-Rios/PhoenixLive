@@ -1,4 +1,5 @@
 defmodule PhoenixApp.Accounts do
+  import Ecto.Query
   alias PhoenixApp.Repo
   alias PhoenixApp.Accounts.User
   
@@ -765,5 +766,73 @@ defmodule PhoenixApp.Accounts do
       :ok -> :ok
       {:error, _reason} -> {:error, :rate_limited}
     end
+  end
+
+  # ---------------------
+  # User Blocking System
+  # ---------------------
+  
+  @doc "Block a user from sending invites"
+  def block_user(blocker_id, blocked_id) when blocker_id != blocked_id do
+    user = get_user!(blocker_id)
+    current_blocked = Map.get(user, :blocked_user_ids, [])
+    
+    if blocked_id in current_blocked do
+      {:ok, user}
+    else
+      user
+      |> Ecto.Changeset.change(blocked_user_ids: [blocked_id | current_blocked])
+      |> Repo.update()
+    end
+  end
+  def block_user(id, id), do: {:error, :cannot_block_self}
+
+  @doc "Unblock a user"
+  def unblock_user(blocker_id, blocked_id) do
+    user = get_user!(blocker_id)
+    current_blocked = Map.get(user, :blocked_user_ids, [])
+    
+    user
+    |> Ecto.Changeset.change(blocked_user_ids: List.delete(current_blocked, blocked_id))
+    |> Repo.update()
+  end
+
+  @doc "Get list of blocked users with their details"
+  def list_blocked_users(user_id) do
+    user = get_user!(user_id)
+    blocked_ids = Map.get(user, :blocked_user_ids, [])
+    
+    if Enum.empty?(blocked_ids) do
+      []
+    else
+      from(u in User,
+        where: u.id in ^blocked_ids,
+        select: %{id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url}
+      )
+      |> Repo.all()
+    end
+  end
+
+  # ---------------------
+  # User Preferences
+  # ---------------------
+  
+  @doc "Update user invite preferences"
+  def update_invite_preferences(user_id, attrs) do
+    user = get_user!(user_id)
+    
+    user
+    |> Ecto.Changeset.cast(attrs, [:allow_channel_invites])
+    |> Repo.update()
+  end
+
+  @doc "Update user audio preferences"
+  def update_audio_preferences(user_id, attrs) do
+    user = get_user!(user_id)
+    
+    user
+    |> Ecto.Changeset.cast(attrs, [:notification_sound_enabled, :master_volume])
+    |> Ecto.Changeset.validate_number(:master_volume, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 1.0)
+    |> Repo.update()
   end
 end

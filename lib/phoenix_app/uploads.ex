@@ -34,9 +34,13 @@ defmodule PhoenixApp.Uploads do
   or relative path in development.
   """
   def base_dir do
-    # Always use /app/uploads which is where the PVC is mounted in production
-    # In development, this path won't exist and will fall back to creating it locally
-    "/app/uploads"
+    # Use /app/uploads in production (PVC mount)
+    # Use local uploads directory in development
+    if System.get_env("MIX_ENV") == "prod" || File.exists?("/app/uploads") do
+      "/app/uploads"
+    else
+      Path.expand("uploads", File.cwd!())
+    end
   end
 
   @doc """
@@ -304,4 +308,37 @@ defmodule PhoenixApp.Uploads do
   end
 
   def url_to_path(_), do: nil
+
+  @doc """
+  Lists all uploaded files for a user in a specific context.
+  Returns a list of maps with file details.
+  """
+  def list_user_uploads(user_id, context) do
+    dir = user_dir(user_id, context: context)
+    
+    if File.exists?(dir) do
+      dir
+      |> File.ls!()
+      |> Enum.filter(fn file -> 
+        # Filter out thumbnails if they exist in the same dir
+        !String.starts_with?(file, "thumb_") && 
+        !String.starts_with?(file, "transcoded_")
+      end)
+      |> Enum.map(fn filename ->
+        path = Path.join(dir, filename)
+        stat = File.stat!(path)
+        url = url_path(user_id, context, filename)
+        
+        %{
+          filename: filename,
+          url: url,
+          size: stat.size,
+          updated_at: stat.mtime
+        }
+      end)
+      |> Enum.sort_by(&(&1.updated_at), :desc)
+    else
+      []
+    end
+  end
 end

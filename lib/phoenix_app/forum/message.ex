@@ -19,6 +19,7 @@ defmodule PhoenixApp.Forum.Message do
     has_many :reactions, PhoenixApp.Forum.Reaction
     has_many :attachments, PhoenixApp.Forum.MessageAttachment
     has_one :created_thread, PhoenixApp.Forum.Thread, foreign_key: :message_id
+    has_many :replies, PhoenixApp.Forum.Message, foreign_key: :reply_to_id, preload_order: [asc: :inserted_at]
 
     timestamps(type: :utc_datetime)
   end

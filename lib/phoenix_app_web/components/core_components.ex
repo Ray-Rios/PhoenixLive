@@ -102,6 +102,7 @@ defmodule PhoenixAppWeb.CoreComponents do
       phx-remove={JS.hide(to: "##{@flash_id}", transition: {"transition-all duration-300", "opacity-100 translate-x-0", "opacity-0 translate-x-full"})}
       phx-hook="AutoDismissFlash"
       data-auto-dismiss="3000"
+      data-key={@kind}
       role="alert"
       style={"position: fixed; top: #{@top_position}px; right: 20px; z-index: 99999;"}
       class={[
@@ -132,13 +133,19 @@ defmodule PhoenixAppWeb.CoreComponents do
   attr :id, :string, default: nil, doc: "the optional id of flash container"
 
   def flash_group(assigns) do
-    assigns = assign(assigns, :flash_id, assigns.id || "flash-group-#{System.unique_integer([:positive])}")
+    assigns = assign(assigns, :flash_id, assigns.id || "flash-group")
 
     # Collect all active flash messages with their types and stable IDs
+    # We include a hash of the message in the ID to force re-mounting when the message changes
+    # even if the kind is the same. This ensures the animation plays again.
     active_flashes = [
       {:info, Phoenix.Flash.get(assigns.flash, :info), :info},
       {:error, Phoenix.Flash.get(assigns.flash, :error), :error}
-    ] |> Enum.filter(fn {_, msg, _} -> msg end)
+    ] 
+    |> Enum.filter(fn {_, msg, _} -> msg end)
+    |> Enum.map(fn {kind, msg, _} -> 
+      {kind, msg, "#{kind}-#{:erlang.phash2(msg)}"}
+    end)
 
     assigns = assign(assigns, :active_flashes, active_flashes)
 
@@ -301,6 +308,7 @@ defmodule PhoenixAppWeb.CoreComponents do
   attr :prompt, :string, default: nil, doc: "the prompt for select inputs"
   attr :options, :list, doc: "the options to pass to Phoenix.HTML.Form.options_for_select/2"
   attr :multiple, :boolean, default: false, doc: "the multiple flag for select inputs"
+  attr :label_class, :string, default: nil
 
   attr :rest, :global,
     include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
@@ -323,7 +331,7 @@ defmodule PhoenixAppWeb.CoreComponents do
 
     ~H"""
     <div phx-feedback-for={@name}>
-      <label class="flex items-center gap-4 text-sm leading-6 text-zinc-600">
+      <label class={["flex items-center gap-4 text-sm leading-6", @label_class || "text-zinc-600"]}>
         <input type="hidden" name={@name} value="false" />
         <input
           type="checkbox"
@@ -344,7 +352,7 @@ defmodule PhoenixAppWeb.CoreComponents do
   def input(%{type: "select"} = assigns) do
     ~H"""
     <div phx-feedback-for={@name}>
-      <.label for={@id}><%= @label %></.label>
+      <.label for={@id} class={@label_class}><%= @label %></.label>
       <select
         id={@id}
         name={@name}
@@ -363,7 +371,7 @@ defmodule PhoenixAppWeb.CoreComponents do
   def input(%{type: "textarea"} = assigns) do
     ~H"""
     <div phx-feedback-for={@name}>
-      <.label for={@id}><%= @label %></.label>
+      <.label for={@id} class={@label_class}><%= @label %></.label>
       <textarea
         id={@id}
         name={@name}
@@ -383,7 +391,7 @@ defmodule PhoenixAppWeb.CoreComponents do
   def input(assigns) do
     ~H"""
     <div phx-feedback-for={@name}>
-      <.label for={@id}><%= @label %></.label>
+      <.label for={@id} class={@label_class}><%= @label %></.label>
       <input
         type={@type}
         name={@name}
@@ -406,11 +414,12 @@ defmodule PhoenixAppWeb.CoreComponents do
   Renders a label.
   """
   attr :for, :string, default: nil
+  attr :class, :string, default: nil
   slot :inner_block, required: true
 
   def label(assigns) do
     ~H"""
-    <label for={@for} class="block text-sm font-semibold leading-6 text-zinc-800">
+    <label for={@for} class={["block text-sm font-semibold leading-6", @class || "text-zinc-800"]}>
       <%= render_slot(@inner_block) %>
     </label>
     """

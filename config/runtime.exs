@@ -175,3 +175,22 @@ config :cors_plug,
     ),
   max_age: 86400,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+# -------------------------------------------------
+# Clustering (libcluster)
+# -------------------------------------------------
+if System.get_env("KUBERNETES_SERVICE_HOST") do
+  config :libcluster,
+    topologies: [
+      k8s: [
+        strategy: Cluster.Strategy.Kubernetes,
+        config: [
+          mode: :ip,
+          kubernetes_node_basename: "phoenix_app",
+          kubernetes_selector: "app=phoenix-web",
+          kubernetes_namespace: System.get_env("POD_NAMESPACE") || "default",
+          polling_interval: 3_000
+        ]
+      ]
+    ]
+end

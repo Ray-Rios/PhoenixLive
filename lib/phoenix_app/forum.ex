@@ -1,4 +1,3 @@
-  
 defmodule PhoenixApp.Forum do
   @moduledoc """
   The Forum context for Discord-like messaging functionality.
@@ -257,17 +256,31 @@ defmodule PhoenixApp.Forum do
     from(m in Message,
       join: u in assoc(m, :user),
       where: m.channel_id == ^channel_id,
+      where: is_nil(m.reply_to_id),
       where: is_nil(u.role) or u.role != "banned",
       # Load the most recent N messages (desc), then reverse so callers receive
       # chronological order (oldest -> newest). This makes the initial view
       # show the latest window of messages while preserving ascending ordering
       order_by: [desc: m.inserted_at],
       limit: ^limit,
-      preload: [:user, :reactions, :thread, attachments: :user]
+      preload: [
+        :user, :reactions, :thread, attachments: :user,
+        replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+      ]
     )
     |> Repo.all()
+    |> filter_banned_content()
+    # Reverse to get chronological order (oldest -> newest)
+    |> Enum.reverse()
+  end
+
+  defp filter_banned_content(messages) do
+    messages
+    |> Enum.filter(fn m -> 
+      is_nil(m.user) or is_nil(m.user.role) or m.user.role != "banned"
+    end)
     |> Enum.map(fn m ->
-      # Filter attachments uploaded by banned users
+      # Filter attachments
       filtered_attachments = Enum.filter(m.attachments || [], fn att ->
         case att do
           %{user_id: nil} -> true
@@ -275,12 +288,18 @@ defmodule PhoenixApp.Forum do
           _ -> true
         end
       end)
+      
+      # Recursively filter replies if loaded
+      filtered_replies = if Ecto.assoc_loaded?(m.replies) do
+        filter_banned_content(m.replies)
+      else
+        []
+      end
 
-      %{m | attachments: filtered_attachments}
+      %{m | attachments: filtered_attachments, replies: filtered_replies}
     end)
-    # Reverse to get chronological order (oldest -> newest)
-    |> Enum.reverse()
   end
+
 
   @doc "Cursor based pagination: load messages before a given message id (older messages)"
   def list_messages_cursor(channel_id, opts \\ %{}) do
@@ -290,8 +309,12 @@ defmodule PhoenixApp.Forum do
     base_query = from(m in Message,
       join: u in assoc(m, :user),
       where: m.channel_id == ^channel_id,
+      where: is_nil(m.reply_to_id),
       where: is_nil(u.role) or u.role != "banned",
-      preload: [:user, :reactions, :thread, attachments: :user]
+      preload: [
+        :user, :reactions, :thread, attachments: :user,
+        replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+      ]
     )
 
     query =
@@ -312,18 +335,7 @@ defmodule PhoenixApp.Forum do
       _ -> Enum.reverse(results)
     end
 
-    # Filter attachments uploaded by banned users identically to list_messages
-    Enum.map(results, fn m ->
-      filtered_attachments = Enum.filter(m.attachments || [], fn att ->
-        case att do
-          %{user_id: nil} -> true
-          %{user: u} when not is_nil(u) -> is_nil(u.role) or u.role != "banned"
-          _ -> true
-        end
-      end)
-
-      %{m | attachments: filtered_attachments}
-    end)
+    filter_banned_content(results)
   end
 
   def list_messages_by_room(room_id, limit \\ 50) do
@@ -349,7 +361,17 @@ defmodule PhoenixApp.Forum do
   end
 
   def get_message!(id) do
-    Repo.get!(Message, id) |> Repo.preload([:user, :reactions, :thread, attachments: :user])
+    Repo.get!(Message, id) |> Repo.preload([
+      :user, :reactions, :thread, attachments: :user,
+      replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+    ])
+  end
+
+  def get_message(id) do
+    Repo.get(Message, id) |> Repo.preload([
+      :user, :reactions, :thread, attachments: :user,
+      replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+    ])
   end
 
   def create_message(user, channel_id, attrs \\ %{}) do
@@ -376,6 +398,13 @@ defmodule PhoenixApp.Forum do
       if not can_post_in_channel?(user, channel) do
         {:error, :forbidden}
       else
+        # Map parent_id to reply_to_id if present
+        attrs = if Map.has_key?(attrs, :parent_id) do
+          Map.put(attrs, :reply_to_id, attrs.parent_id)
+        else
+          attrs
+        end
+
         # After checks, proceed to create message
         %Message{}
         |> Message.changeset(attrs)
@@ -386,7 +415,8 @@ defmodule PhoenixApp.Forum do
           {:ok, message} ->
             # Audit log: message created
             Task.start(fn -> PhoenixApp.Audit.log(user.id, "create_message", "message", message.id, %{channel_id: channel_id}) end)
-            message = Repo.preload(message, [:user, :reactions, :attachments])
+            # Preload replies (empty) so it's a list, not NotLoaded
+            message = Repo.preload(message, [:user, :reactions, :attachments, :replies])
             pubsub_broadcast("channel:#{channel_id}", {:new_message, message})
             {:ok, message}
           error -> error
@@ -449,12 +479,68 @@ defmodule PhoenixApp.Forum do
     result
   end
 
-  @doc "Delete a message with permission check for a given user (admins/editors or owner)."
+  @doc "Delete a message with permission check for a given user (admins/editors, owner, or channel moderator)."
   def delete_message_by_user(%{id: user_id} = user, %Message{} = message) do
-    can_delete = message.user_id == user_id || Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"]
+    # Ensure channel is loaded for permission check
+    message = Repo.preload(message, :channel)
+    channel = message.channel
+
+    can_delete = message.user_id == user_id || 
+                 Map.get(user, :is_admin, false) || 
+                 user.role in ["admin", "gm", "editor"] ||
+                 can_moderate_channel?(user, channel)
 
     if can_delete do
       delete_message(message)
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  @doc "Update a message with permission check for a given user (admins/editors, owner, or channel moderator)."
+  def update_message_by_user(%{id: user_id} = user, %Message{} = message, attrs) do
+    # Ensure channel is loaded for permission check
+    message = Repo.preload(message, :channel)
+    channel = message.channel
+
+    # Check if user is banned in this channel
+    member = get_channel_member(channel.id, user_id)
+    is_banned = member && member.is_banned
+
+    if is_banned do
+      {:error, :forbidden}
+    else
+      can_edit = message.user_id == user_id || 
+                 Map.get(user, :is_admin, false) || 
+                 user.role in ["admin", "gm", "editor"] ||
+                 can_moderate_channel?(user, channel)
+
+      if can_edit do
+        update_message(message, attrs)
+      else
+        {:error, :forbidden}
+      end
+    end
+  end
+
+  @doc "Toggle the pinned status of a message. Only channel moderators/owners can do this."
+  def toggle_message_pin(%{id: _user_id} = user, %Message{} = message) do
+    message = Repo.preload(message, :channel)
+    channel = message.channel
+
+    if can_moderate_channel?(user, channel) do
+      new_status = !message.is_pinned
+      
+      message
+      |> Message.changeset(%{is_pinned: new_status})
+      |> Repo.update()
+      |> case do
+        {:ok, updated_message} ->
+          updated_message = Repo.preload(updated_message, [:user, :reactions, :attachments])
+          pubsub_broadcast("channel:#{message.channel_id}", {:message_updated, updated_message})
+          {:ok, updated_message}
+        error -> error
+      end
     else
       {:error, :forbidden}
     end
@@ -635,6 +721,30 @@ defmodule PhoenixApp.Forum do
     member
     |> ChannelMember.changeset(attrs)
     |> Repo.update()
+    |> case do
+      {:ok, updated_member} ->
+        # Broadcast ban event if user was just banned
+        if Map.get(attrs, :is_banned) == true or Map.get(attrs, "is_banned") == true do
+          pubsub_broadcast("channel:#{member.channel_id}", {:user_banned, member.user_id, member.channel_id})
+        end
+        {:ok, updated_member}
+      error -> error
+    end
+  end
+
+  def list_pinned_messages(channel_id) do
+    from(m in Message,
+      join: u in assoc(m, :user),
+      where: m.channel_id == ^channel_id and m.is_pinned == true,
+      where: is_nil(u.role) or u.role != "banned",
+      order_by: [desc: m.inserted_at],
+      preload: [
+        :user, :reactions, :thread, attachments: :user,
+        replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+      ]
+    )
+    |> Repo.all()
+    |> filter_banned_content()
   end
 
   @doc "Mark messages read for a user in a channel (set last_read_message_id and last_seen_at)."
@@ -648,7 +758,13 @@ defmodule PhoenixApp.Forum do
   def remove_channel_member(channel_id, user_id) do
     case get_channel_member(channel_id, user_id) do
       nil -> {:error, :not_found}
-      member -> Repo.delete(member)
+      member -> 
+        case Repo.delete(member) do
+          {:ok, deleted_member} ->
+            pubsub_broadcast("channel:#{channel_id}", {:user_kicked, user_id, channel_id})
+            {:ok, deleted_member}
+          error -> error
+        end
     end
   end
 
@@ -713,12 +829,13 @@ defmodule PhoenixApp.Forum do
   def can_manage_channel?(%{id: user_id} = user, %Channel{} = channel) do
     is_admin = Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"]
     is_owner = Map.get(channel, :owner_id) == user_id
-    is_creator = Map.get(channel, :created_by_id) == user_id
+    # Removed is_creator check to prevent former owners from retaining control
+    # is_creator = Map.get(channel, :created_by_id) == user_id
 
     cond do
       is_admin -> true
       is_owner -> true
-      is_creator -> true
+      # is_creator -> true
       true -> user_role_in_channel(channel.id, user_id) == "owner"
     end
   end
@@ -749,14 +866,23 @@ defmodule PhoenixApp.Forum do
     if Map.get(user, :role) == "banned" do
       false
     else
-      if channel.is_private do
+      # Allow admins and staff to post in private channels
+      if Map.get(user, :is_admin, false) || Map.get(user, :role) in ["admin", "gm", "editor"] do
+        true
+      else
+        if channel.is_private do
         case get_channel_member(channel.id, user_id) do
           %ChannelMember{is_banned: true} -> false
           %ChannelMember{} -> true
           nil -> false
         end
-      else
-        true
+        else
+          # Check for ban in public channel
+          case get_channel_member(channel.id, user_id) do
+            %ChannelMember{is_banned: true} -> false
+            _ -> true
+          end
+        end
       end
     end
   end
@@ -822,8 +948,35 @@ defmodule PhoenixApp.Forum do
     if resolved_invitee_id == nil do
       {:error, :invitee_not_found}
     else
-      attrs = Map.merge(%{inviter_id: inviter_id, invitee_id: resolved_invitee_id, channel_id: channel_id}, opts)
-      create_channel_invite(attrs)
+      # Check if user is already a member
+      if get_channel_member(channel_id, resolved_invitee_id) do
+        {:error, :already_member}
+      else
+        # Check if there's already a pending invite
+        existing_invite = from(i in ChannelInvite,
+          where: i.inviter_id == ^inviter_id,
+          where: i.invitee_id == ^resolved_invitee_id,
+          where: i.channel_id == ^channel_id,
+          where: is_nil(i.accepted_at),
+          where: i.is_revoked == false,
+          where: is_nil(i.revoked_at),
+          limit: 1
+        ) |> Repo.one()
+
+        if existing_invite do
+          {:error, :invite_already_pending}
+        else
+          # Check if invitee can receive invites
+          invitee = PhoenixApp.Accounts.get_user(resolved_invitee_id)
+          
+          if invitee && !can_receive_invite?(invitee, inviter_id) do
+            {:error, :invitee_blocked_invites}
+          else
+            attrs = Map.merge(%{inviter_id: inviter_id, invitee_id: resolved_invitee_id, channel_id: channel_id}, opts)
+            create_channel_invite(attrs)
+          end
+        end
+      end
     end
   end
 
@@ -847,43 +1000,43 @@ defmodule PhoenixApp.Forum do
             if invite.invitee_id && invite.invitee_id != user_id do
               {:error, :invite_not_for_user}
             else
-          # Check if already a member
-          if is_channel_member?(invite.channel_id, user_id) do
-            {:error, :already_member}
-          else
-            Repo.transaction(fn ->
-              # Add user as member
-              case create_channel_member(%{
-                channel_id: invite.channel_id,
-                user_id: user_id,
-                role: "member"
-              }) do
-                {:ok, member} ->
-                  # Increment invite usage
-                  invite
-                  |> Ecto.Changeset.change(uses: invite.uses + 1)
-                  |> Repo.update!()
-                  # Mark accepted timestamp when invite is personal
-                  if invite.invitee_id do
-                    invite
-                    |> ChannelInvite.accept()
-                    |> Repo.update!()
+              # Check if already a member
+              if is_channel_member?(invite.channel_id, user_id) do
+                {:error, :already_member}
+              else
+                Repo.transaction(fn ->
+                  # Add user as member
+                  case create_channel_member(%{
+                    channel_id: invite.channel_id,
+                    user_id: user_id,
+                    role: "member"
+                  }) do
+                    {:ok, member} ->
+                      # Increment invite usage
+                      invite
+                      |> Ecto.Changeset.change(uses: invite.uses + 1)
+                      |> Repo.update!()
+                      # Mark accepted timestamp when invite is personal
+                      if invite.invitee_id do
+                        invite
+                        |> ChannelInvite.accept()
+                        |> Repo.update!()
+                      end
+                      
+                      member
+                    
+                    {:error, changeset} ->
+                      Repo.rollback(changeset)
                   end
-                  
-                  member
-                
-                {:error, changeset} ->
-                  Repo.rollback(changeset)
+                end)
               end
-            end)
-          end
             end
           else
             {:error, :invite_expired}
           end
         end
-        end
     end
+  end
 
   @doc "Accept a channel invite by ID (used for personal invites). Returns {:ok, member} or {:error, reason}."
   def accept_channel_invite(invite_id, user_id) do
@@ -894,18 +1047,28 @@ defmodule PhoenixApp.Forum do
           {:error, :forbidden}
         else
           if ChannelInvite.is_valid?(invite) do
-            Repo.transaction(fn ->
-              case create_channel_member(%{channel_id: invite.channel_id, user_id: user_id, role: "member"}) do
-                {:ok, member} ->
-                  invite
-                  |> Ecto.Changeset.change(uses: invite.uses + 1)
-                  |> ChannelInvite.accept()
-                  |> Repo.update!()
-                  member
+            # Check if already a member
+            if is_channel_member?(invite.channel_id, user_id) do
+              # Mark invite as accepted even though already member
+              invite
+              |> Ecto.Changeset.change(uses: invite.uses + 1)
+              |> ChannelInvite.accept()
+              |> Repo.update()
+              {:error, :already_member}
+            else
+              Repo.transaction(fn ->
+                case create_channel_member(%{channel_id: invite.channel_id, user_id: user_id, role: "member"}) do
+                  {:ok, member} ->
+                    invite
+                    |> Ecto.Changeset.change(uses: invite.uses + 1)
+                    |> ChannelInvite.accept()
+                    |> Repo.update!()
+                    member
 
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
-            end)
+                  {:error, changeset} -> Repo.rollback(changeset)
+                end
+              end)
+            end
           else
             {:error, :invite_expired}
           end
@@ -1038,5 +1201,85 @@ defmodule PhoenixApp.Forum do
     else
       :ok
     end
+  end
+
+  # Invite Management Functions
+  
+  @doc "Get all pending invites for a user (not accepted, not expired, not revoked)"
+  def list_pending_invites_for_user(user_id) do
+    from(i in ChannelInvite,
+      where: i.invitee_id == ^user_id,
+      where: is_nil(i.accepted_at),
+      where: i.is_revoked == false,
+      where: is_nil(i.revoked_at),
+      where: is_nil(i.expires_at) or i.expires_at > ^DateTime.utc_now(),
+      where: is_nil(i.max_uses) or i.uses < i.max_uses,
+      order_by: [desc: i.inserted_at],
+      preload: [:channel, :inviter]
+    )
+    |> Repo.all()
+  end
+
+  @doc "Count pending invites for a user (for notification badge)"
+  def count_pending_invites(user_id) do
+    from(i in ChannelInvite,
+      where: i.invitee_id == ^user_id,
+      where: is_nil(i.accepted_at),
+      where: i.is_revoked == false,
+      where: is_nil(i.revoked_at),
+      where: is_nil(i.expires_at) or i.expires_at > ^DateTime.utc_now(),
+      where: is_nil(i.max_uses) or i.uses < i.max_uses,
+      select: count(i.id)
+    )
+    |> Repo.one()
+  end
+
+  @doc "Decline/ignore an invite (marks as revoked so user doesn't see it again)"
+  def decline_invite(invite_id, user_id) do
+    case Repo.get(ChannelInvite, invite_id) do
+      nil -> {:error, :not_found}
+      invite ->
+        if invite.invitee_id == user_id do
+          invite
+          |> ChannelInvite.revoke()
+          |> Repo.update()
+        else
+          {:error, :forbidden}
+        end
+    end
+  end
+
+  @doc "Check rate limiting: prevent users from sending too many invites in a short period"
+  def can_send_invite?(inviter_id) do
+    # Count invites sent in last hour
+    one_hour_ago = DateTime.utc_now() |> DateTime.add(-1, :hour)
+    
+    count = from(i in ChannelInvite,
+      where: i.inviter_id == ^inviter_id,
+      where: i.inserted_at > ^one_hour_ago,
+      select: count(i.id)
+    )
+    |> Repo.one()
+    
+    # Limit to 10 invites per hour
+    count < 10
+  end
+
+  @doc "Check if a user can be invited (not blocked, has invites enabled)"
+  def can_receive_invite?(invitee, inviter_id) do
+    # Check if invites are enabled
+    invites_enabled = Map.get(invitee, :allow_channel_invites, true)
+    
+    # Check if inviter is blocked
+    blocked_ids = Map.get(invitee, :blocked_user_ids, [])
+    not_blocked = inviter_id not in blocked_ids
+    
+    invites_enabled && not_blocked
+  end
+
+  @doc "Get shareable invite link for a channel invite code"
+  def get_invite_link(code) do
+    # This will be a route like /forum/invite/:code
+    "/forum/invite/#{code}"
   end
 end
