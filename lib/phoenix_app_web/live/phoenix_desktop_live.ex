@@ -5,6 +5,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   This LiveComponent provides a persistent desktop environment with taskbar and windows.
   """
   use PhoenixAppWeb, :live_component
+  require Logger
   alias Phoenix.PubSub
 
   def update(assigns, socket) do
@@ -154,32 +155,36 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
 
   def handle_event("save_note", %{"note" => note}, socket) do
     if socket.assigns.selected_date && socket.assigns.current_user do
-      date = Date.from_iso8601!(socket.assigns.selected_date)
-      
-      # Handle uploads
-      uploaded_files = consume_uploaded_entries(socket, :calendar_attachment, fn %{path: path}, entry ->
-        # Save to user's drive (user://uploads/)
-        user_upload_path = get_real_path("user://uploads/", socket.assigns.current_user)
-        if !File.exists?(user_upload_path), do: File.mkdir_p!(user_upload_path)
-        
-        dest = Path.join(user_upload_path, entry.client_name)
-        File.cp!(path, dest)
-        {:ok, entry.client_name}
-      end)
-      
-      # Append uploaded filenames to note
-      updated_note = if Enum.empty?(uploaded_files) do
-        note
-      else
-        files_list = Enum.map(uploaded_files, fn name -> "- [File] #{name}" end) |> Enum.join("\n")
-        if note == "", do: "Attachments:\n" <> files_list, else: note <> "\n\nAttachments:\n" <> files_list
-      end
+      case Date.from_iso8601(socket.assigns.selected_date) do
+        {:ok, date} ->
+          # Handle uploads
+          uploaded_files = consume_uploaded_entries(socket, :calendar_attachment, fn %{path: path}, entry ->
+            # Save to user's drive (user://uploads/)
+            user_upload_path = get_real_path("user://uploads/", socket.assigns.current_user)
+            if !File.exists?(user_upload_path), do: File.mkdir_p!(user_upload_path)
+            
+            dest = Path.join(user_upload_path, entry.client_name)
+            File.cp!(path, dest)
+            {:ok, entry.client_name}
+          end)
+          
+          # Append uploaded filenames to note
+          updated_note = if Enum.empty?(uploaded_files) do
+            note
+          else
+            files_list = Enum.map(uploaded_files, fn name -> "- [File] #{name}" end) |> Enum.join("\n")
+            if note == "", do: "Attachments:\n" <> files_list, else: note <> "\n\nAttachments:\n" <> files_list
+          end
 
-      # Save to DB
-      PhoenixApp.Calendar.save_note(socket.assigns.current_user.id, date, updated_note)
-      
-      notes = Map.put(socket.assigns.calendar_notes, socket.assigns.selected_date, updated_note)
-      {:noreply, assign(socket, calendar_notes: notes, selected_date: nil)}
+          # Save to DB
+          PhoenixApp.Calendar.save_note(socket.assigns.current_user.id, date, updated_note)
+          
+          notes = Map.put(socket.assigns.calendar_notes, socket.assigns.selected_date, updated_note)
+          {:noreply, assign(socket, calendar_notes: notes, selected_date: nil)}
+        
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Invalid date selected")}
+      end
     else
       {:noreply, socket}
     end
@@ -296,8 +301,11 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     end
   end
 
+  def handle_event("validate_upload", _, socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("open_app", %{"app" => app}, socket) do
-    require Logger
     Logger.info("Opening app: #{app}")
     
     window_id = Ecto.UUID.generate()

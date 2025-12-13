@@ -465,12 +465,6 @@ const SidebarResizer = {
       }
     }
 
-    if (savedCollapsed === 'true') {
-      isCollapsed = true;
-      el.style.width = '10px'; // Collapsed width
-      if (content) content.style.display = 'none';
-    }
-
     const onMouseDown = (e: MouseEvent) => {
       isResizing = true;
       startX = e.clientX;
@@ -516,13 +510,14 @@ const SidebarResizer = {
 
       // Check if it was a click (toggle)
       if (dx < clickThreshold) {
-        toggleSidebar();
+        // If clicking the handle, we want to collapse it (since handle is only visible when open)
+        this.pushEvent("toggle_sidebar", {});
       } else {
         // It was a drag, save the new state
         const currentWidth = el.offsetWidth;
-        if (currentWidth <= 10) {
-          isCollapsed = true;
-          localStorage.setItem('forum_sidebar_collapsed', 'true');
+        if (currentWidth <= 100) {
+          // Dragged to collapse - trigger server event to close fully
+          this.pushEvent("toggle_sidebar", {});
         } else {
           isCollapsed = false;
           lastWidth = currentWidth;
@@ -533,23 +528,9 @@ const SidebarResizer = {
     };
 
     const toggleSidebar = () => {
-      if (isCollapsed) {
-        // Expand
-        isCollapsed = false;
-        el.style.width = `${lastWidth}px`;
-        if (content) content.style.display = 'block';
-        localStorage.setItem('forum_sidebar_collapsed', 'false');
-      } else {
-        // Collapse
-        isCollapsed = true;
-        lastWidth = el.offsetWidth; // Save current width before collapsing
-        if (lastWidth < 150) lastWidth = 256; // Ensure reasonable restore width
-        localStorage.setItem('forum_sidebar_width', lastWidth.toString());
-        
-        el.style.width = '10px';
-        if (content) content.style.display = 'none';
-        localStorage.setItem('forum_sidebar_collapsed', 'true');
-      }
+      // This is called when clicking the handle.
+      // Since handle is only visible when open, we always collapse.
+      this.pushEvent("toggle_sidebar", {});
     };
 
     handle.addEventListener('mousedown', onMouseDown);

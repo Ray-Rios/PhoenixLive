@@ -58,6 +58,7 @@ defmodule PhoenixAppWeb.ForumLive do
         editing_message_id: nil,
         editing_message_content: "",
         replying_to_message_id: nil,
+        reply_message_content: "",
         can_create_more_channels: length(visible_private_channels) < 5,
         show_image_viewer: false,
         viewer_image_url: nil,
@@ -72,19 +73,19 @@ defmodule PhoenixAppWeb.ForumLive do
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
         max_entries: 5,
         max_file_size: 100_000_000,  # 100MB for video files
-        auto_upload: false  # Manual upload control
+        auto_upload: true
       )
       |> allow_upload(:reply_attachment,
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
         max_entries: 5,
         max_file_size: 100_000_000,
-        auto_upload: false
+        auto_upload: true
       )
       |> allow_upload(:edit_attachment,
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
         max_entries: 5,
         max_file_size: 100_000_000,
-        auto_upload: false
+        auto_upload: true
       )
       
       can_moderate = Forum.can_moderate_channel?(user, default_channel)
@@ -234,6 +235,11 @@ defmodule PhoenixAppWeb.ForumLive do
   end
 
   @impl true
+  def handle_event("toggle_sidebar", _params, socket) do
+    {:noreply, assign(socket, sidebar_open: !socket.assigns.sidebar_open)}
+  end
+
+  @impl true
   def handle_event("send_message", %{"message" => content} = _params, socket) when content != "" do
     require Logger
     user = socket.assigns.current_user
@@ -325,112 +331,137 @@ end
     {:noreply, assign(socket, current_message: message)}
   end
 
-  def handle_event("start_reply", %{"message_id" => message_id}, socket) do
-    message = Forum.get_message!(message_id)
-    # Re-insert message into stream to trigger UI update if needed, 
-    # though assigning replying_to_message_id should be enough if the component uses it.
-    # However, with streams, we might need to force an update.
-    # Actually, since replying_to_message_id is a global assign passed to the component,
-    # and the component is rendered in the loop, we need to make sure LiveView knows to re-render it.
-    # But LiveView only re-renders stream items if they change in the stream.
-    # So we MUST re-insert the message into the stream.
-    
-    {:noreply, 
-     socket 
-     |> assign(replying_to_message_id: message_id)
-     |> stream_insert(:messages, message)}
-  end
-
-  def handle_event("cancel_reply", _params, socket) do
-    if socket.assigns.replying_to_message_id do
-      message = Forum.get_message!(socket.assigns.replying_to_message_id)
-      {:noreply, 
-       socket 
-       |> assign(replying_to_message_id: nil)
-       |> stream_insert(:messages, message)}
-    else
-      {:noreply, socket}
+  defp refresh_message(socket, nil), do: socket
+  defp refresh_message(socket, message_id) do
+    case Forum.get_message(message_id) do
+      nil -> socket
+      message -> 
+        # Always refresh the root message to ensure nested replies are updated
+        root_id = get_root_message_id(message)
+        case Forum.get_message(root_id) do
+          nil -> socket
+          root -> stream_insert(socket, :messages, root)
+        end
     end
   end
 
+  def handle_event("start_reply", %{"message_id" => message_id}, socket) do
+    old_id = socket.assigns.replying_to_message_id
+    
+    socket = 
+      socket
+      |> assign(replying_to_message_id: message_id)
+      |> refresh_message(old_id)
+      |> refresh_message(message_id)
+      
+    {:noreply, socket}
+  end
+
+  def handle_event("cancel_reply", _params, socket) do
+    old_id = socket.assigns.replying_to_message_id
+    
+    socket = 
+      socket
+      |> assign(replying_to_message_id: nil)
+      |> refresh_message(old_id)
+      
+    {:noreply, socket}
+  end
+
+
+
   # Open message inline edit
   def handle_event("start_edit_message", %{"message_id" => message_id}, socket) do
-    message = Forum.get_message!(message_id)
+    old_id = socket.assigns.editing_message_id
     
-    socket = assign(socket, editing_message_id: message_id, editing_message_content: message.content)
-    
-    if message.reply_to_id do
-      # It's a reply, update the parent message in the stream
-      parent = Forum.get_message!(message.reply_to_id)
-      {:noreply, stream_insert(socket, :messages, parent)}
-    else
-      # Top level message
-      {:noreply, stream_insert(socket, :messages, message)}
+    case Forum.get_message(message_id) do
+      nil -> 
+        {:noreply, put_flash(socket, :error, "Message not found")}
+      message ->
+        socket = 
+          socket
+          |> assign(editing_message_id: message_id, editing_message_content: message.content)
+          |> refresh_message(old_id)
+          |> refresh_message(message_id)
+          
+        {:noreply, socket}
     end
   end
 
   # Apply edited content
-  def handle_event("apply_edit_message", %{"message_id" => message_id, "content" => content}, socket) do
-    message = Forum.get_message!(message_id)
-    user = socket.assigns.current_user
-    channel = socket.assigns.current_channel
+  def handle_event("apply_edit_message", params, socket) do
+    message_id = params["message_id"]
+    content = params["content"] || ""
 
-    case Forum.update_message_by_user(user, message, %{content: content}) do
-      {:ok, updated_message} ->
-        # Process uploaded files for edit
-        consume_uploaded_entries(socket, :edit_attachment, fn %{path: path}, entry ->
-          context = "forum/#{channel.id}/messages/#{updated_message.id}"
-          case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
-            {:ok, url_path} ->
-              Forum.create_message_attachment(updated_message, %{
-                "filename" => entry.client_name,
-                "content_type" => entry.client_type,
-                "file_size" => entry.client_size,
-                "file" => url_path,
-                "user_id" => user.id
-              })
-            {:error, reason} -> {:error, reason}
+    # Check for pending uploads
+    if Enum.any?(socket.assigns.uploads.edit_attachment.entries, fn entry -> !entry.done? end) do
+      {:noreply, put_flash(socket, :error, "Please wait for files to finish uploading.")}
+    else
+      case Forum.get_message(message_id) do
+        nil -> 
+          {:noreply, put_flash(socket, :error, "Message not found")}
+        message ->
+          user = socket.assigns.current_user
+          channel = socket.assigns.current_channel
+
+          # Allow empty content if files are attached
+          has_uploads = length(socket.assigns.uploads.edit_attachment.entries) > 0
+          content = if content == "" && has_uploads, do: " ", else: content
+
+          case Forum.update_message_by_user(user, message, %{content: content}) do
+            {:ok, updated_message} ->
+              # Process uploaded files for edit
+              consume_uploaded_entries(socket, :edit_attachment, fn %{path: path}, entry ->
+                context = "forum/#{channel.id}/messages/#{updated_message.id}"
+                case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
+                  {:ok, url_path} ->
+                    Forum.create_message_attachment(updated_message, %{
+                      "filename" => entry.client_name,
+                      "content_type" => entry.client_type,
+                      "file_size" => entry.client_size,
+                      "file" => url_path,
+                      "user_id" => user.id
+                    })
+                  {:error, reason} -> {:error, reason}
+                end
+              end)
+              
+              # Re-fetch message to get attachments
+              updated_message = case Forum.get_message(updated_message.id) do
+                nil -> updated_message # Should not happen, but fallback to current struct
+                msg -> msg
+              end
+              
+              # Refresh the root message to update the UI
+              root_id = get_root_message_id(updated_message)
+              socket = refresh_message(socket, root_id)
+              
+              socket = 
+                socket 
+                |> assign(editing_message_id: nil, editing_message_content: "") 
+                |> put_flash(:info, "Message updated")
+              
+              {:noreply, socket}
+
+            {:error, :forbidden} ->
+              {:noreply, put_flash(socket, :error, "You don't have permission to edit this message")}
+
+            {:error, _changeset} ->
+              {:noreply, put_flash(socket, :error, "Failed to update message")}
           end
-        end)
-        
-        # Re-fetch message to get attachments
-        updated_message = Forum.get_message!(updated_message.id)
-        
-        socket = 
-          socket 
-          |> assign(editing_message_id: nil, editing_message_content: "") 
-          |> put_flash(:info, "Message updated")
-        
-        if updated_message.reply_to_id do
-          parent = Forum.get_message!(updated_message.reply_to_id)
-          {:noreply, stream_insert(socket, :messages, parent)}
-        else
-          {:noreply, stream_insert(socket, :messages, updated_message)}
-        end
-
-      {:error, :forbidden} ->
-        {:noreply, put_flash(socket, :error, "You don't have permission to edit this message")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update message")}
+      end
     end
   end
   
   def handle_event("cancel_edit", _params, socket) do
-    if socket.assigns.editing_message_id do
-      message = Forum.get_message!(socket.assigns.editing_message_id)
+    old_id = socket.assigns.editing_message_id
+    
+    socket = 
+      socket
+      |> assign(editing_message_id: nil, editing_message_content: "")
+      |> refresh_message(old_id)
       
-      socket = assign(socket, editing_message_id: nil, editing_message_content: "")
-      
-      if message.reply_to_id do
-        parent = Forum.get_message!(message.reply_to_id)
-        {:noreply, stream_insert(socket, :messages, parent)}
-      else
-        {:noreply, stream_insert(socket, :messages, message)}
-      end
-    else
-      {:noreply, assign(socket, editing_message_id: nil, editing_message_content: "")}
-    end
+    {:noreply, socket}
   end
 
   @impl true
@@ -445,60 +476,76 @@ end
   end
 
   def handle_event("toggle_pin", %{"message_id" => message_id}, socket) do
-    message = Forum.get_message!(message_id)
-    user = socket.assigns.current_user
-
-    case Forum.toggle_message_pin(user, message) do
-      {:ok, updated_message} ->
-        status = if updated_message.is_pinned, do: "pinned", else: "unpinned"
-        {:noreply, put_flash(socket, :info, "Message #{status}")}
-      
-      {:error, :forbidden} ->
-        {:noreply, put_flash(socket, :error, "Permission denied")}
+    case Forum.get_message(message_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Message not found")}
         
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to update pin status")}
+      message ->
+        user = socket.assigns.current_user
+
+        case Forum.toggle_message_pin(user, message) do
+          {:ok, updated_message} ->
+            status = if updated_message.is_pinned, do: "pinned", else: "unpinned"
+            {:noreply, put_flash(socket, :info, "Message #{status}")}
+          
+          {:error, :forbidden} ->
+            {:noreply, put_flash(socket, :error, "Permission denied")}
+            
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Failed to update pin status")}
+        end
     end
   end
 
   def handle_event("delete_message", %{"message_id" => message_id}, socket) do
-    message = Forum.get_message!(message_id)
-    user = socket.assigns.current_user
-    
-    # Delegate permission check and deletion to the context
-    case Forum.delete_message_by_user(user, message) do
-      {:ok, _} ->
-        {:noreply, put_flash(socket, :info, "Message deleted")}
-      {:error, :forbidden} ->
-        {:noreply, put_flash(socket, :error, "You don't have permission to delete this message")}
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete message")}
+    case Forum.get_message(message_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Message not found")}
+      message ->
+        user = socket.assigns.current_user
+        
+        # Delegate permission check and deletion to the context
+        case Forum.delete_message_by_user(user, message) do
+          {:ok, _} ->
+            {:noreply, put_flash(socket, :info, "Message deleted")}
+          {:error, :forbidden} ->
+            {:noreply, put_flash(socket, :error, "You don't have permission to delete this message")}
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Failed to delete message")}
+        end
     end
   end
 
   def handle_event("toggle_reaction", %{"message_id" => message_id, "emoji" => emoji}, socket) do
-    message = Forum.get_message!(message_id)
-    user = socket.assigns.current_user
-    
-    Forum.add_reaction(message, user, emoji)
-    {:noreply, socket}
+    case Forum.get_message(message_id) do
+      nil ->
+        {:noreply, socket}
+      message ->
+        user = socket.assigns.current_user
+        Forum.add_reaction(message, user, emoji)
+        {:noreply, socket}
+    end
   end
 
   def handle_event("delete_attachment", %{"attachment_id" => attachment_id}, socket) do
     user = socket.assigns.current_user
-    attachment = Forum.get_attachment!(attachment_id)
+    
+    case Forum.get_attachment(attachment_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Attachment not found")}
+        
+      attachment ->
+        # attachment already preloaded by Forum.get_attachment
+        can_delete = attachment.user_id == user.id || (attachment.message && attachment.message.user_id == user.id) || user.role in ["admin", "gm", "editor"] || Map.get(user, :is_admin, false)
 
-    # attachment already preloaded by Forum.get_attachment!
-
-    can_delete = attachment.user_id == user.id || (attachment.message && attachment.message.user_id == user.id) || user.role in ["admin", "gm", "editor"] || Map.get(user, :is_admin, false)
-
-    if can_delete do
-      case Forum.delete_attachment(attachment) do
-        {:ok, _} -> {:noreply, put_flash(socket, :info, "Attachment deleted")}
-        {:error, _} -> {:noreply, put_flash(socket, :error, "Failed to delete attachment")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "You don't have permission to delete this attachment")}
+        if can_delete do
+          case Forum.delete_attachment(attachment) do
+            {:ok, _} -> {:noreply, put_flash(socket, :info, "Attachment deleted")}
+            {:error, _} -> {:noreply, put_flash(socket, :error, "Failed to delete attachment")}
+          end
+        else
+          {:noreply, put_flash(socket, :error, "You don't have permission to delete this attachment")}
+        end
     end
   end
 
@@ -537,7 +584,7 @@ end
   def handle_event("show_create_channel", _params, socket) do
     user = socket.assigns.current_user
     
-    if user && (user.is_admin || user.role in ["admin", "gm", "editor"]) do
+    if user && (user.is_admin || user.role in ["admin", "gm"]) do
       {:noreply, assign(socket, show_create_channel_form: true)}
     else
       {:noreply, put_flash(socket, :error, "You don't have permission to create channels.")}
@@ -561,7 +608,7 @@ end
     user = socket.assigns.current_user
     
     # Check if user has permission to create channels
-    if user && (user.is_admin || user.role in ["admin", "gm", "editor"]) do
+    if user && (user.is_admin || user.role in ["admin", "gm"]) do
       case Forum.create_channel(channel_params) do
         {:ok, channel} ->
           # Refresh channel lists after creation
@@ -597,7 +644,11 @@ end
   end
 
   def handle_event("show_delete_channel_confirm", _params, socket) do
-    {:noreply, assign(socket, show_delete_channel_confirm: true)}
+    if can_delete_channel?(socket.assigns.current_user, socket.assigns.current_channel) do
+      {:noreply, assign(socket, show_delete_channel_confirm: true)}
+    else
+      {:noreply, put_flash(socket, :error, "You do not have permission to delete this channel.")}
+    end
   end
 
   def handle_event("cancel_delete_channel", _params, socket) do
@@ -608,21 +659,8 @@ end
     user = socket.assigns.current_user
     channel = socket.assigns.current_channel
 
-    # Protect General channel
-    if String.downcase(channel.name) == "general" do
-      {:noreply, 
-       socket
-       |> assign(show_delete_channel_confirm: false)
-       |> put_flash(:error, "The General channel cannot be deleted")}
-    else
-      # Only owner, creator, admin, gm, or editor can delete a channel
-      can_delete = (Map.has_key?(channel, :owner_id) && channel.owner_id == user.id) or 
-           (Map.has_key?(channel, :created_by_id) && channel.created_by_id == user.id) or
-           Map.get(user, :is_admin, false) or 
-           user.role in ["admin", "gm", "editor"]
-      
-      if can_delete do
-        case Forum.delete_channel_by_user(user, channel) do
+    if can_delete_channel?(user, channel) do
+      case Forum.delete_channel_by_user(user, channel) do
         {:ok, _} ->
           # Refresh channel lists
           all_channels = Forum.list_channels()
@@ -665,12 +703,12 @@ end
            socket
            |> assign(show_delete_channel_confirm: false)
            |> put_flash(:error, "Failed to delete channel")}
-      end else
+      end
+    else
         {:noreply, 
          socket
          |> assign(show_delete_channel_confirm: false)
          |> put_flash(:error, "You don't have permission to delete this channel")}
-      end
     end
   end
 
@@ -833,55 +871,81 @@ end
   # (Removed duplicate start_reply and cancel_reply handlers)
 
 
-  def handle_event("send_reply", %{"content" => content, "reply_to_id" => reply_to_id}, socket) do
-    user = socket.assigns.current_user
-    channel = socket.assigns.current_channel
+  def handle_event("send_reply", params, socket) do
+    content = params["content"] || ""
+    reply_to_id = params["reply_to_id"]
 
-    if content == "" do
-      {:noreply, socket}
+    # Check for pending uploads
+    if Enum.any?(socket.assigns.uploads.reply_attachment.entries, fn entry -> !entry.done? end) do
+      {:noreply, put_flash(socket, :error, "Please wait for files to finish uploading.")}
     else
-      if user && Map.get(user, :role) == "banned" do
-        {:noreply, put_flash(socket, :error, "You are banned from posting messages.")}
-      else
-        if !can_access_channel?(channel, user) do
-          {:noreply, put_flash(socket, :error, "You don't have permission to post in this channel.")}
-        else
-          # Check if user has already replied to this message
-          # We need to fetch the parent message to check its replies
-          case Forum.get_message(reply_to_id) do
-            nil ->
-              {:noreply, put_flash(socket, :error, "Message you are replying to no longer exists.")}
-            parent_message ->
-              has_replied = Enum.any?(parent_message.replies || [], fn r -> r.user_id == user.id end)
+      user = socket.assigns.current_user
+      channel = socket.assigns.current_channel
 
-              if has_replied do
-                {:noreply, put_flash(socket, :error, "You have already replied to this message.")}
-              else
-                case Forum.create_message(user, channel.id, %{content: content, parent_id: reply_to_id}) do
-                  {:ok, message} ->
-                    # Process uploaded files for reply
-                    consume_uploaded_entries(socket, :reply_attachment, fn %{path: path}, entry ->
-                      context = "forum/#{channel.id}/messages/#{message.id}"
-                      case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
-                        {:ok, url_path} ->
-                          Forum.create_message_attachment(message, %{
-                            "filename" => entry.client_name,
-                            "content_type" => entry.client_type,
-                            "file_size" => entry.client_size,
-                            "file" => url_path,
-                            "user_id" => user.id
-                          })
-                        {:error, reason} -> {:error, reason}
+      # Allow empty content if files are attached
+      has_uploads = length(socket.assigns.uploads.reply_attachment.entries) > 0
+      
+      if content == "" && !has_uploads do
+        {:noreply, socket}
+      else
+        content = if content == "" && has_uploads, do: " ", else: content
+        
+        if user && Map.get(user, :role) == "banned" do
+          {:noreply, put_flash(socket, :error, "You are banned from posting messages.")}
+        else
+          if !can_access_channel?(channel, user) do
+            {:noreply, put_flash(socket, :error, "You don't have permission to post in this channel.")}
+          else
+            # Check if user has already replied to this message
+            # We need to fetch the parent message to check its replies
+            case Forum.get_message(reply_to_id) do
+              nil ->
+                {:noreply, put_flash(socket, :error, "Message you are replying to no longer exists.")}
+              parent_message ->
+                has_replied = Enum.any?(parent_message.replies || [], fn r -> r.user_id == user.id end)
+
+                if has_replied do
+                  {:noreply, put_flash(socket, :error, "You have already replied to this message.")}
+                else
+                  case Forum.create_message(user, channel.id, %{content: content, parent_id: reply_to_id}) do
+                    {:ok, message} ->
+                      # Process uploaded files for reply
+                      consume_uploaded_entries(socket, :reply_attachment, fn %{path: path}, entry ->
+                        context = "forum/#{channel.id}/messages/#{message.id}"
+                        case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
+                          {:ok, url_path} ->
+                            Forum.create_message_attachment(message, %{
+                              "filename" => entry.client_name,
+                              "content_type" => entry.client_type,
+                              "file_size" => entry.client_size,
+                              "file" => url_path,
+                              "user_id" => user.id
+                            })
+                          {:error, reason} -> {:error, reason}
+                        end
+                      end)
+                      
+                      # Re-fetch message to get attachments
+                      message = case Forum.get_message(message.id) do
+                        nil -> message
+                        msg -> msg
                       end
-                    end)
-                    
-                    {:noreply, assign(socket, replying_to_message_id: nil)}
-                  {:error, :rate_limited} ->
-                    {:noreply, put_flash(socket, :error, "You're sending messages too quickly.")}
-                  {:error, _} ->
-                    {:noreply, put_flash(socket, :error, "Failed to send reply")}
+                      
+                      # Refresh the root message to update the UI
+                      root_id = get_root_message_id(message)
+                      socket = refresh_message(socket, root_id)
+                      
+                      {:noreply, 
+                       socket 
+                       |> assign(replying_to_message_id: nil, reply_message_content: "")
+                       |> put_flash(:info, "Reply sent")}
+                    {:error, :rate_limited} ->
+                      {:noreply, put_flash(socket, :error, "You're sending messages too quickly.")}
+                    {:error, _} ->
+                      {:noreply, put_flash(socket, :error, "Failed to send reply")}
+                  end
                 end
-              end
+            end
           end
         end
       end
@@ -928,10 +992,15 @@ end
     channel = socket.assigns.current_channel
 
     if Forum.can_invite_to_channel?(user, channel) do
+      max_uses_int = case Integer.parse(max_uses || "0") do
+        {int, _} -> int
+        :error -> 0
+      end
+
       attrs = %{
         inviter_id: user.id,
         channel_id: channel.id,
-        max_uses: String.to_integer(max_uses || "0") || nil,
+        max_uses: if(max_uses_int > 0, do: max_uses_int, else: nil),
         expires_at: (if expires_at in [nil, "", "null"], do: nil, else: DateTime.from_iso8601(expires_at) |> elem(1))
       }
 
@@ -1118,12 +1187,14 @@ end
     {:noreply, assign(socket, current_message: content)}
   end
 
-  def handle_event("validate_reply", _params, socket) do
-    {:noreply, socket}
+  def handle_event("validate_reply", params, socket) do
+    content = params["content"] || ""
+    {:noreply, assign(socket, reply_message_content: content)}
   end
 
-  def handle_event("validate_edit", _params, socket) do
-    {:noreply, socket}
+  def handle_event("validate_edit", params, socket) do
+    content = params["content"] || ""
+    {:noreply, assign(socket, editing_message_content: content)}
   end
 
   def handle_event("messages_read", %{"last_read_id" => last_read_id}, socket) do
@@ -1193,20 +1264,12 @@ end
   @impl true
   def handle_info({:new_message, message}, socket) do
     if message.reply_to_id do
-      # It's a reply, update the parent message recursively
-      # With streams, we need to find the parent in the stream and update it
-      # But streams are append-only or update-by-id.
-      # If we update the parent message (which contains replies), we can just re-insert it.
-      # However, we need to fetch the parent message with replies loaded.
-      
-      # For now, let's just insert the new message into the stream if it's a top-level message,
-      # but since it's a reply, it should be nested.
-      # The current UI renders replies nested inside the parent.
-      # So we need to update the parent message in the stream.
-      
-      # Fetch parent with replies
-      parent = Forum.get_message!(message.reply_to_id)
-      {:noreply, stream_insert(socket, :messages, parent)}
+      # It's a reply, update the root parent message recursively
+      root_id = get_root_message_id(message)
+      case Forum.get_message(root_id) do
+        nil -> {:noreply, socket} # Root message deleted, ignore
+        root -> {:noreply, stream_insert(socket, :messages, root)}
+      end
     else
       # Messages are stored oldest -> newest. When a new message arrives we should
       # append it to the end so the conversation remains chronological in real-time
@@ -1230,7 +1293,16 @@ end
     end
 
     socket = assign(socket, pinned_messages: pinned_messages)
-    {:noreply, stream_insert(socket, :messages, updated_message)}
+    
+    if updated_message.reply_to_id do
+      root_id = get_root_message_id(updated_message)
+      case Forum.get_message(root_id) do
+        nil -> {:noreply, socket}
+        root -> {:noreply, stream_insert(socket, :messages, root)}
+      end
+    else
+      {:noreply, stream_insert(socket, :messages, updated_message)}
+    end
   end
 
   def handle_info({:user_banned, user_id, channel_id}, socket) do
@@ -1247,7 +1319,25 @@ end
     end
   end
 
+  def handle_info({:message_deleted, %PhoenixApp.Forum.Message{} = message}, socket) do
+    pinned_messages = Enum.filter(socket.assigns.pinned_messages, &(&1.id != message.id))
+    
+    socket = assign(socket, pinned_messages: pinned_messages)
+
+    if message.reply_to_id do
+      # It was a reply, we need to update the root parent message in the stream
+      root_id = get_root_message_id(message)
+      case Forum.get_message(root_id) do
+        nil -> {:noreply, socket}
+        root -> {:noreply, stream_insert(socket, :messages, root)}
+      end
+    else
+      {:noreply, stream_delete(socket, :messages, message)}
+    end
+  end
+
   def handle_info({:message_deleted, message_id}, socket) do
+    # Fallback for legacy calls or if message struct wasn't passed
     pinned_messages = Enum.filter(socket.assigns.pinned_messages, &(&1.id != message_id))
     {:noreply, 
      socket 
@@ -1397,21 +1487,25 @@ end
     {:noreply, assign(socket, active_stream: nil)}
   end
 
-
   @impl true
   def render(assigns) do
     ~H"""
     <PhoenixAppWeb.Components.PageContainer.fullscreen_container>
       <div class="flex-1 flex flex-row overflow-hidden">
         <%!-- Sidebar with glass theme --%>
-        <div id="forum-sidebar" phx-hook="SidebarResizer" class="dark-glass border-r border-cyan-500/30 relative flex flex-col" style="width: 256px; min-width: 10px; max-width: 500px;">
+        <div 
+          id="forum-sidebar" 
+          phx-hook="SidebarResizer" 
+          class={"dark-glass border-r border-cyan-500/30 flex flex-col flex-none overflow-hidden z-40 " <> if(@sidebar_open, do: "absolute inset-y-0 left-0 md:relative", else: "hidden")}
+          style={if @sidebar_open, do: "width: 256px; min-width: 200px; max-width: 500px;", else: "width: 0px; display: none;"}
+        >
           <div class="flex-1 overflow-y-auto p-4 overflow-x-hidden sidebar-content">
             <%!-- Public Channels Section --%>
             <div class="mb-6">
                 <div class="flex items-center justify-between mb-2">
                   <h2 class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Public Channels</h2>
                   <div class="flex items-center gap-2">
-                    <button phx-click={if @current_user && (Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin","gm","editor"]), do: "show_create_channel", else: "show_create_user_channel"} class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                    <button phx-click={if @current_user && (Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin","gm"]), do: "show_create_channel", else: "show_create_user_channel"} class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                       <span>Create new channel</span>
                     </button>
@@ -1459,6 +1553,9 @@ end
           <%!-- Channel header with glass theme --%>
           <div class="p-2 border-b border-cyan-500/30 flex items-center justify-between dark-glass shadow-sm h-14">
             <div class="flex items-center gap-3 flex-1 min-w-0">
+              <button phx-click="toggle_sidebar" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+              </button>
               <div class="min-w-0">
                 <h1 class="text-lg font-bold text-gray-800 dark:text-gray-200 truncate flex items-center gap-2">
                   #<%= @current_channel.name %>
@@ -1488,7 +1585,7 @@ end
 
               <%!-- Invite button for private channels --%>
                   <%= if @current_channel.is_private && (@current_user.is_admin || @current_user.role in ["admin", "gm", "editor"] || 
-                    (@current_channel.owner_id && @current_channel.owner_id == @current_user.id)) do %>
+                    (@current_channel.owner_id && @current_channel.owner_id == @current_user.id) || @can_moderate) do %>
                 <button phx-click="show_invite_modal" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors flex items-center gap-1.5">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3H4"></path>
@@ -1500,8 +1597,8 @@ end
               <%!-- Members and Delete buttons --%>
               <%!-- Only show members management for private channels or user-created channels. Public system channels shouldn't expose members UI. --%>
               <%= if @current_user && String.downcase(@current_channel.name) != "general" && (
-                    Map.get(@current_user, :is_admin, false) || @current_user.role in ["admin", "gm", "editor"] ||
-                    ( @current_channel.is_private && (Map.get(@current_channel, :is_user_created, false) || (Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id) || (Map.has_key?(@current_channel, :created_by_id) && @current_channel.created_by_id == @current_user.id)) )
+                    Map.get(@current_user, :is_admin, false) || @current_user.role == "admin" ||
+                    ( @current_channel.is_private && ((Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id) || (Map.has_key?(@current_channel, :created_by_id) && @current_channel.created_by_id == @current_user.id)) )
                   ) do %>
                 <button phx-click="open_members_modal" phx-value-channel_id={@current_channel.id} class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors flex items-center gap-1.5" title="Manage Members">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1523,10 +1620,36 @@ end
             </div>
           </div>
 
-        <%!-- Pinned Messages Section removed --%>
-
         <div class="flex-1 relative flex flex-col min-h-0">
           <div id="messages" class="flex-1 px-4 pt-4 pb-2 overflow-y-auto dark-glass" phx-hook="MessageList" data-auto-scroll={if @auto_scroll_enabled, do: "true", else: "false"}>
+            
+            <%!-- Pinned Messages Section (Scrollable) --%>
+            <%= if length(@pinned_messages) > 0 do %>
+              <div class="bg-gray-100/50 dark:bg-gray-800/50 border border-gray-700 p-2 mb-4 rounded-lg">
+                <div class="text-xs font-bold text-yellow-500 mb-2 flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                  PINNED MESSAGES
+                </div>
+                <div class="space-y-2">
+                  <%= for message <- @pinned_messages do %>
+                    <div class="bg-white/5 dark:bg-black/20 rounded p-2 border border-gray-200/10 dark:border-gray-700/30">
+                      <.message_item 
+                        message={message} 
+                        current_user={@current_user} 
+                        can_moderate={@can_moderate} 
+                        replying_to_message_id={@replying_to_message_id} 
+                        editing_message_id={@editing_message_id} 
+                        editing_message_content={@editing_message_content}
+                        reply_message_content={@reply_message_content}
+                        last_read_message_id={@last_read_message_id}
+                        uploads={@uploads}
+                      />
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+
             <div id="messages-list" phx-update="stream">
               <% 
                 # Combine pinned messages (at top) with regular messages (excluding pinned ones to avoid duplicates)
@@ -1537,28 +1660,6 @@ end
                 # The original code filtered @messages. With streams, we iterate @streams.messages.
               %>
               
-              <%!-- Pinned Messages Area --%>
-              <%= if length(@pinned_messages) > 0 do %>
-                <div class="mb-4 border-b border-gray-700 pb-2">
-                  <div class="text-xs font-bold text-yellow-500 mb-2 flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                    PINNED MESSAGES
-                  </div>
-                  <%= for message <- @pinned_messages do %>
-                    <.message_item 
-                      message={message} 
-                      current_user={@current_user} 
-                      can_moderate={@can_moderate} 
-                      replying_to_message_id={@replying_to_message_id} 
-                      editing_message_id={@editing_message_id} 
-                      editing_message_content={@editing_message_content}
-                      last_read_message_id={@last_read_message_id}
-                      uploads={@uploads}
-                    />
-                  <% end %>
-                </div>
-              <% end %>
-
               <%= for {dom_id, message} <- @streams.messages do %>
                 <%!-- Don't render pinned messages in the main stream to avoid duplication if they are shown above --%>
                 <%= unless message.is_pinned do %>
@@ -1570,6 +1671,7 @@ end
                     replying_to_message_id={@replying_to_message_id} 
                     editing_message_id={@editing_message_id} 
                     editing_message_content={@editing_message_content}
+                    reply_message_content={@reply_message_content}
                     last_read_message_id={@last_read_message_id}
                     uploads={@uploads}
                   />
@@ -1599,8 +1701,127 @@ end
           </div>
         </div>
 
+        <%!-- Edit Form - Rendered outside the stream for proper upload handling --%>
+        <%= if @editing_message_id do %>
+          <div class="p-3 border-t border-cyan-500/30 dark-glass bg-gray-800/90">
+            <div class="text-xs text-gray-400 mb-2 flex items-center justify-between">
+              <span>Editing message</span>
+              <button type="button" phx-click="cancel_edit" class="text-gray-500 hover:text-gray-300">✕</button>
+            </div>
+            <.form for={%{}} phx-submit="apply_edit_message" phx-change="validate_edit" phx-drop-target={@uploads.edit_attachment.ref} class="mb-0">
+              <input type="hidden" name="message_id" value={@editing_message_id} />
+              
+              <%!-- File upload previews for Edit --%>
+              <%= if length(@uploads.edit_attachment.entries) > 0 do %>
+                <div class="mb-2 flex flex-wrap gap-2">
+                  <%= for entry <- @uploads.edit_attachment.entries do %>
+                    <div class="relative group">
+                      <.live_img_preview entry={entry} class="h-16 w-16 object-cover rounded border border-gray-300 dark:border-gray-600" />
+                      <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} phx-value-upload_config="edit_attachment" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                      <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 rounded-b">
+                        <div class="h-full bg-blue-500 rounded-b transition-all" style={"width: #{entry.progress}%"}></div>
+                      </div>
+                      <%= for err <- upload_errors(@uploads.edit_attachment, entry) do %>
+                        <div class="absolute top-0 left-0 w-full h-full bg-red-500/50 flex items-center justify-center rounded">
+                          <span class="text-white text-xs font-bold"><%= error_to_string(err) %></span>
+                        </div>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+
+              <div class="relative">
+                <textarea 
+                  id="edit-message-textarea"
+                  name="content" 
+                  class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10" 
+                  rows="2"
+                  phx-hook="ChatInput"
+                ><%= @editing_message_content %></textarea>
+                <div class="absolute bottom-2 right-2 flex items-center space-x-2">
+                  <label class="cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="Attach file">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                    </svg>
+                    <.live_file_input upload={@uploads.edit_attachment} class="sr-only" />
+                  </label>
+                  <.emoji_picker target="#edit-message-textarea" id="edit-emoji-picker" />
+                </div>
+              </div>
+              <div class="mt-2 flex space-x-2 justify-end">
+                <button type="button" phx-click="cancel_edit" class="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600">Cancel</button>
+                <% is_uploading = Enum.any?(@uploads.edit_attachment.entries, fn entry -> entry.progress < 100 end) %>
+                <button type="submit" phx-disable-with="Saving..." disabled={is_uploading} class={"px-3 py-1 text-sm rounded text-white " <> if(is_uploading, do: "bg-blue-400 cursor-not-allowed", else: "bg-blue-600 hover:bg-blue-700")}>
+                  <%= if is_uploading, do: "Uploading...", else: "Save" %>
+                </button>
+              </div>
+            </.form>
+          </div>
+        <% end %>
+
+        <%!-- Reply Form - Rendered outside the stream for proper upload handling --%>
+        <%= if @replying_to_message_id do %>
+          <div class="p-3 border-t border-cyan-500/30 dark-glass bg-gray-800/90">
+            <div class="text-xs text-gray-400 mb-2 flex items-center justify-between">
+              <span>Replying to message</span>
+              <button type="button" phx-click="cancel_reply" class="text-gray-500 hover:text-gray-300">✕</button>
+            </div>
+            <.form for={%{}} phx-submit="send_reply" phx-change="validate_reply" phx-drop-target={@uploads.reply_attachment.ref} class="mb-0">
+              <input type="hidden" name="reply_to_id" value={@replying_to_message_id} />
+              
+              <%!-- File upload previews for Reply --%>
+              <%= if length(@uploads.reply_attachment.entries) > 0 do %>
+                <div class="mb-2 flex flex-wrap gap-2">
+                  <%= for entry <- @uploads.reply_attachment.entries do %>
+                    <div class="relative group">
+                      <.live_img_preview entry={entry} class="h-16 w-16 object-cover rounded border border-gray-300 dark:border-gray-600" />
+                      <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} phx-value-upload_config="reply_attachment" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                      <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 rounded-b">
+                        <div class="h-full bg-blue-500 rounded-b transition-all" style={"width: #{entry.progress}%"}></div>
+                      </div>
+                      <%= for err <- upload_errors(@uploads.reply_attachment, entry) do %>
+                        <div class="absolute top-0 left-0 w-full h-full bg-red-500/50 flex items-center justify-center rounded">
+                          <span class="text-white text-xs font-bold"><%= error_to_string(err) %></span>
+                        </div>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+
+              <div class="relative">
+                <textarea 
+                  id="reply-message-textarea"
+                  name="content" 
+                  class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10" 
+                  rows="2" 
+                  placeholder="Write a reply..."
+                  phx-hook="ChatInput"
+                ><%= @reply_message_content %></textarea>
+                <div class="absolute bottom-2 right-2 flex items-center space-x-2">
+                  <label class="cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="Attach file">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                    </svg>
+                    <.live_file_input upload={@uploads.reply_attachment} class="sr-only" />
+                  </label>
+                  <.emoji_picker target="#reply-message-textarea" id="reply-emoji-picker" />
+                </div>
+              </div>
+              <div class="mt-2 flex space-x-2 justify-end">
+                <button type="button" phx-click="cancel_reply" class="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600">Cancel</button>
+                <% is_uploading = Enum.any?(@uploads.reply_attachment.entries, fn entry -> entry.progress < 100 end) %>
+                <button type="submit" phx-disable-with="Sending..." disabled={is_uploading} class={"px-3 py-1 text-sm rounded text-white " <> if(is_uploading, do: "bg-blue-400 cursor-not-allowed", else: "bg-green-600 hover:bg-green-700")}>
+                  <%= if is_uploading, do: "Uploading...", else: "Reply" %>
+                </button>
+              </div>
+            </.form>
+          </div>
+        <% end %>
+
         <div class="p-2 border-t border-cyan-500/30 dark-glass">
-          <form phx-submit="send_message" phx-change="validate_message" phx-drop-target={@uploads.forum_attachment.ref}>
+          <form phx-submit="send_message" phx-change="validate_message" phx-drop-target={@uploads.forum_attachment.ref} onsubmit="return false;">
             <%!-- File upload previews --%>
             <%= if length(@uploads.forum_attachment.entries) > 0 do %>
               <div class="mb-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
@@ -1655,10 +1876,18 @@ end
                 </div>
               </div>
               <div class="flex flex-col space-y-1">
-                <button type="submit" class="flex items-center justify-center bg-blue-500 text-white h-[30px] w-[30px] rounded-md hover:bg-blue-600 transition-colors border border-transparent">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                  </svg>
+                <% is_uploading = Enum.any?(@uploads.forum_attachment.entries, fn entry -> entry.progress < 100 end) %>
+                <button type="submit" disabled={is_uploading} class={"flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors border border-transparent " <> if(is_uploading, do: "bg-gray-400 cursor-not-allowed", else: "bg-blue-500 text-white hover:bg-blue-600")}>
+                  <%= if is_uploading do %>
+                    <svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  <% else %>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
+                  <% end %>
                 </button>
               </div>
             </div>
@@ -1690,7 +1919,12 @@ end
                 <div class="flex items-center gap-3">
                   <%= if member.user do %>
                     <%= avatar_tag(member.user, size_class: "w-8 h-8") %>
-                    <div class="text-sm"><%= member.user.name || member.user.email %></div>
+                    <div class="text-sm flex items-center gap-1">
+                      <%= member.user.name || member.user.email %>
+                      <%= if @editing_channel.owner_id == member.user_id do %>
+                        <span class="text-yellow-500" title="Channel Owner">👑</span>
+                      <% end %>
+                    </div>
                   <% else %>
                     <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-white text-sm">?</div>
                     <div class="text-sm text-gray-400">Unknown user</div>
@@ -1970,16 +2204,44 @@ end
   attr :replying_to_message_id, :string, default: nil
   attr :editing_message_id, :string, default: nil
   attr :editing_message_content, :string, default: ""
+  attr :reply_message_content, :string, default: ""
   attr :last_read_message_id, :string, default: nil
   attr :depth, :integer, default: 0
   attr :uploads, :map, required: true
 
   def message_item(assigns) do
+    assigns = Map.put_new(assigns, :depth, 0)
     ~H"""
-    <div id={@id || "message-#{@message.id}"} class="flex flex-col mb-4 group">
+    <div id={@id || "message-#{@message.id}"} class="flex flex-col mb-4 group relative">
       <div class="flex items-start">
-        <div class="mr-4">
-          <%= avatar_tag(@message.user, size_class: "w-10 h-10") %>
+        <div class="mr-4 relative group/avatar">
+          <%= avatar_tag(@message.user, size_class: "w-10 h-10 cursor-pointer") %>
+          
+          <!-- User Hover Card -->
+          <div class="absolute left-0 top-full mt-2 w-96 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 opacity-0 invisible group-hover/avatar:opacity-100 group-hover/avatar:visible transition-all duration-200 p-4 pointer-events-none group-hover/avatar:pointer-events-auto">
+            <div class="flex items-start space-x-4 mb-3">
+              <%= avatar_tag(@message.user, size_class: "w-32 h-32") %>
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-white text-lg truncate"><%= @message.user.name || @message.user.email %></div>
+                <div class="text-xs text-gray-400">Joined <%= Calendar.strftime(@message.user.inserted_at, "%b %Y") %></div>
+                <%= if @message.user.role in ["admin", "gm", "editor"] do %>
+                  <div class="mt-1 inline-block px-2 py-0.5 rounded text-xs font-bold bg-blue-900 text-blue-200 border border-blue-700">
+                    <%= String.upcase(@message.user.role) %>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+            
+            <%= if Map.get(@message.user, :bio) do %>
+              <div class="text-sm text-gray-300 mb-3 border-t border-gray-700 pt-2 break-words">
+                <%= @message.user.bio %>
+              </div>
+            <% end %>
+            
+            <div class="flex justify-between text-xs text-gray-500 border-t border-gray-700 pt-2">
+              <span>Messages: <%= if Ecto.assoc_loaded?(@message.user.chat_messages), do: length(@message.user.chat_messages), else: "..." %></span>
+            </div>
+          </div>
         </div>
         <div class="flex-1">
           <div class="flex items-baseline">
@@ -2002,13 +2264,14 @@ end
                 has_replied = Enum.any?(replies, fn r -> r.user_id == @current_user.id end)
               %>
               <%= if @message.user_id != @current_user.id && !has_replied do %>
-                <button phx-click="start_reply" phx-value-message_id={@message.id} class="text-gray-400 hover:text-green-500 text-xs" title="Reply">
+                <button type="button" phx-click="start_reply" phx-value-message_id={@message.id} class="text-gray-400 hover:text-green-500 text-xs" title="Reply">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
                 </button>
               <% end %>
 
               <%= if @can_moderate do %>
                 <button 
+                  type="button"
                   phx-click="toggle_pin" 
                   phx-value-message_id={@message.id}
                   class={"text-xs " <> if(@message.is_pinned, do: "text-yellow-500 hover:text-yellow-600", else: "text-gray-400 hover:text-yellow-500")}
@@ -2022,6 +2285,7 @@ end
 
               <%= if @message.user_id == @current_user.id or @can_moderate do %>
                 <button 
+                  type="button"
                   phx-click="start_edit_message" 
                   phx-value-message_id={@message.id}
                   class="text-gray-400 hover:text-blue-500 text-xs"
@@ -2032,6 +2296,7 @@ end
                   </svg>
                 </button>
                 <button 
+                  type="button"
                   phx-click="delete_message" 
                   phx-value-message_id={@message.id}
                   class="text-gray-400 hover:text-red-500 text-xs"
@@ -2047,66 +2312,31 @@ end
           </div>
 
           <%= if @editing_message_id == @message.id do %>
-            <.form for={%{}} phx-submit="apply_edit_message" phx-change="validate_edit" phx-drop-target={@uploads.edit_attachment.ref} class="mb-0">
-              <input type="hidden" name="message_id" value={@message.id} />
-              
-              <%!-- File upload previews for Edit --%>
-              <%= if length(@uploads.edit_attachment.entries) > 0 do %>
-                <div class="mb-2 flex flex-wrap gap-2">
-                  <%= for entry <- @uploads.edit_attachment.entries do %>
-                    <div class="relative group">
-                      <.live_img_preview entry={entry} class="h-16 w-16 object-cover rounded border border-gray-300 dark:border-gray-600" />
-                      <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} phx-value-upload_config="edit_attachment" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
-                      
-                      <%= for err <- upload_errors(@uploads.edit_attachment, entry) do %>
-                        <div class="absolute top-0 left-0 w-full h-full bg-red-500/50 flex items-center justify-center rounded">
-                          <span class="text-white text-xs font-bold"><%= error_to_string(err) %></span>
-                        </div>
-                      <% end %>
-                    </div>
-                  <% end %>
-                </div>
-              <% end %>
-
-              <div class="relative">
-                <textarea 
-                  id={"edit-message-#{@message.id}"}
-                  name="content" 
-                  class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10" 
-                  rows="2"
-                  phx-hook="ChatInput"
-                ><%= @editing_message_content %></textarea>
-                <div class="absolute bottom-2 right-2 flex items-center space-x-2">
-                  <label class="cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="Attach file">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
-                    </svg>
-                    <.live_file_input upload={@uploads.edit_attachment} class="hidden" />
-                  </label>
-                  <.emoji_picker target={"#edit-message-#{@message.id}"} id={"emoji-picker-#{@message.id}"} />
-                </div>
-              </div>
-              <div class="mt-2 flex space-x-2 justify-end">
-                <button type="button" phx-click="cancel_edit" class="px-3 py-1 text-sm bg-gray-500 text-white rounded">Cancel</button>
-                <button type="submit" class="px-3 py-1 text-sm bg-blue-600 text-white rounded">Save</button>
-              </div>
-            </.form>
+            <p class="text-gray-500 italic text-sm">(Editing in form below...)</p>
           <% else %>
             <p class="text-gray-700 dark:text-gray-300"><%= @message.content %></p>
           <% end %>
-          
-          <%= if @message.attachments && length(@message.attachments) > 0 do %>
-            <div class="mt-2 space-y-2">
+
+          <%!-- Attachments --%>
+          <%= if Ecto.assoc_loaded?(@message.attachments) && length(@message.attachments) > 0 do %>
+            <div class="mt-2 flex flex-wrap gap-2">
               <%= for attachment <- @message.attachments do %>
-                <div class="relative">
-                  <PhoenixAppWeb.Components.MediaPreview.media_preview attachment={attachment} />
-                  <div class="absolute top-2 right-12 opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 z-10">
-                    <%= if @current_user && (@current_user.id == attachment.user_id || @current_user.id == @message.user_id || @current_user.role in ["admin", "gm", "editor"] || Map.get(@current_user, :is_admin, false)) do %>
-                      <button phx-click="delete_attachment" phx-value-attachment_id={attachment.id} class="text-red-500 hover:text-red-700 text-xs bg-white/80 dark:bg-black/80 p-1.5 rounded shadow-sm" title="Delete attachment">
-                        ✕
-                      </button>
-                    <% end %>
+                <div class="relative group/item">
+                  <div class="h-48 w-auto flex items-center justify-center rounded-lg overflow-hidden border border-transparent hover:border-gray-200 dark:hover:border-gray-700 bg-transparent">
+                    <PhoenixAppWeb.Components.MediaPreview.media_preview attachment={attachment} class="max-h-48 max-w-xs object-contain" show_filename={false} />
                   </div>
+                  
+                  <%= if @current_user && (@current_user.id == attachment.user_id || @current_user.id == @message.user_id || @current_user.role in ["admin", "gm", "editor"] || Map.get(@current_user, :is_admin, false)) do %>
+                    <button 
+                      phx-click="delete_attachment" 
+                      phx-value-attachment_id={attachment.id} 
+                      class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md opacity-0 group-hover/item:opacity-100 transition-opacity z-10"
+                      title="Delete attachment"
+                      data-confirm="Delete this attachment?"
+                    >
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                  <% end %>
                 </div>
               <% end %>
             </div>
@@ -2127,53 +2357,10 @@ end
         </div>
       </div>
 
-      <!-- Reply Form -->
+      <!-- Reply indicator (form is rendered outside the stream) -->
       <%= if @replying_to_message_id == @message.id do %>
         <div class="ml-14 mt-2 mb-4">
-          <.form for={%{}} phx-submit="send_reply" phx-change="validate_reply" phx-drop-target={@uploads.reply_attachment.ref} class="mb-0">
-            <input type="hidden" name="reply_to_id" value={@message.id} />
-            
-            <%!-- File upload previews for Reply --%>
-            <%= if length(@uploads.reply_attachment.entries) > 0 do %>
-              <div class="mb-2 flex flex-wrap gap-2">
-                <%= for entry <- @uploads.reply_attachment.entries do %>
-                  <div class="relative group">
-                    <.live_img_preview entry={entry} class="h-16 w-16 object-cover rounded border border-gray-300 dark:border-gray-600" />
-                    <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} phx-value-upload_config="reply_attachment" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
-                    
-                    <%= for err <- upload_errors(@uploads.reply_attachment, entry) do %>
-                      <div class="absolute top-0 left-0 w-full h-full bg-red-500/50 flex items-center justify-center rounded">
-                        <span class="text-white text-xs font-bold"><%= error_to_string(err) %></span>
-                      </div>
-                    <% end %>
-                  </div>
-                <% end %>
-              </div>
-            <% end %>
-
-            <div class="relative">
-              <textarea 
-                id={"reply-input-#{@message.id}"}
-                name="content" 
-                class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10" 
-                rows="2" 
-                placeholder="Write a reply..."
-                phx-hook="ChatInput"
-              ></textarea>
-              <div class="absolute bottom-2 right-2 flex items-center space-x-2">
-                <label class="cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="Attach file">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
-                  </svg>
-                  <.live_file_input upload={@uploads.reply_attachment} class="hidden" />
-                </label>
-                <.emoji_picker target={"#reply-input-#{@message.id}"} id={"reply-emoji-#{@message.id}"} />
-              </div>
-            </div>
-            <div class="mt-2 flex space-x-2 justify-end">
-              <button type="button" phx-click="cancel_reply" class="px-3 py-1 text-sm bg-gray-500 text-white rounded">Cancel</button>
-              <button type="submit" class="px-3 py-1 text-sm bg-blue-600 text-white rounded">Reply</button>
-            </div>
-          </.form>
+          <p class="text-gray-500 italic text-sm">(Replying in form below...)</p>
         </div>
       <% end %>
 
@@ -2204,6 +2391,7 @@ end
                 replying_to_message_id={@replying_to_message_id} 
                 editing_message_id={@editing_message_id} 
                 editing_message_content={@editing_message_content}
+                reply_message_content={@reply_message_content}
                 last_read_message_id={@last_read_message_id}
                 depth={@depth + 1}
                 uploads={@uploads}
@@ -2249,4 +2437,24 @@ end
     </div>
     """
   end
-end
+
+  defp get_root_message_id(%{reply_to_id: nil, id: id}), do: id
+  defp get_root_message_id(%{reply_to_id: parent_id}) do
+    case Forum.get_message(parent_id) do
+      nil -> parent_id # Should not happen, but return parent_id as best guess
+      parent -> get_root_message_id(parent)
+    end
+  end
+  defp can_delete_channel?(user, channel) do
+    # Protect General channel
+    if String.downcase(channel.name) == "general" do
+      false
+    else
+      # Only owner, creator, admin, gm, or editor can delete a channel
+      (Map.has_key?(channel, :owner_id) && channel.owner_id == user.id) or 
+      (Map.has_key?(channel, :created_by_id) && channel.created_by_id == user.id) or
+      Map.get(user, :is_admin, false) or 
+      user.role in ["admin", "gm", "editor"]
+    end
+  end
+end 

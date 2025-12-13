@@ -28,6 +28,7 @@ defmodule PhoenixApp.Accounts.User do
     field :position_x, :float, default: 400.0
     field :position_y, :float, default: 300.0
     field :last_activity, :utc_datetime
+    field :bio, :string
 
     # Background customization - NOW ENABLED
     field :background_preference, :string, default: "galaxy"
@@ -129,10 +130,11 @@ defmodule PhoenixApp.Accounts.User do
 
   def profile_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_opacity, :avatar_url, :role])
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_opacity, :avatar_url, :role, :bio])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
     |> validate_number(:avatar_opacity, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
+    |> validate_length(:bio, max: 500)
     |> unique_constraint(:email)
   end
 

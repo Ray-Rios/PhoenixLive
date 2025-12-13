@@ -30,7 +30,6 @@ defmodule PhoenixAppWeb.ProfileUploadsLive do
   end
 
   def handle_event("toggle_select", %{"id" => id}, socket) do
-    id = String.to_integer(id)
     selected_ids = 
       if MapSet.member?(socket.assigns.selected_ids, id) do
         MapSet.delete(socket.assigns.selected_ids, id)

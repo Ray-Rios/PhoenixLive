@@ -32,17 +32,17 @@ export const GlassTheme = {
     
     // Convert theme to CSS values - base colors with placeholder for opacity
     const themeColors = {
-      'dark': { bg: 'rgba(17, 24, 39, OPACITY)', border: 'rgba(255, 255, 255, 0.15)' },
-      'blue': { bg: 'rgba(59, 130, 246, OPACITY)', border: 'rgba(59, 130, 246, 0.3)' },
-      'purple': { bg: 'rgba(147, 51, 234, OPACITY)', border: 'rgba(147, 51, 234, 0.3)' },
-      'green': { bg: 'rgba(34, 197, 94, OPACITY)', border: 'rgba(34, 197, 94, 0.3)' },
-      'red': { bg: 'rgba(239, 68, 68, OPACITY)', border: 'rgba(239, 68, 68, 0.3)' },
-      'amber': { bg: 'rgba(245, 158, 11, OPACITY)', border: 'rgba(245, 158, 11, 0.3)' },
-      'teal': { bg: 'rgba(20, 184, 166, OPACITY)', border: 'rgba(20, 184, 166, 0.3)' },
-      'light': { bg: 'rgba(249, 250, 251, OPACITY)', border: 'rgba(0, 0, 0, 0.15)' },
+      'dark': { rgb: '17, 24, 39', border: 'rgba(255, 255, 255, 0.15)' },
+      'blue': { rgb: '59, 130, 246', border: 'rgba(59, 130, 246, 0.3)' },
+      'purple': { rgb: '147, 51, 234', border: 'rgba(147, 51, 234, 0.3)' },
+      'green': { rgb: '34, 197, 94', border: 'rgba(34, 197, 94, 0.3)' },
+      'red': { rgb: '239, 68, 68', border: 'rgba(239, 68, 68, 0.3)' },
+      'amber': { rgb: '245, 158, 11', border: 'rgba(245, 158, 11, 0.3)' },
+      'teal': { rgb: '20, 184, 166', border: 'rgba(20, 184, 166, 0.3)' },
+      'light': { rgb: '249, 250, 251', border: 'rgba(0, 0, 0, 0.15)' },
     };
 
-    let bgColor, borderColor;
+    let bgColor, borderColor, rgbValues;
     const opacity = parseFloat(data.opacity?.toString() || '0.15');
     const blur = parseInt(data.blur?.toString() || '15', 10);
 
@@ -54,16 +54,19 @@ export const GlassTheme = {
       const g = parseInt(hex.substr(2, 2), 16);
       const b = parseInt(hex.substr(4, 2), 16);
       
+      rgbValues = `${r}, ${g}, ${b}`;
       bgColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
       borderColor = `rgba(${r}, ${g}, ${b}, ${Math.min(1, opacity + 0.2)})`;
     } else {
       // Use predefined theme colors with dynamic opacity
       const theme = themeColors[data.theme as keyof typeof themeColors] || themeColors.dark;
-      bgColor = theme.bg.replace('OPACITY', opacity.toString());
+      rgbValues = theme.rgb;
+      bgColor = `rgba(${theme.rgb}, ${opacity})`;
       borderColor = theme.border;
     }
 
     // Update CSS custom properties globally - FORCE update
+    root.style.setProperty('--glass-rgb', rgbValues);
     root.style.setProperty('--glass-bg', bgColor);
     root.style.setProperty('--glass-border', borderColor);
     root.style.setProperty('--glass-blur', `${blur}px`);

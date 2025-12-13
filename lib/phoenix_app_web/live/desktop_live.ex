@@ -26,6 +26,21 @@ defmodule PhoenixAppWeb.DesktopLive do
 
   # Add desktop-specific handlers here (icon double-click, context menu, etc.)
   
+  # Handle events bubbled up from Taskbar if they reach here (though they should be handled by PhoenixDesktopLive)
+  def handle_event("toggle_calendar", _params, socket) do
+    # This event should be handled by the parent LiveComponent (PhoenixDesktopLive)
+    # But if it bubbles up here, we ignore it to prevent crashes
+    {:noreply, socket}
+  end
+
+  def handle_event("toggle_start_menu", _params, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("open_app", _params, socket) do
+    {:noreply, socket}
+  end
+  
   # ==================== HELPER FUNCTIONS ====================
 
   defp get_desktop_files do

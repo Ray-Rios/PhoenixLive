@@ -590,7 +590,7 @@ defmodule PhoenixAppWeb.ProfileLive do
             <div class="lg:col-span-2">
               <!-- Tabs -->
               <div class="glass-dark rounded-t-lg border-b-0">
-                <div class="flex">
+                <div class="flex flex-wrap">
                   <button phx-click="switch_tab" phx-value-tab="profile" 
                           class={"px-6 py-4 text-sm font-medium border-b-2 transition-colors #{if @active_tab == "profile", do: "text-blue-400 border-blue-400 bg-gray-750", else: "text-gray-400 border-transparent hover:text-white"}"}>
                     Profile Settings
@@ -632,6 +632,11 @@ defmodule PhoenixAppWeb.ProfileLive do
                       
                       <div>
                         <.input field={@form[:email]} label="Email Address" placeholder="your@email.com" label_class="text-white" />
+                      </div>
+                      
+                      <div class="col-span-1 md:col-span-2">
+                        <.input field={@form[:bio]} type="textarea" label="Bio" placeholder="Tell us about yourself..." label_class="text-white" rows="3" />
+                        <p class="text-xs text-gray-400 mt-1">Max 500 characters</p>
                       </div>
                     </div>
 
@@ -978,6 +983,33 @@ defmodule PhoenixAppWeb.ProfileLive do
 
                     <!-- Glass Settings Form - Real-time updates -->
                     <form phx-change="update_glass_setting" class="space-y-6">
+                      <!-- Theme Selection -->
+                      <div>
+                        <label class="block text-sm text-gray-400 mb-3">Glass Theme</label>
+                        <div class="grid grid-cols-4 gap-3">
+                          <%= for {theme, label, color} <- [
+                            {"dark", "Dark", "bg-gray-900"},
+                            {"blue", "Blue", "bg-blue-600"},
+                            {"purple", "Purple", "bg-purple-600"},
+                            {"green", "Green", "bg-green-600"},
+                            {"red", "Red", "bg-red-600"},
+                            {"amber", "Amber", "bg-amber-500"},
+                            {"teal", "Teal", "bg-teal-500"},
+                            {"light", "Frosted", "bg-gray-100"}
+                          ] do %>
+                            <button
+                              type="button"
+                              phx-click="update_glass_theme"
+                              phx-value-theme={theme}
+                              class={"flex flex-col items-center justify-center p-3 rounded-lg border transition-all #{if (get_in(@custom_data, ["glass_theme"]) || "dark") == theme, do: "border-white ring-2 ring-white/20 bg-white/5", else: "border-gray-700 hover:border-gray-500 hover:bg-white/5"}"}
+                            >
+                              <div class={"w-8 h-8 rounded-full mb-2 #{color} border border-white/10 shadow-lg"}></div>
+                              <span class="text-xs text-gray-300"><%= label %></span>
+                            </button>
+                          <% end %>
+                        </div>
+                      </div>
+
                       <!-- Custom Color Picker for Glass -->
                       <div>
                         <label class="block text-sm text-gray-400 mb-3">Glass Tint Color</label>

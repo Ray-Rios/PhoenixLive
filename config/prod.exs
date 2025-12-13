@@ -6,12 +6,14 @@ import Config
 config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
   url: [host: System.get_env("PHOENIX_HOST") || "phxlive.net", port: 443, scheme: "https"],
-  check_origin: [
-    "https://phxlive.net",
-    "https://www.phxlive.net",
-    "//localhost",
-    "//127.0.0.1"
-  ],
+  # Allow all origins to support local network access (e.g. 192.168.x.x)
+  check_origin: false,
+  # check_origin: [
+  #   "https://phxlive.net",
+  #   "https://www.phxlive.net",
+  #   "//localhost",
+  #   "//127.0.0.1"
+  # ],
   force_ssl: [rewrite_on: [:x_forwarded_proto], log: false, exclude: ["health"]],
   server: true,
   secret_key_base: (System.get_env("SECRET_KEY_BASE") ||

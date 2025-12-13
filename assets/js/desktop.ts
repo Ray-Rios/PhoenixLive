@@ -220,7 +220,15 @@ const initTaskbarClock = () => {
 
     const update = () => {
       const now = new Date();
-      const hhmm = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Manual formatting to remove leading zero on hour if present
+      let hours = now.getHours();
+      const minutes = now.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      const strMinutes = minutes < 10 ? '0' + minutes : minutes;
+      const hhmm = hours + ':' + strMinutes + ' ' + ampm;
+      
       // Full date: "December 7, 2025"
       const fullDate = now.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
 

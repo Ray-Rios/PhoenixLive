@@ -25,7 +25,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
     <div id="taskbar" class="fixed bottom-0 left-0 w-full h-[35px] auth-glass-panel border-t border-gray-700 z-50 transition-transform duration-300 ease-in-out">
       <div class="flex items-center justify-between h-full px-2">
         <!-- Start Menu Button -->
-        <div class="relative">
+        <div id="start-menu-wrapper" class="relative h-full flex items-center" phx-click-away={if @show_start_menu, do: "toggle_start_menu", else: nil} phx-target={@target}>
           <button 
             phx-click="toggle_start_menu"
             phx-target={@target}
@@ -35,7 +35,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
           
           <!-- Start Menu -->
           <div :if={@show_start_menu} 
-               class="absolute bottom-full left-0 mb-2 w-80 glass-dark rounded-lg shadow-2xl border border-gray-600 overflow-hidden">
+               class="absolute bottom-full left-0 mb-2 w-80 auth-glass-panel rounded-lg shadow-2xl border border-gray-600 overflow-hidden">
             <div class="p-4 border-b border-gray-600">
               <div class="flex items-center space-x-3">
                 <%= if @current_user do %>
@@ -298,7 +298,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
           </div>
           
           <!-- Clock -->
-          <div class="relative group h-full flex items-center">
+          <div id="calendar-wrapper" class="relative group h-full flex items-center" phx-click-away={if @show_calendar, do: "toggle_calendar", else: nil} phx-target={@target}>
             <button 
               id="taskbar-clock" 
               phx-click="toggle_calendar"
@@ -317,7 +317,7 @@ defmodule PhoenixAppWeb.Components.Taskbar do
 
             <!-- Calendar Popup -->
             <%= if @show_calendar do %>
-              <div class="absolute bottom-full right-0 mb-2 w-80 glass-dark rounded-lg shadow-2xl border border-gray-600 overflow-hidden animate-slide-up z-50">
+              <div class="absolute bottom-full right-0 mb-2 w-80 auth-glass-panel rounded-lg shadow-2xl border border-gray-600 overflow-hidden animate-slide-up z-50">
                 <div class="p-4 border-b border-gray-600 flex justify-between items-center">
                   <h3 class="text-white font-semibold date-full-header">Calendar</h3>
                   <button phx-click="toggle_calendar" phx-target={@target} class="text-gray-400 hover:text-white">✕</button>

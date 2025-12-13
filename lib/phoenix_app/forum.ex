@@ -458,7 +458,7 @@ defmodule PhoenixApp.Forum do
     # Preload attachments so we can clean up files
     message = Repo.preload(message, [:attachments])
     # Repo.all returns the results newest -> oldest (desc), reverse to oldest -> newest
-    pubsub_broadcast("channel:#{message.channel_id}", {:message_deleted, message.id})
+    pubsub_broadcast("channel:#{message.channel_id}", {:message_deleted, message})
     Task.start(fn -> PhoenixApp.Audit.log(nil, "delete_message", "message", message.id, %{channel_id: message.channel_id}) end)
 
     # Collect attachment paths for cleanup before deletion
@@ -570,6 +570,10 @@ defmodule PhoenixApp.Forum do
 
   def get_attachment!(id) do
     Repo.get!(PhoenixApp.Forum.MessageAttachment, id) |> Repo.preload([:message, :user, :channel])
+  end
+
+  def get_attachment(id) do
+    Repo.get(PhoenixApp.Forum.MessageAttachment, id) |> Repo.preload([:message, :user, :channel])
   end
 
   def delete_attachment(%PhoenixApp.Forum.MessageAttachment{} = attachment) do
