@@ -70,6 +70,12 @@ defmodule PhoenixAppWeb.Components.AdminSidebar do
             label="Uploads"
             active={String.starts_with?(@current_path, "/admin/uploads")}
           />
+          <.sidebar_link
+            href="/admin/custom-emojis"
+            icon="😀"
+            label="Custom Emojis"
+            active={String.starts_with?(@current_path, "/admin/custom-emojis")}
+          />
         </div>
         
         <!-- Commerce Section -->

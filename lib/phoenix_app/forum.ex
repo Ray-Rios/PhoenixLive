@@ -304,8 +304,8 @@ defmodule PhoenixApp.Forum do
       order_by: [desc: m.inserted_at],
       limit: ^limit,
       preload: [
-        :user, :reactions, :thread, attachments: :user,
-        replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+        :user, reactions: :user, thread: [], attachments: :user,
+        replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user]]]
       ]
     )
     |> Repo.all()
@@ -352,8 +352,8 @@ defmodule PhoenixApp.Forum do
       where: is_nil(m.reply_to_id),
       where: is_nil(u.role) or u.role != "banned",
       preload: [
-        :user, :reactions, :thread, attachments: :user,
-        replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+        :user, reactions: :user, thread: [], attachments: :user,
+        replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user]]]
       ]
     )
 
@@ -402,15 +402,15 @@ defmodule PhoenixApp.Forum do
 
   def get_message!(id) do
     Repo.get!(Message, id) |> Repo.preload([
-      :user, :reactions, :thread, attachments: :user,
-      replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+      :user, reactions: :user, thread: [], attachments: :user,
+      replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user]]]
     ])
   end
 
   def get_message(id) do
     Repo.get(Message, id) |> Repo.preload([
-      :user, :reactions, :thread, attachments: :user,
-      replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user, replies: [:user, :reactions, attachments: :user]]]
+      :user, reactions: :user, thread: [], attachments: :user,
+      replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user, replies: [:user, reactions: :user, attachments: :user]]]
     ])
   end
 
@@ -638,6 +638,34 @@ defmodule PhoenixApp.Forum do
   end
 
   # Reactions
+  @doc """
+  Toggles a reaction on a message. If the user has already reacted with this emoji,
+  the reaction is removed. Otherwise, a new reaction is added.
+  """
+  def toggle_reaction(message, user, emoji) do
+    case Repo.get_by(Reaction, message_id: message.id, user_id: user.id, emoji: emoji) do
+      nil ->
+        # No existing reaction - add it
+        %Reaction{}
+        |> Reaction.changeset(%{message_id: message.id, user_id: user.id, emoji: emoji})
+        |> Repo.insert()
+        |> case do
+          {:ok, reaction} ->
+            pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
+            {:ok, :added, reaction}
+          error -> error
+        end
+      reaction ->
+        # Existing reaction - remove it
+        case Repo.delete(reaction) do
+          {:ok, deleted_reaction} ->
+            pubsub_broadcast("channel:#{message.channel_id}", {:reaction_removed, deleted_reaction})
+            {:ok, :removed, deleted_reaction}
+          error -> error
+        end
+    end
+  end
+
   def add_reaction(message, user, emoji) do
     case Repo.get_by(Reaction, message_id: message.id, user_id: user.id, emoji: emoji) do
       nil ->
@@ -646,6 +674,7 @@ defmodule PhoenixApp.Forum do
         |> Repo.insert()
         |> case do
           {:ok, reaction} ->
+            reaction = Repo.preload(reaction, :user)
             pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
             {:ok, reaction}
           error -> error
@@ -659,9 +688,28 @@ defmodule PhoenixApp.Forum do
     case Repo.get_by(Reaction, message_id: message.id, user_id: user.id, emoji: emoji) do
       nil -> {:error, :not_found}
       reaction ->
+        reaction = Repo.preload(reaction, :user)
         pubsub_broadcast("channel:#{message.channel_id}", {:reaction_removed, reaction})
         Repo.delete(reaction)
     end
+  end
+
+  @doc """
+  Removes all reactions from a user on a specific message.
+  Used to enforce one-reaction-per-user policy.
+  """
+  def remove_all_user_reactions(message, user) do
+    from(r in Reaction,
+      where: r.message_id == ^message.id and r.user_id == ^user.id
+    )
+    |> Repo.all()
+    |> Repo.preload(:user)
+    |> Enum.each(fn reaction ->
+      pubsub_broadcast("channel:#{message.channel_id}", {:reaction_removed, reaction})
+      Repo.delete(reaction)
+    end)
+    
+    :ok
   end
 
   # Threads
@@ -1325,5 +1373,61 @@ defmodule PhoenixApp.Forum do
   def get_invite_link(code) do
     # This will be a route like /forum/invite/:code
     "/forum/invite/#{code}"
+  end
+
+  # Custom Emojis
+  alias PhoenixApp.Forum.CustomEmoji
+
+  @doc "List all custom emojis"
+  def list_custom_emojis do
+    from(e in CustomEmoji, order_by: [asc: e.category, asc: e.shortcode])
+    |> Repo.all()
+  end
+
+  @doc "Get a custom emoji by shortcode"
+  def get_custom_emoji_by_shortcode(shortcode) do
+    Repo.get_by(CustomEmoji, shortcode: shortcode)
+  end
+
+  @doc "Get a custom emoji by id"
+  def get_custom_emoji!(id) do
+    Repo.get!(CustomEmoji, id)
+  end
+
+  @doc "Create a custom emoji (Admin/GM/Editor only)"
+  def create_custom_emoji(user, attrs) do
+    if can_manage_emojis?(user) do
+      %CustomEmoji{}
+      |> CustomEmoji.changeset(Map.put(attrs, :created_by_id, user.id))
+      |> Repo.insert()
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc "Update a custom emoji"
+  def update_custom_emoji(user, %CustomEmoji{} = emoji, attrs) do
+    if can_manage_emojis?(user) do
+      emoji
+      |> CustomEmoji.changeset(attrs)
+      |> Repo.update()
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc "Delete a custom emoji"
+  def delete_custom_emoji(user, %CustomEmoji{} = emoji) do
+    if can_manage_emojis?(user) do
+      Repo.delete(emoji)
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  @doc "Check if user can manage custom emojis"
+  def can_manage_emojis?(nil), do: false
+  def can_manage_emojis?(user) do
+    Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"]
   end
 end

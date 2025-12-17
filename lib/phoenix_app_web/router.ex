@@ -124,6 +124,7 @@ defmodule PhoenixAppWeb.Router do
       live "/sql", AdminLive.SQL, :index
       live "/security", Admin.SecurityLive, :index
       live "/api-toolbox", AdminLive.ApiToolbox, :index
+      live "/custom-emojis", AdminLive.CustomEmojis, :index
     end
   end
 

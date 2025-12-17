@@ -607,7 +607,20 @@ defmodule PhoenixAppWeb.ForumLive do
         {:noreply, socket}
       message ->
         user = socket.assigns.current_user
-        Forum.add_reaction(message, user, emoji)
+        
+        # Check if user already reacted with this emoji
+        has_reacted = Enum.any?(message.reactions, fn r -> 
+          r.user_id == user.id && r.emoji == emoji 
+        end)
+
+        # Remove any existing reactions from this user first (one reaction per user)
+        Forum.remove_all_user_reactions(message, user)
+        
+        # Only add if they didn't already have this reaction (toggle behavior)
+        if !has_reacted do
+          Forum.add_reaction(message, user, emoji)
+        end
+        
         {:noreply, socket}
     end
   end
@@ -1399,6 +1412,20 @@ defmodule PhoenixAppWeb.ForumLive do
     end
   end
 
+  def handle_info({:reaction_added, reaction}, socket) do
+    case Forum.get_message(reaction.message_id) do
+      nil -> {:noreply, socket}
+      message -> {:noreply, stream_insert(socket, :messages, message)}
+    end
+  end
+
+  def handle_info({:reaction_removed, reaction}, socket) do
+    case Forum.get_message(reaction.message_id) do
+      nil -> {:noreply, socket}
+      message -> {:noreply, stream_insert(socket, :messages, message)}
+    end
+  end
+
   def handle_info({:user_banned, user_id, channel_id}, socket) do
     if socket.assigns.current_user.id == user_id and socket.assigns.current_channel.id == channel_id do
       default_channel = Forum.get_or_create_default_channel()
@@ -1600,6 +1627,23 @@ defmodule PhoenixAppWeb.ForumLive do
 
   def handle_info(:stream_ended, socket) do
     {:noreply, assign(socket, active_stream: nil)}
+  end
+
+  # Handle emoji picker events
+  def handle_info({:add_reaction, message_id, emoji}, socket) do
+    case Forum.get_message(message_id) do
+      nil -> {:noreply, socket}
+      message ->
+        user = socket.assigns.current_user
+        Forum.toggle_reaction(message, user, emoji)
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info({:insert_emoji, emoji}, socket) do
+    # Append emoji to the current message content
+    new_content = (socket.assigns.message_content || "") <> emoji
+    {:noreply, assign(socket, message_content: new_content)}
   end
 
   @impl true
@@ -2469,6 +2513,18 @@ defmodule PhoenixAppWeb.ForumLive do
             
             <%!-- Message actions --%>
             <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">
+              <%!-- Reaction picker button (triggers dropdown near reactions) --%>
+              <button 
+                type="button" 
+                phx-click={JS.toggle(to: "#reaction-dropdown-#{@message.id}", in: "fade-in-scale", out: "fade-out-scale")}
+                class="text-gray-400 hover:text-yellow-500 text-xs" 
+                title="Add reaction"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </button>
+              
               <% 
                 replies = if Ecto.assoc_loaded?(@message.replies), do: @message.replies, else: []
                 has_replied = Enum.any?(replies, fn r -> r.user_id == @current_user.id end)
@@ -2553,15 +2609,47 @@ defmodule PhoenixAppWeb.ForumLive do
             </div>
           <% end %>
           
-          <div class="flex mt-1">
+          <div class="flex flex-wrap gap-1 mt-1">
             <%= for {emoji, count} <- group_reactions(@message.reactions) do %>
-              <div class="flex items-center mr-2 p-1 bg-gray-200 dark:bg-gray-700 rounded-full">
-                <span class="text-sm"><%= emoji %></span>
+              <% 
+                reactors = Enum.filter(@message.reactions, fn r -> r.emoji == emoji end)
+                user_reacted = Enum.any?(reactors, fn r -> r.user_id == @current_user.id end)
+                reactor_names = Enum.map_join(reactors, ", ", fn r -> 
+                  if Ecto.assoc_loaded?(r.user) do
+                    r.user.name || r.user.email || "Unknown"
+                  else
+                    "User"
+                  end
+                end)
+              %>
+              <button 
+                type="button"
+                phx-click="toggle_reaction"
+                phx-value-message_id={@message.id}
+                phx-value-emoji={emoji}
+                class={"flex items-center px-2 py-0.5 rounded-full text-sm transition-colors cursor-pointer border #{if user_reacted, do: "bg-transparent border-transparent", else: "bg-transparent border-transparent hover:bg-gray-100 dark:hover:bg-gray-800"}"}
+                title={reactor_names}
+              >
+                <span><%= emoji %></span>
                 <span class="text-xs text-gray-600 dark:text-gray-400 ml-1"><%= count %></span>
-              </div>
+              </button>
             <% end %>
+            <%!-- Quick add reaction button (shows on message hover) --%>
+            <div class="relative opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                type="button"
+                phx-click={JS.toggle(to: "#reaction-dropdown-#{@message.id}", in: "fade-in-scale", out: "fade-out-scale")}
+                class="flex items-center px-2 py-0.5 rounded-full text-sm hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                title="Add reaction"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+              </button>
+              <%!-- Full emoji reaction dropdown with categories --%>
+              <.reaction_emoji_picker id={"reaction-dropdown-#{@message.id}"} message_id={@message.id} />
+            </div>
           </div>
-          
           
           <%!-- Collapsible Replies removed (using recursive Nested Replies below) --%>
 
@@ -2618,6 +2706,20 @@ defmodule PhoenixAppWeb.ForumLive do
   attr :target, :string, required: true
   attr :id, :string, required: true
   def emoji_picker(assigns) do
+    # Comprehensive emoji list organized by categories
+    assigns = assign(assigns, :emoji_categories, %{
+      "😀" => ~w(😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐),
+      "😢" => ~w(😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖),
+      "👋" => ~w(👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪),
+      "❤️" => ~w(❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟),
+      "🐶" => ~w(🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐻‍❄️ 🐨 🐯 🦁 🐮 🐷 🐽 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪱 🐛 🦋 🐌 🐞 🐜 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🦓 🦍 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🦬 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🐐 🦌 🐕 🐈 🐓 🦃 🦚 🦜 🦢 🦩 🐇 🦔),
+      "🍕" => ~w(🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🌽 🥕 🥔 🍠 🥐 🍞 🥖 🥨 🧀 🥚 🍳 🥞 🧇 🥓 🥩 🍗 🍖 🌭 🍔 🍟 🍕 🥪 🥙 🌮 🌯 🥗 🥘 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🍤 🍙 🍚 🍘 🍥 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 🍯 🥛 ☕ 🍵 🥤 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🍾),
+      "⚽" => ~w(⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳ 🏹 🎣 🥊 🥋 🎽 🛹 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🏋️ 🤼 🤸 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🧗 🚴 🚵 🏆 🥇 🥈 🥉 🏅 🎪 🎭 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🎷 🎺 🎸 🎻 🎲 🎯 🎳 🎮 🎰 🧩),
+      "🚗" => ~w(🚗 🚕 🚙 🚌 🚎 🏎️ 🚓 🚑 🚒 🚐 🛻 🚚 🚛 🚜 🛴 🚲 🛵 🏍️ 🚨 🚔 🚍 🚘 🚡 🚠 🚟 🚃 🚋 🚞 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 🛩️ 💺 🛰️ 🚀 🛸 🚁 🛶 ⛵ 🚤 🛥️ 🛳️ ⛴️ 🚢 ⚓ ⛽ 🚧 🚦 🚥 🗺️ 🗿 🗽 🗼 🏰 🏯 🏟️ 🎡 🎢 🎠 ⛲ 🏖️ 🏝️ 🏜️ 🌋 ⛰️ 🏔️ 🏕️ ⛺ 🏠 🏡 🏢 🏬 🏣 🏥 🏦 🏨 🏪 🏫 💒 🏛️ ⛪ 🕌 🕍 🕋 ⛩️ 🏙️ 🌃 🌌 🌉 🌁),
+      "💡" => ~w(⌚ 📱 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🕹️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 📞 ☎️ 📺 📻 🎙️ ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🧯 💸 💵 💴 💶 💷 💰 💳 💎 ⚖️ 🧰 🔧 🔨 🛠️ ⛏️ 🔩 ⚙️ 🔫 💣 🔪 🗡️ ⚔️ 🛡️ 🔮 💈 🔭 🔬 🩹 🩺 💊 💉 🧬 🦠 🧪 🌡️ 🧹 🧺 🧻 🚽 🚰 🚿 🛁 🧼 🔑 🗝️ 🚪 🛋️ 🛏️ 🧸 🖼️ 🛍️ 🛒 🎁 🎈 🎏 🎀 🎊 🎉 🎎 🏮 🎐 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 📪 📫 📬 📭 📮 📯 📜 📃 📄 📊 📈 📉 📆 📅 🗑️ 📋 📁 📂 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🔗 📎 📐 📏 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎 🔒 🔓),
+      "✨" => ~w(❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ ⚛️ ☢️ ☣️ 🈚 🈸 🈺 🈷️ ✴️ 🆚 💮 🉐 🈴 🈵 🈹 🈲 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️ 🚷 🚯 🚳 🚱 🔞 📵 🚭 ❗ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 💹 ❇️ ✳️ ❎ 🌐 💠 🌀 💤 🏧 🚾 ♿ 🅿️ 🈳 🈂️ 🛂 🛃 🛄 🛅 🚹 🚺 🚼 🚻 🚮 🎦 📶 🆖 🆗 🆙 🆒 🆕 🆓 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟 #️⃣ *️⃣ ⏏️ ▶️ ⏸️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ⏫ ⏬ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 ™️ ©️ ®️ ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◾ ◽ ◼️ ◻️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 🔈 🔇 🔉 🔊 🔔 🔕 📣 📢 💬 💭 🗯️ ♠️ ♣️ ♥️ ♦️ 🃏 🎴)
+    })
+
     ~H"""
     <div class="relative inline-block" id={@id}>
       <button 
@@ -2633,16 +2735,109 @@ defmodule PhoenixAppWeb.ForumLive do
       
       <div 
         id={"#{@id}-dropdown"}
-        class="hidden absolute bottom-full right-0 mb-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 p-2 grid grid-cols-6 gap-1 max-h-48 overflow-y-auto"
+        class="hidden absolute bottom-full right-0 mb-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50"
+        phx-click-away={JS.hide(to: "##{@id}-dropdown")}
       >
-        <%= for emoji <- ~w(😀 😂 🤣 😉 😊 😍 🥰 😘 🤪 😝 🤓 😎 🥳 🤩 😢 😭 😤 😠 😡 🤬 🤯 😳 😱 😨 😰 😥 😓 🤗 🤔 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 👹 👺 🤡 💩 👻 💀 ☠️ 👽 👾 🤖 🎃 😺 😸 😹 😻 😼 😽 🙀 😿 😾 👋 🤚 🖐 ✋ 🖖 👌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 🖕 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦵 🦶 👂 🦻 👃 🧠 🦷 🦴 👀 👁 👅 👄 💋 🩸) do %>
+        <%!-- Category tabs --%>
+        <div class="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto px-1 py-1">
+          <%= for {icon, _emojis} <- @emoji_categories do %>
+            <button 
+              type="button"
+              class="px-2 py-1 text-lg hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              onclick={"
+                document.querySelectorAll('##{@id}-dropdown .emoji-category').forEach(el => el.classList.add('hidden'));
+                document.getElementById('#{@id}-cat-' + this.dataset.cat).classList.remove('hidden');
+              "}
+              data-cat={icon}
+            >
+              <%= icon %>
+            </button>
+          <% end %>
+        </div>
+        
+        <%!-- Emoji grids by category --%>
+        <div class="p-2 max-h-48 overflow-y-auto">
+          <%= for {icon, emojis} <- @emoji_categories do %>
+            <div 
+              id={"#{@id}-cat-#{icon}"} 
+              class={"emoji-category grid grid-cols-8 gap-1 #{if icon != "😀", do: "hidden", else: ""}"}
+            >
+              <%= for emoji <- emojis do %>
+                <button 
+                  type="button" 
+                  class="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
+                  phx-click={JS.dispatch("insert-text", to: @target, detail: %{text: emoji}) |> JS.hide(to: "##{@id}-dropdown")}
+                >
+                  <%= emoji %>
+                </button>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Reaction emoji picker - same categories as message input but triggers toggle_reaction
+  attr :id, :string, required: true
+  attr :message_id, :string, required: true
+  def reaction_emoji_picker(assigns) do
+    assigns = assign(assigns, :emoji_categories, %{
+      "😀" => ~w(😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐),
+      "😢" => ~w(😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖),
+      "👋" => ~w(👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪),
+      "❤️" => ~w(❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟),
+      "🐶" => ~w(🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐻‍❄️ 🐨 🐯 🦁 🐮 🐷 🐽 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪱 🐛 🦋 🐌 🐞 🐜 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🦓 🦍 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🦬 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🐐 🦌 🐕 🐈 🐓 🦃 🦚 🦜 🦢 🦩 🐇 🦔),
+      "🍕" => ~w(🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🌽 🥕 🥔 🍠 🥐 🍞 🥖 🥨 🧀 🥚 🍳 🥞 🧇 🥓 🥩 🍗 🍖 🌭 🍔 🍟 🍕 🥪 🥙 🌮 🌯 🥗 🥘 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🍤 🍙 🍚 🍘 🍥 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 🍯 🥛 ☕ 🍵 🥤 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🍾),
+      "⚽" => ~w(⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳ 🏹 🎣 🥊 🥋 🎽 🛹 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🏋️ 🤼 🤸 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🧗 🚴 🚵 🏆 🥇 🥈 🥉 🏅 🎪 🎭 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🎷 🎺 🎸 🎻 🎲 🎯 🎳 🎮 🎰 🧩),
+      "🚗" => ~w(🚗 🚕 🚙 🚌 🚎 🏎️ 🚓 🚑 🚒 🚐 🛻 🚚 🚛 🚜 🛴 🚲 🛵 🏍️ 🚨 🚔 🚍 🚘 🚡 🚠 🚟 🚃 🚋 🚞 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 🛩️ 💺 🛰️ 🚀 🛸 🚁 🛶 ⛵ 🚤 🛥️ 🛳️ ⛴️ 🚢 ⚓ ⛽ 🚧 🚦 🚥 🗺️ 🗿 🗽 🗼 🏰 🏯 🏟️ 🎡 🎢 🎠 ⛲ 🏖️ 🏝️ 🏜️ 🌋 ⛰️ 🏔️ 🏕️ ⛺ 🏠 🏡 🏢 🏬 🏣 🏥 🏦 🏨 🏪 🏫 💒 🏛️ ⛪ 🕌 🕍 🕋 ⛩️ 🏙️ 🌃 🌌 🌉 🌁),
+      "💡" => ~w(⌚ 📱 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🕹️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 📞 ☎️ 📺 📻 🎙️ ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🧯 💸 💵 💴 💶 💷 💰 💳 💎 ⚖️ 🧰 🔧 🔨 🛠️ ⛏️ 🔩 ⚙️ 🔫 💣 🔪 🗡️ ⚔️ 🛡️ 🔮 💈 🔭 🔬 🩹 🩺 💊 💉 🧬 🦠 🧪 🌡️ 🧹 🧺 🧻 🚽 🚰 🚿 🛁 🧼 🔑 🗝️ 🚪 🛋️ 🛏️ 🧸 🖼️ 🛍️ 🛒 🎁 🎈 🎏 🎀 🎊 🎉 🎎 🏮 🎐 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 📪 📫 📬 📭 📮 📯 📜 📃 📄 📊 📈 📉 📆 📅 🗑️ 📋 📁 📂 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🔗 📎 📐 📏 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎 🔒 🔓),
+      "✨" => ~w(❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ ⚛️ ☢️ ☣️ ✴️ 🆚 💮 🉐 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️ 🚷 🔞 ❗ ❕ ❓ ❔ ‼️ ⁉️ ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 💹 ❇️ ✳️ ❎ 🌐 💠 🌀 💤 ▶️ ⏸️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 ™️ ©️ ®️ ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 🔈 🔇 🔉 🔊 🔔 🔕 📣 📢 💬 💭 🗯️ ♠️ ♣️ ♥️ ♦️ 🃏 🎴)
+    })
+
+    ~H"""
+    <div 
+      id={@id}
+      class="hidden absolute bottom-full left-0 mb-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50"
+      phx-click-away={JS.hide(to: "##{@id}")}
+    >
+      <%!-- Category tabs --%>
+      <div class="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto px-1 py-1">
+        <%= for {icon, _emojis} <- @emoji_categories do %>
           <button 
-            type="button" 
-            class="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
-            phx-click={JS.dispatch("insert-text", to: @target, detail: %{text: emoji}) |> JS.hide(to: "##{@id}-dropdown")}
+            type="button"
+            class="px-2 py-1 text-lg hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+            onclick={"
+              document.querySelectorAll('##{@id} .emoji-category').forEach(el => el.classList.add('hidden'));
+              document.getElementById('#{@id}-cat-' + this.dataset.cat).classList.remove('hidden');
+            "}
+            data-cat={icon}
           >
-            <%= emoji %>
+            <%= icon %>
           </button>
+        <% end %>
+      </div>
+      
+      <%!-- Emoji grids by category --%>
+      <div class="p-2 max-h-48 overflow-y-auto">
+        <%= for {icon, emojis} <- @emoji_categories do %>
+          <div 
+            id={"#{@id}-cat-#{icon}"} 
+            class={"emoji-category grid grid-cols-8 gap-1 #{if icon != "😀", do: "hidden", else: ""}"}
+          >
+            <%= for emoji <- emojis do %>
+              <button 
+                type="button" 
+                class="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
+                phx-click="toggle_reaction"
+                phx-value-message_id={@message_id}
+                phx-value-emoji={emoji}
+              >
+                <%= emoji %>
+              </button>
+            <% end %>
+          </div>
         <% end %>
       </div>
     </div>

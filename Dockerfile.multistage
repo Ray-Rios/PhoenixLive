@@ -9,6 +9,10 @@ WORKDIR /app
 ARG MIX_ENV=prod
 ENV MIX_ENV=${MIX_ENV}
 
+# Force IPv4 for Erlang to avoid Docker DNS issues
+RUN echo "{inet6, false}." > /etc/erl_inetrc
+ENV ERL_INETRC=/etc/erl_inetrc
+
 # Install hex and rebar
 RUN mix local.hex --force && \
     mix local.rebar --force
@@ -90,6 +94,10 @@ ARG LIVE_VIEW_SIGNING_SALT=build_time_live_view_signing_salt_placeholder_32_char
 ENV SECRET_KEY_BASE=${SECRET_KEY_BASE}
 ENV GUARDIAN_SECRET_KEY=${GUARDIAN_SECRET_KEY}
 ENV LIVE_VIEW_SIGNING_SALT=${LIVE_VIEW_SIGNING_SALT}
+
+# Force IPv4 for Erlang to avoid Docker DNS issues
+RUN echo "{inet6, false}." > /etc/erl_inetrc
+ENV ERL_INETRC=/etc/erl_inetrc
 
 # Install hex and rebar
 RUN mix local.hex --force && \
