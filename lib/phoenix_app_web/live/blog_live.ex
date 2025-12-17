@@ -2,8 +2,11 @@ defmodule PhoenixAppWeb.BlogLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
   import PhoenixAppWeb.Components.PageContainer
+  alias PhoenixAppWeb.Components.RichEditor
 
   on_mount {PhoenixAppWeb.UserAuth, :default}
+
+  @allowed_roles ["admin", "gm", "editor"]
 
   def mount(_params, _session, socket) do
     posts = Content.list_published_posts()
@@ -15,7 +18,10 @@ defmodule PhoenixAppWeb.BlogLive do
        recent_posts: recent_posts,
        current_slide: 0,
        page_title: "Blog",
-       view: :post_list
+       view: :post_list,
+       editing: false,
+       saving: false,
+       last_saved: nil
      )}
   end
 
@@ -26,7 +32,11 @@ defmodule PhoenixAppWeb.BlogLive do
      assign(socket,
        post: post,
        page_title: post.title,
-       view: :post_detail
+       view: :post_detail,
+       editing: false,
+       saving: false,
+       last_saved: nil,
+       pending_content: nil
      )}
   end
 
@@ -35,8 +45,101 @@ defmodule PhoenixAppWeb.BlogLive do
     {:noreply,
      assign(socket,
        page_title: "Blog",
-       view: :post_list
+       view: :post_list,
+       editing: false
      )}
+  end
+
+  # Check if user can edit content
+  defp can_edit?(%{current_user: nil}), do: false
+  defp can_edit?(%{current_user: user}) do
+    user.role in @allowed_roles or Map.get(user, :is_admin, false)
+  end
+  defp can_edit?(_), do: false
+
+  # Toggle edit mode
+  def handle_event("toggle_edit", _params, socket) do
+    if can_edit?(socket.assigns) do
+      {:noreply, assign(socket, editing: !socket.assigns.editing)}
+    else
+      {:noreply, put_flash(socket, :error, "You don't have permission to edit.")}
+    end
+  end
+
+  # Handle inline title edit
+  def handle_event("update_title", %{"value" => title}, socket) do
+    if can_edit?(socket.assigns) do
+      post = socket.assigns.post
+      case Content.update_post(post, %{title: title}) do
+        {:ok, updated_post} ->
+          {:noreply, assign(socket, post: updated_post, last_saved: DateTime.utc_now())}
+        {:error, _} ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Handle Quill editor content changes (real-time save)
+  def handle_event("editor-change", %{"html" => html}, socket) do
+    if can_edit?(socket.assigns) and socket.assigns.editing do
+      # Don't save on every keystroke - let autosave handle it
+      {:noreply, assign(socket, pending_content: html)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Handle auto-save from editor
+  def handle_event("editor-autosave", %{"html" => html}, socket) do
+    if can_edit?(socket.assigns) and socket.assigns.editing do
+      socket = assign(socket, saving: true)
+      post = socket.assigns.post
+      
+      case Content.update_post(post, %{content: html}) do
+        {:ok, updated_post} ->
+          {:noreply, 
+           socket
+           |> assign(post: updated_post, saving: false, last_saved: DateTime.utc_now())
+           |> push_event("content-saved", %{})}
+        {:error, _} ->
+          {:noreply, assign(socket, saving: false)}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Manual save
+  def handle_event("save_content", _params, socket) do
+    if can_edit?(socket.assigns) and socket.assigns.editing do
+      content = socket.assigns[:pending_content] || socket.assigns.post.content
+      socket = assign(socket, saving: true)
+      post = socket.assigns.post
+      
+      case Content.update_post(post, %{content: content}) do
+        {:ok, updated_post} ->
+          {:noreply, 
+           socket
+           |> assign(post: updated_post, saving: false, last_saved: DateTime.utc_now(), editing: false)
+           |> put_flash(:info, "Content saved!")}
+        {:error, _} ->
+          {:noreply, 
+           socket
+           |> assign(saving: false)
+           |> put_flash(:error, "Failed to save.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Cancel editing
+  def handle_event("cancel_edit", _params, socket) do
+    # Reload the post to discard any unsaved changes
+    post = Content.get_post!(socket.assigns.post.id)
+    {:noreply, assign(socket, editing: false, post: post, pending_content: nil)}
   end
 
   def handle_event("next_slide", _params, socket) do
@@ -247,7 +350,64 @@ defmodule PhoenixAppWeb.BlogLive do
 
           <!-- Post Header -->
           <article class="prose prose-invert max-w-none">
-            <h1 class="text-4xl font-bold text-white mb-4"><%= @post.title %></h1>
+            <div class="flex items-center justify-between mb-4">
+              <!-- Title: Editable or Read-only -->
+              <%= if @editing do %>
+                <input
+                  type="text"
+                  value={@post.title}
+                  phx-blur="update_title"
+                  phx-keyup="update_title"
+                  phx-key="Enter"
+                  class="text-4xl font-bold text-white bg-transparent border-b-2 border-blue-500 focus:outline-none focus:border-blue-400 w-full"
+                  placeholder="Post title..."
+                />
+              <% else %>
+                <h1 class="text-4xl font-bold text-white"><%= @post.title %></h1>
+              <% end %>
+              
+              <!-- Edit/Save/Cancel Buttons for Authorized Users -->
+              <%= if can_edit?(assigns) do %>
+                <%= if @editing do %>
+                  <div class="flex items-center gap-2 ml-4">
+                    <!-- Save Status Indicator -->
+                    <span :if={@saving} class="text-yellow-400 text-sm animate-pulse">Saving...</span>
+                    <span :if={@last_saved && !@saving} class="text-green-400 text-sm">
+                      Saved <%= Calendar.strftime(@last_saved, "%H:%M:%S") %>
+                    </span>
+                    
+                    <button
+                      type="button"
+                      phx-click="save_content"
+                      class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                      Save & Exit
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="cancel_edit"
+                      class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                <% else %>
+                  <button
+                    type="button"
+                    phx-click="toggle_edit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Edit Post
+                  </button>
+                <% end %>
+              <% end %>
+            </div>
 
             <div class="flex items-center text-gray-400 text-sm mb-8">
               <%= if @post.user.avatar_url do %>
@@ -272,10 +432,21 @@ defmodule PhoenixAppWeb.BlogLive do
               <% end %>
             </div>
 
-            <!-- Post Content -->
-            <div class="text-gray-200 leading-relaxed text-lg">
-              <%= PhoenixAppWeb.Markdown.render(@post.content) %>
-            </div>
+            <!-- Post Content: WYSIWYG Editor or Rendered View -->
+            <%= if @editing do %>
+              <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+                <RichEditor.quill_editor
+                  id={"blog-editor-#{@post.id}"}
+                  content={@post.content}
+                  placeholder="Write your blog post content..."
+                  min_height="400px"
+                />
+              </div>
+            <% else %>
+              <div class="text-gray-200 leading-relaxed text-lg">
+                <%= PhoenixAppWeb.Markdown.render(@post.content) %>
+              </div>
+            <% end %>
           </article>
         </div>
       </div>

@@ -216,11 +216,6 @@ defmodule PhoenixAppWeb.Components.Taskbar do
             </button>
           </div>
           
-          <!-- Network Status -->
-          <button class="p-2 rounded hover:glass-dark hover:bg-white/20 text-gray-300 hover:text-white transition-colors">
-            <span class="text-lg">📶</span>
-          </button>
-          
           <!-- Volume -->
           <div class="relative">
             <button 

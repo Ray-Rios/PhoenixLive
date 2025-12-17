@@ -152,17 +152,57 @@ defmodule PhoenixApp.Forum do
     if String.downcase(channel.name) == "general" do
       {:error, :protected_channel}
     else
-      can_delete = (Map.has_key?(channel, :owner_id) && channel.owner_id == user_id) ||
-                   (Map.has_key?(channel, :created_by_id) && channel.created_by_id == user_id) ||
-                   Map.get(user, :is_admin, false) ||
-                   user.role in ["admin", "gm", "editor"]
-
-      if can_delete do
-        delete_channel(channel)
-      else
+      is_admin_or_gm = Map.get(user, :is_admin, false) || user.role in ["admin", "gm", "editor"]
+      
+      # If channel is public, ONLY admins/GMs can delete it, even if they are the owner
+      if !channel.is_private && !is_admin_or_gm do
         {:error, :forbidden}
+      else
+        can_delete = (Map.has_key?(channel, :owner_id) && channel.owner_id == user_id) ||
+                     (Map.has_key?(channel, :created_by_id) && channel.created_by_id == user_id) ||
+                     is_admin_or_gm
+
+        if can_delete do
+          delete_channel(channel)
+        else
+          {:error, :forbidden}
+        end
       end
     end
+  end
+
+  def reorder_channels(%PhoenixApp.Accounts.User{} = user, ids) do
+    # Filter out invalid UUIDs just in case
+    valid_ids = Enum.filter(ids, fn id -> 
+      case Ecto.UUID.cast(id) do
+        {:ok, _} -> true
+        _ -> false
+      end
+    end)
+
+    user
+    |> PhoenixApp.Accounts.User.channel_order_changeset(%{channel_order: valid_ids})
+    |> Repo.update()
+  end
+
+  def reorder_channels(ids) do
+    Repo.transaction(fn ->
+      Enum.with_index(ids)
+      |> Enum.each(fn {id, index} ->
+        # Ensure ID is a valid UUID before querying to avoid crashes
+        case Ecto.UUID.cast(id) do
+          {:ok, uuid} ->
+            from(c in Channel, where: c.id == ^uuid)
+            |> Repo.update_all(set: [position: index])
+          _ -> 
+            # Skip invalid IDs
+            :ok
+        end
+      end)
+    end)
+    
+    # Broadcast update so other users see the new order
+    pubsub_broadcast("chat:channels", {:channels_reordered, ids})
   end
 
   def change_channel(%Channel{} = channel, attrs \\ %{}) do

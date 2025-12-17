@@ -12,10 +12,6 @@
     </script>
   </head>
   <body class="bg-black antialiased" phx-hook="GlobalHooks" id="global-glass-theme">
-    <!-- Mount Global Camera Controller separately (phx-hook accepts a single hook) -->
-    <div id="global-camera-hook" phx-hook="GlobalCameraController" class="hidden" aria-hidden="true"></div>
-    <div id="glass-theme-hook" phx-hook="GlassTheme" class="hidden" aria-hidden="true"></div>
-    <div id="background-updater-hook" phx-hook="BackgroundUpdater" class="hidden" aria-hidden="true"></div>
     <!-- Global background canvas (outside LiveView-managed @inner_content to avoid being patched) -->
     <%!-- Determine user's background preference and render either a Three.js scene hook or a CSS overlay for gradient/solid --%>
     <% bg_pref = (assigns[:current_user] && assigns[:current_user].background_preference) || "galaxy" %>

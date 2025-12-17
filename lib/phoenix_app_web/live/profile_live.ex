@@ -22,6 +22,9 @@ defmodule PhoenixAppWeb.ProfileLive do
       # Load previous avatars
       previous_avatars = PhoenixApp.Uploads.list_user_uploads(current_user.id, "avatar")
 
+      # Load data usage
+      data_usage = PhoenixApp.Files.get_user_data_usage(current_user.id)
+
       socket = 
         assign(socket,
           page_title: "Profile Settings",
@@ -34,7 +37,8 @@ defmodule PhoenixAppWeb.ProfileLive do
           custom_data: custom_data,
           avatar_opacity: avatar_opacity,
           blocked_users: blocked_users,
-          previous_avatars: previous_avatars
+          previous_avatars: previous_avatars,
+          data_usage: data_usage
         )
         |> allow_upload(:avatar, 
           accept: ~w(.jpg .jpeg .png .gif .webp image/jpeg image/png image/gif image/webp), 
@@ -581,6 +585,17 @@ defmodule PhoenixAppWeb.ProfileLive do
                     <% else %>
                       <span class="bg-yellow-600 text-white px-2 py-1 rounded-full text-xs">Unverified</span>
                     <% end %>
+                  </div>
+                  
+                  <div class="mt-6 pt-6 border-t border-gray-700">
+                    <h4 class="text-sm font-medium text-gray-400 mb-2">Storage Usage</h4>
+                    <div class="w-full bg-gray-700 rounded-full h-2.5 mb-1">
+                      <div class="bg-blue-600 h-2.5 rounded-full" style={"width: #{min((@data_usage.total_size_bytes / @data_usage.limit) * 100, 100)}%"}></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-400">
+                      <span><%= PhoenixApp.Files.format_file_size(@data_usage.total_size_bytes) %></span>
+                      <span><%= PhoenixApp.Files.format_file_size(@data_usage.limit) %></span>
+                    </div>
                   </div>
                 </div>
               </div>

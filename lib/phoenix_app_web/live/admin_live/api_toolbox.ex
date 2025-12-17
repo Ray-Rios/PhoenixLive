@@ -7,6 +7,7 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
   alias PhoenixApp.Content
   alias PhoenixApp.Commerce
   alias PhoenixApp.Files
+  alias PhoenixAppWeb.Components.AdminSidebar
 
   @impl true
   def mount(_params, _session, socket) do
@@ -362,9 +363,8 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
   @impl true
   def render(assigns) do
     ~H"""
-    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
-      <div class="w-full max-w-[95%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <div class="max-w-7xl mx-auto">
+    <AdminSidebar.admin_layout current_path="/admin/api-toolbox">
+      <div class="max-w-7xl mx-auto">
           <!-- Header -->
           <div class="mb-8">
             <h1 class="text-4xl font-bold text-white mb-3 flex items-center gap-3">
@@ -558,7 +558,6 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
               </div>
             <% end %>
           </div>
-        </div>
       </div>
 
       <style>
@@ -578,7 +577,7 @@ defmodule PhoenixAppWeb.AdminLive.ApiToolbox do
           background: rgba(96, 165, 250, 0.7);
         }
       </style>
-    </div>
+    </AdminSidebar.admin_layout>
     """
   end
 

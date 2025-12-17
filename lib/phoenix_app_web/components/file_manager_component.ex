@@ -6,7 +6,6 @@ defmodule PhoenixAppWeb.FileManagerComponent do
   use PhoenixAppWeb, :live_component
 
   alias PhoenixApp.Files
-  alias PhoenixApp.Files.UserFile
 
   @impl true
   def mount(socket) do
@@ -280,7 +279,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
         <div class="mb-2">
           <%= if Files.is_image?(@file) do %>
             <img 
-              src={PhoenixApp.UserFileUpload.url({@file.file, @file}, :thumb)} 
+              src={@file.url} 
               class="w-12 h-12 mx-auto rounded object-cover"
               alt={@file.filename}
             />
@@ -292,11 +291,11 @@ defmodule PhoenixAppWeb.FileManagerComponent do
             </div>
           <% end %>
         </div>
-        <div class="text-xs text-gray-300 truncate" title={@file.original_filename}>
+        <div class="text-xs text-gray-300 truncate" title={@file.filename}>
           <%= @file.filename %>
         </div>
         <div class="text-xs text-gray-500 mt-1">
-          <%= Files.format_file_size(@file.file_size) %>
+          <%= Files.format_file_size(@file.size) %>
         </div>
       </div>
       
@@ -306,6 +305,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
           class="p-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
           phx-click="download_file" 
           phx-value-id={@file.id}
+          phx-value-type={@file.type}
           phx-target={@myself}
           title="Download"
         >
@@ -315,6 +315,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
           class="p-1 bg-red-600 hover:bg-red-700 rounded text-xs"
           phx-click="delete_file" 
           phx-value-id={@file.id}
+          phx-value-type={@file.type}
           phx-target={@myself}
           data-confirm="Are you sure you want to delete this file?"
           title="Delete"
@@ -333,7 +334,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
       <div class="flex-shrink-0 mr-3">
         <%= if Files.is_image?(@file) do %>
           <img 
-            src={PhoenixApp.UserFileUpload.url({@file.file, @file}, :thumb)} 
+            src={@file.url} 
             class="w-8 h-8 rounded object-cover"
             alt={@file.filename}
           />
@@ -347,11 +348,11 @@ defmodule PhoenixAppWeb.FileManagerComponent do
       </div>
       
       <div class="flex-1 min-w-0">
-        <div class="text-sm text-gray-200 truncate" title={@file.original_filename}>
+        <div class="text-sm text-gray-200 truncate" title={@file.filename}>
           <%= @file.filename %>
         </div>
         <div class="text-xs text-gray-500">
-          <%= Files.format_file_size(@file.file_size) %> • <%= Calendar.strftime(@file.inserted_at, "%b %d, %Y") %>
+          <%= Files.format_file_size(@file.size) %> • <%= Calendar.strftime(@file.inserted_at, "%b %d, %Y") %>
         </div>
       </div>
       
@@ -361,6 +362,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
           class="p-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
           phx-click="download_file" 
           phx-value-id={@file.id}
+          phx-value-type={@file.type}
           phx-target={@myself}
           title="Download"
         >
@@ -370,6 +372,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
           class="p-1 bg-red-600 hover:bg-red-700 rounded text-xs"
           phx-click="delete_file" 
           phx-value-id={@file.id}
+          phx-value-type={@file.type}
           phx-target={@myself}
           data-confirm="Are you sure you want to delete this file?"
           title="Delete"
@@ -382,7 +385,7 @@ defmodule PhoenixAppWeb.FileManagerComponent do
   end
 
   # File icon helper
-  defp file_icon(%UserFile{} = file) do
+  defp file_icon(file) do
     cond do
       Files.is_image?(file) -> "🖼️"
       Files.is_video?(file) -> "🎥"
@@ -459,6 +462,10 @@ defmodule PhoenixAppWeb.FileManagerComponent do
     {:noreply, socket}
   end
 
+  def handle_event("delete_file", %{"id" => _file_id, "type" => "media"}, socket) do
+    {:noreply, put_flash(socket, :error, "Cannot delete media files from here")}
+  end
+
   def handle_event("delete_file", %{"id" => file_id}, socket) do
     user = socket.assigns.user
     
@@ -510,11 +517,15 @@ defmodule PhoenixAppWeb.FileManagerComponent do
     user_role = socket.assigns.user_role
 
     files = case {current_location, String.trim(search_query)} do
-      {:user_files, ""} -> Files.list_user_files(user)
-      {:user_files, query} -> Files.search_files(user, query)
-      {:public_files, ""} -> Files.list_public_files(user_role)
+      {:user_files, ""} -> Files.list_all_user_content(user)
+      {:user_files, query} -> 
+        Files.list_all_user_content(user)
+        |> Enum.filter(fn file -> String.contains?(String.downcase(file.filename), String.downcase(query)) end)
+      {:public_files, ""} -> 
+        Files.list_public_files(user_role) |> normalize_files()
       {:public_files, query} -> 
         Files.list_public_files(user_role)
+        |> normalize_files()
         |> Enum.filter(fn file -> String.contains?(String.downcase(file.filename), String.downcase(query)) end)
     end
 
@@ -530,10 +541,10 @@ defmodule PhoenixAppWeb.FileManagerComponent do
     stats = case current_location do
       :user_files -> Files.get_file_stats(user)
       :public_files -> 
-        all_files = Files.list_public_files(user_role)
+        all_files = Files.list_public_files(user_role) |> normalize_files()
         %{
           total_files: length(all_files),
-          total_size: Enum.sum(Enum.map(all_files, & &1.file_size)),
+          total_size: Enum.sum(Enum.map(all_files, & &1.size)),
           images: Enum.count(all_files, &Files.is_image?/1),
           videos: Enum.count(all_files, &Files.is_video?/1),  
           audio: Enum.count(all_files, &Files.is_audio?/1),
@@ -547,6 +558,21 @@ defmodule PhoenixAppWeb.FileManagerComponent do
     |> assign(:files, filtered_files)
     |> assign(:stats, stats)
     |> assign(:usage, usage)
+  end
+
+  defp normalize_files(files) do
+    Enum.map(files, fn file ->
+      %{
+        id: file.id,
+        filename: file.filename,
+        content_type: file.content_type,
+        size: file.file_size,
+        inserted_at: file.inserted_at,
+        url: PhoenixApp.UserFileUpload.url({file.file, file}, :original),
+        type: :file,
+        source: file
+      }
+    end)
   end
 
   defp update_current_path(socket) do

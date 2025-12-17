@@ -431,13 +431,13 @@ defmodule PhoenixApp.Accounts do
 
   def enable_user(%User{} = user) do
     user
-    |> User.status_changeset(%{is_active: true})
+    |> User.status_changeset(%{status: "active"})
     |> Repo.update()
   end
 
   def disable_user(%User{} = user) do
     user
-    |> User.status_changeset(%{is_active: false})
+    |> User.status_changeset(%{status: "disabled"})
     |> Repo.update()
   end
 
@@ -579,7 +579,18 @@ defmodule PhoenixApp.Accounts do
       end
     end)
     |> case do
-      {:ok, deleted_user} -> {:ok, deleted_user}
+      {:ok, deleted_user} ->
+        # Cleanup user's upload directory from filesystem
+        user_upload_dir = PhoenixApp.Uploads.user_dir(deleted_user.id)
+        case File.rm_rf(user_upload_dir) do
+          {:ok, _files} ->
+            Logger.info("delete_user: removed upload directory #{user_upload_dir}")
+          {:error, reason, _} ->
+            Logger.error("delete_user: failed to remove upload directory #{user_upload_dir}: #{inspect(reason)}")
+        end
+
+        {:ok, deleted_user}
+
       {:error, reason} ->
         Logger.error("delete_user: transaction failed for user_id=#{user.id} reason=#{inspect(reason)}")
         {:error, reason}

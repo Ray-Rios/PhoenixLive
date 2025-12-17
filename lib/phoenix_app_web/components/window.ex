@@ -219,9 +219,10 @@ defmodule PhoenixAppWeb.Components.Window do
             <div class="grid grid-cols-5 gap-4">
               <%= for item <- @window.current_items do %>
                 <div 
-                  phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: nil}
+                  phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: "open_file"}
                   phx-value-window_id={@window.id}
                   phx-value-path={item.path}
+                  phx-value-url={Map.get(item, :url)}
                   phx-target={@target}
                   class="glass-dark rounded-lg p-4 transition-colors cursor-pointer hover:bg-gray-700 group"
                 >
@@ -240,9 +241,10 @@ defmodule PhoenixAppWeb.Components.Window do
             <div class="space-y-1">
               <%= for item <- @window.current_items do %>
                 <div 
-                  phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: nil}
+                  phx-click={if item.type in ["drive", "folder"], do: "navigate_to", else: "open_file"}
                   phx-value-window_id={@window.id}
                   phx-value-path={item.path}
+                  phx-value-url={Map.get(item, :url)}
                   phx-target={@target}
                   class="flex items-center justify-between p-3 hover:glass-dark rounded transition-colors cursor-pointer"
                 >

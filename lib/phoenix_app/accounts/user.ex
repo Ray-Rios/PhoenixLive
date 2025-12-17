@@ -37,6 +37,7 @@ defmodule PhoenixApp.Accounts.User do
     # Invite & notification preferences
     field :allow_channel_invites, :boolean, default: true
     field :blocked_user_ids, {:array, :binary_id}, default: []
+    field :channel_order, {:array, :binary_id}, default: []
     field :notification_sound_enabled, :boolean, default: true
     field :master_volume, :float, default: 0.7
 
@@ -228,7 +229,7 @@ defmodule PhoenixApp.Accounts.User do
   # Status changeset
   def status_changeset(user, attrs) do
     user
-    |> cast(attrs, [:status, :is_active])
+    |> cast(attrs, [:status])
   end
 
   # Two-factor authentication changeset
@@ -385,5 +386,10 @@ defmodule PhoenixApp.Accounts.User do
     else
       changeset
     end
+  end
+
+  def channel_order_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:channel_order])
   end
 end

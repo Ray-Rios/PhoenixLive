@@ -67,6 +67,7 @@ defmodule PhoenixAppWeb.Router do
     # Public blog/shop/chat/etc.
     live "/blog", BlogLive, :index
     live "/blog/:slug", BlogLive, :show
+    
     live "/pages/:slug", PageLive, :show
     live "/shop", ShopLive, :index
     live "/shop/category/:slug", ShopLive, :category
@@ -112,8 +113,13 @@ defmodule PhoenixAppWeb.Router do
 
       live "/", AdminLive.Dashboard, :index
       live "/blog-management", AdminLive.BlogManagement, :index
-  live "/pages", AdminLive.Pages, :index
-      live "/user-management", UserManagementLive, :index
+      live "/blog-management/:id", AdminLive.BlogManagement, :edit
+      live "/pages", AdminLive.Pages, :index
+      live "/pages/:id", AdminLive.Pages, :edit
+      live "/products", AdminLive.Products, :index
+      live "/orders", AdminLive.Orders, :index
+      live "/uploads", AdminLive.Uploads, :index
+      live "/user-management", AdminLive.UserManagementLive, :index
       live "/files", AdminLive.Files, :index
       live "/sql", AdminLive.SQL, :index
       live "/security", Admin.SecurityLive, :index

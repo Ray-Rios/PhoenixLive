@@ -24,9 +24,8 @@ defmodule PhoenixAppWeb.ForumLive do
         can_access_channel?(ch, user)
       end)
       
-      # Sort channels
-      public_channels = Enum.sort_by(public_channels, & &1.name)
-      all_private_channels = Enum.sort_by(visible_private_channels, & &1.name)
+      # Sort channels based on user preference
+      {public_channels, all_private_channels} = sort_channels(public_channels, visible_private_channels, user)
       
       # Default channel should be first public or first private accessible
       default_channel = List.first(public_channels) || List.first(all_private_channels) || Forum.get_or_create_default_channel()
@@ -87,6 +86,13 @@ defmodule PhoenixAppWeb.ForumLive do
         max_file_size: 100_000_000,
         auto_upload: true
       )
+      |> allow_upload(:channel_icon,
+        accept: ~w(.jpg .jpeg .png .gif .webp),
+        max_entries: 1,
+        max_file_size: 5_000_000,
+        auto_upload: true,
+        progress: &handle_channel_icon_progress/3
+      )
       
       can_moderate = Forum.can_moderate_channel?(user, default_channel)
 
@@ -134,6 +140,14 @@ defmodule PhoenixAppWeb.ForumLive do
           Logger.info("handle_params tracking presence for user #{user.id} in channel #{channel_id}")
           case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel_id}", to_string(user.id), %{
             name: user.name || user.email,
+            email: user.email,
+            avatar_url: user.avatar_url,
+            avatar_color: user.avatar_color,
+            avatar_shape: user.avatar_shape,
+            avatar_opacity: user.avatar_opacity,
+            role: user.role,
+            bio: Map.get(user, :bio),
+            inserted_at: user.inserted_at,
             online_at: DateTime.utc_now()
           }) do
             {:ok, _} -> Logger.info("Successfully tracked user #{user.id}")
@@ -148,7 +162,7 @@ defmodule PhoenixAppWeb.ForumLive do
       online_users = Enum.map(presences, fn {uid, meta} ->
         metas = Map.get(meta, :metas, [])
         latest = List.last(metas) || %{}
-        %{id: uid, name: latest.name, online_at: latest.online_at}
+        Map.put(latest, :id, uid)
       end)
       
       can_moderate = Forum.can_moderate_channel?(user, channel)
@@ -236,7 +250,8 @@ defmodule PhoenixAppWeb.ForumLive do
 
   @impl true
   def handle_event("toggle_sidebar", _params, socket) do
-    {:noreply, assign(socket, sidebar_open: !socket.assigns.sidebar_open)}
+    # Push event to client-side hook to toggle sidebar
+    {:noreply, push_event(socket, "toggle_sidebar", %{})}
   end
 
   @impl true
@@ -291,10 +306,13 @@ defmodule PhoenixAppWeb.ForumLive do
           end)
 
           socket = if Enum.empty?(upload_errors) do
-            assign(socket, current_message: "")
+            socket
+            |> assign(current_message: "")
+            |> push_event("clear_input", %{id: "chat-input-textarea"})
           else
             put_flash(socket, :error, "Some files failed to upload (Storage limit exceeded or other error).")
             |> assign(current_message: "")
+            |> push_event("clear_input", %{id: "chat-input-textarea"})
           end
 
           {:noreply, socket}
@@ -305,9 +323,9 @@ defmodule PhoenixAppWeb.ForumLive do
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to send message")}
       end
+      end
     end
   end
-end
 
   def handle_event("send_message", _params, socket) do
     # Handle case where message is empty but files are attached
@@ -321,6 +339,87 @@ end
     end
   end
 
+  def handle_event("send_reply", params, socket) do
+    content = params["content"] || ""
+    reply_to_id = params["reply_to_id"]
+
+    # Check for pending uploads
+    if Enum.any?(socket.assigns.uploads.reply_attachment.entries, fn entry -> !entry.done? end) do
+      {:noreply, put_flash(socket, :error, "Please wait for files to finish uploading.")}
+    else
+      user = socket.assigns.current_user
+      channel = socket.assigns.current_channel
+
+      # Allow empty content if files are attached
+      has_uploads = length(socket.assigns.uploads.reply_attachment.entries) > 0
+      
+      if content == "" && !has_uploads do
+        {:noreply, socket}
+      else
+        content = if content == "" && has_uploads, do: " ", else: content
+        
+        if user && Map.get(user, :role) == "banned" do
+          {:noreply, put_flash(socket, :error, "You are banned from posting messages.")}
+        else
+          if !can_access_channel?(channel, user) do
+            {:noreply, put_flash(socket, :error, "You don't have permission to post in this channel.")}
+          else
+            # Check if user has already replied to this message
+            # We need to fetch the parent message to check its replies
+            case Forum.get_message(reply_to_id) do
+              nil ->
+                {:noreply, put_flash(socket, :error, "Message you are replying to no longer exists.")}
+              parent_message ->
+                has_replied = Enum.any?(parent_message.replies || [], fn r -> r.user_id == user.id end)
+
+                if has_replied do
+                  {:noreply, put_flash(socket, :error, "You have already replied to this message.")}
+                else
+                  case Forum.create_message(user, channel.id, %{content: content, parent_id: reply_to_id}) do
+                    {:ok, message} ->
+                      # Process uploaded files for reply
+                      consume_uploaded_entries(socket, :reply_attachment, fn %{path: path}, entry ->
+                        context = "forum/#{channel.id}/messages/#{message.id}"
+                        case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
+                          {:ok, url_path} ->
+                            Forum.create_message_attachment(message, %{
+                              "filename" => entry.client_name,
+                              "content_type" => entry.client_type,
+                              "file_size" => entry.client_size,
+                              "file" => url_path,
+                              "user_id" => user.id
+                            })
+                          {:error, reason} -> {:error, reason}
+                        end
+                      end)
+                      
+                      # Re-fetch message to get attachments
+                      message = case Forum.get_message(message.id) do
+                        nil -> message
+                        msg -> msg
+                      end
+                      
+                      # Refresh the root message to update the UI
+                      root_id = get_root_message_id(message)
+                      socket = refresh_message(socket, root_id)
+                      
+                      {:noreply, 
+                       socket 
+                       |> assign(replying_to_message_id: nil, reply_message_content: "")
+                       |> put_flash(:info, "Reply sent")}
+                    {:error, :rate_limited} ->
+                      {:noreply, put_flash(socket, :error, "You're sending messages too quickly.")}
+                    {:error, _} ->
+                      {:noreply, put_flash(socket, :error, "Failed to send reply")}
+                  end
+                end
+            end
+          end
+        end
+      end
+    end
+  end
+
   def handle_event("update_message", %{"message" => message}, socket) do
     # Broadcast typing indicator
     if String.length(message) > 0 do
@@ -329,20 +428,6 @@ end
     end
     
     {:noreply, assign(socket, current_message: message)}
-  end
-
-  defp refresh_message(socket, nil), do: socket
-  defp refresh_message(socket, message_id) do
-    case Forum.get_message(message_id) do
-      nil -> socket
-      message -> 
-        # Always refresh the root message to ensure nested replies are updated
-        root_id = get_root_message_id(message)
-        case Forum.get_message(root_id) do
-          nil -> socket
-          root -> stream_insert(socket, :messages, root)
-        end
-    end
   end
 
   def handle_event("start_reply", %{"message_id" => message_id}, socket) do
@@ -572,6 +657,27 @@ end
         
       {:error, changeset} ->
         {:noreply, assign(socket, channel_form: to_form(changeset))}
+    end
+  end
+
+  def handle_event("reorder_channels", %{"group" => _group, "ids" => ids}, socket) do
+    user = socket.assigns.current_user
+    
+    try do
+      # Update user preference instead of global order
+      {:ok, updated_user} = Forum.reorder_channels(user, ids)
+      
+      # Update current user in socket
+      socket = assign(socket, current_user: updated_user)
+      
+      # Re-sort channels based on new user preference
+      {public_channels, private_channels} = sort_channels(socket.assigns.public_channels, socket.assigns.private_channels, updated_user)
+      
+      {:noreply, assign(socket, public_channels: public_channels, private_channels: private_channels)}
+    rescue
+      e -> 
+        Logger.error("Failed to reorder channels: #{inspect(e)}")
+        {:noreply, put_flash(socket, :error, "Failed to reorder channels")}
     end
   end
 
@@ -871,86 +977,33 @@ end
   # (Removed duplicate start_reply and cancel_reply handlers)
 
 
-  def handle_event("send_reply", params, socket) do
-    content = params["content"] || ""
-    reply_to_id = params["reply_to_id"]
+  def handle_event("validate_channel_icon", _params, socket) do
+    {:noreply, socket}
+  end
 
-    # Check for pending uploads
-    if Enum.any?(socket.assigns.uploads.reply_attachment.entries, fn entry -> !entry.done? end) do
-      {:noreply, put_flash(socket, :error, "Please wait for files to finish uploading.")}
-    else
-      user = socket.assigns.current_user
-      channel = socket.assigns.current_channel
+  def handle_event("remove_channel_icon", _params, socket) do
+    user = socket.assigns.current_user
+    channel = socket.assigns.current_channel
 
-      # Allow empty content if files are attached
-      has_uploads = length(socket.assigns.uploads.reply_attachment.entries) > 0
-      
-      if content == "" && !has_uploads do
-        {:noreply, socket}
-      else
-        content = if content == "" && has_uploads, do: " ", else: content
-        
-        if user && Map.get(user, :role) == "banned" do
-          {:noreply, put_flash(socket, :error, "You are banned from posting messages.")}
-        else
-          if !can_access_channel?(channel, user) do
-            {:noreply, put_flash(socket, :error, "You don't have permission to post in this channel.")}
-          else
-            # Check if user has already replied to this message
-            # We need to fetch the parent message to check its replies
-            case Forum.get_message(reply_to_id) do
-              nil ->
-                {:noreply, put_flash(socket, :error, "Message you are replying to no longer exists.")}
-              parent_message ->
-                has_replied = Enum.any?(parent_message.replies || [], fn r -> r.user_id == user.id end)
-
-                if has_replied do
-                  {:noreply, put_flash(socket, :error, "You have already replied to this message.")}
-                else
-                  case Forum.create_message(user, channel.id, %{content: content, parent_id: reply_to_id}) do
-                    {:ok, message} ->
-                      # Process uploaded files for reply
-                      consume_uploaded_entries(socket, :reply_attachment, fn %{path: path}, entry ->
-                        context = "forum/#{channel.id}/messages/#{message.id}"
-                        case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
-                          {:ok, url_path} ->
-                            Forum.create_message_attachment(message, %{
-                              "filename" => entry.client_name,
-                              "content_type" => entry.client_type,
-                              "file_size" => entry.client_size,
-                              "file" => url_path,
-                              "user_id" => user.id
-                            })
-                          {:error, reason} -> {:error, reason}
-                        end
-                      end)
-                      
-                      # Re-fetch message to get attachments
-                      message = case Forum.get_message(message.id) do
-                        nil -> message
-                        msg -> msg
-                      end
-                      
-                      # Refresh the root message to update the UI
-                      root_id = get_root_message_id(message)
-                      socket = refresh_message(socket, root_id)
-                      
-                      {:noreply, 
-                       socket 
-                       |> assign(replying_to_message_id: nil, reply_message_content: "")
-                       |> put_flash(:info, "Reply sent")}
-                    {:error, :rate_limited} ->
-                      {:noreply, put_flash(socket, :error, "You're sending messages too quickly.")}
-                    {:error, _} ->
-                      {:noreply, put_flash(socket, :error, "Failed to send reply")}
-                  end
-                end
-            end
-          end
-        end
+    if Forum.can_manage_channel?(user, channel) do
+      case Forum.update_channel(channel, %{icon_path: nil}) do
+        {:ok, updated_channel} ->
+          {:noreply, assign(socket, current_channel: updated_channel) |> put_flash(:info, "Channel icon removed")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to remove channel icon")}
       end
+    else
+      {:noreply, put_flash(socket, :error, "Permission denied")}
     end
   end
+
+  def handle_event("trigger_channel_icon_upload", _params, socket) do
+    {:noreply, socket}
+  end
+
+
+
+
 
   def handle_event("create_personal_invite", %{"invitee_id" => invitee_id}, socket) do
     user = socket.assigns.current_user
@@ -1086,40 +1139,48 @@ end
       _ -> false
     end
     
-    channel_params = Map.merge(channel_params, %{
-      "owner_id" => user.id,
-      "is_user_created" => true,
-      "is_private" => is_private,
-      "is_public" => !is_private
-    })
-    
-    case Forum.create_user_channel(user, channel_params) do
-      {:ok, channel} ->
-        # Refresh channel lists
-        all_channels = Forum.list_channels()
-        {public_channels, all_private_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
-        private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(ch, user) end)
-        
-        {:noreply,
-         socket
-         |> assign(
-           show_create_channel_form: false,
-           creating_user_channel: false,
-           channel_form: to_form(Forum.change_channel(%Forum.Channel{})),
-           public_channels: public_channels,
-           private_channels: private_channels,
-           can_create_more_channels: length(private_channels) < 5
-         )
-         |> put_flash(:info, "Channel '#{channel.name}' created!")
-         |> push_navigate(to: ~p"/forum/#{channel.id}")}
+    # Permission check: Only Admins/GMs can create public channels
+    if !is_private && !(user.is_admin || user.role in ["admin", "gm"]) do
+      {:noreply, put_flash(socket, :error, "Only Admins and GMs can create public channels.")}
+    else
+      channel_params = Map.merge(channel_params, %{
+        "owner_id" => user.id,
+        "is_user_created" => true,
+        "is_private" => is_private,
+        "is_public" => !is_private
+      })
       
-      {:error, %Ecto.Changeset{} = changeset} ->
-        error_msg = if changeset.errors[:owner_id] do
-          "You can only create up to 5 channels"
-        else
-          "Failed to create channel"
-        end
-        {:noreply, assign(socket, channel_form: to_form(changeset)) |> put_flash(:error, error_msg)}
+      case Forum.create_user_channel(user, channel_params) do
+        {:ok, channel} ->
+          # Refresh channel lists
+          all_channels = Forum.list_channels()
+          {public_channels, all_private_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
+          private_channels = Enum.filter(all_private_unfiltered, fn ch -> can_access_channel?(ch, user) end)
+          
+          # Sort channels based on user preference
+          {public_channels, private_channels} = sort_channels(public_channels, private_channels, user)
+          
+          {:noreply,
+           socket
+           |> assign(
+             show_create_channel_form: false,
+             creating_user_channel: false,
+             channel_form: to_form(Forum.change_channel(%Forum.Channel{})),
+             public_channels: public_channels,
+             private_channels: private_channels,
+             can_create_more_channels: length(private_channels) < 5
+           )
+           |> put_flash(:info, "Channel '#{channel.name}' created!")
+           |> push_navigate(to: ~p"/forum/#{channel.id}")}
+        
+        {:error, %Ecto.Changeset{} = changeset} ->
+          error_msg = if changeset.errors[:owner_id] do
+            "You can only create up to 5 channels"
+          else
+            "Failed to create channel"
+          end
+          {:noreply, assign(socket, channel_form: to_form(changeset)) |> put_flash(:error, error_msg)}
+      end
     end
   end
 
@@ -1261,6 +1322,39 @@ end
     {:noreply, socket}
   end
 
+  def handle_channel_icon_progress(:channel_icon, entry, socket) do
+    if entry.done? do
+      consume_uploaded_entries(socket, :channel_icon, fn %{path: path}, _entry ->
+        user = socket.assigns.current_user
+        channel = socket.assigns.current_channel
+        
+        # Check permissions (owner or admin)
+        if Forum.can_manage_channel?(user, channel) do
+           context = "channel_icons/#{channel.id}"
+           case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
+             {:ok, url_path} ->
+               # Update channel
+               case Forum.update_channel(channel, %{icon_path: url_path}) do
+                 {:ok, _updated_channel} ->
+                   {:ok, url_path}
+                 {:error, _} ->
+                   {:error, "Failed to update channel"}
+               end
+             {:error, reason} -> {:error, reason}
+           end
+        else
+           {:error, "Permission denied"}
+        end
+      end)
+      
+      # Refresh channel to show new icon
+      channel = Forum.get_channel!(socket.assigns.current_channel.id)
+      {:noreply, assign(socket, current_channel: channel) |> put_flash(:info, "Channel icon updated")}
+    else
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info({:new_message, message}, socket) do
     if message.reply_to_id do
@@ -1345,6 +1439,20 @@ end
      |> stream_delete(:messages, %{id: message_id})}
   end
 
+  def handle_info({:channels_reordered, _ids}, socket) do
+    user = socket.assigns.current_user
+
+    # Recompute channels to reflect new order
+    all_channels = Forum.list_channels()
+    {public_channels, all_private_channels_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
+    visible_private_channels = Enum.filter(all_private_channels_unfiltered, fn ch -> can_access_channel?(ch, user) end)
+    
+    # Sort channels based on user preference
+    {public_channels, visible_private_channels} = sort_channels(public_channels, visible_private_channels, user)
+    
+    {:noreply, assign(socket, public_channels: public_channels, private_channels: visible_private_channels)}
+  end
+
   def handle_info({:channel_created, _channel}, socket) do
     user = socket.assigns.current_user
 
@@ -1352,10 +1460,11 @@ end
     all_channels = Forum.list_channels()
     {public_channels, all_private_channels_unfiltered} = Enum.split_with(all_channels, fn ch -> !ch.is_private end)
     visible_private_channels = Enum.filter(all_private_channels_unfiltered, fn ch -> can_access_channel?(ch, user) end)
-    public_channels = Enum.sort_by(public_channels, & &1.name)
-    all_private_channels = Enum.sort_by(visible_private_channels, & &1.name)
-
-    {:noreply, assign(socket, public_channels: public_channels, private_channels: all_private_channels)}
+    
+    # Sort channels based on user preference
+    {public_channels, visible_private_channels} = sort_channels(public_channels, visible_private_channels, user)
+    
+    {:noreply, assign(socket, public_channels: public_channels, private_channels: visible_private_channels)}
   end
   
   def handle_info({:channel_updated, updated_channel}, socket) do
@@ -1366,9 +1475,15 @@ end
       end)
     end
     
+    public_channels = update_channel_in_list.(socket.assigns.public_channels)
+    private_channels = update_channel_in_list.(socket.assigns.private_channels)
+    
+    # Re-sort
+    {public_channels, private_channels} = sort_channels(public_channels, private_channels, socket.assigns.current_user)
+    
     socket = socket
-    |> assign(public_channels: update_channel_in_list.(socket.assigns.public_channels))
-    |> assign(private_channels: update_channel_in_list.(socket.assigns.private_channels))
+    |> assign(public_channels: public_channels)
+    |> assign(private_channels: private_channels)
     
     # Update current channel if it's the one being edited
     socket = if socket.assigns.current_channel.id == updated_channel.id do
@@ -1468,7 +1583,7 @@ end
         # meta may have :metas list, take the most recent
         metas = Map.get(meta, :metas, [])
         latest = List.last(metas) || %{}
-        %{id: user_id, name: latest.name, online_at: latest.online_at}
+        Map.put(latest, :id, user_id)
       end)
 
     {:noreply, assign(socket, online_users: online_users)}
@@ -1496,8 +1611,8 @@ end
         <div 
           id="forum-sidebar" 
           phx-hook="SidebarResizer" 
-          class={"dark-glass border-r border-cyan-500/30 flex flex-col flex-none overflow-hidden z-40 " <> if(@sidebar_open, do: "absolute inset-y-0 left-0 md:relative", else: "hidden")}
-          style={if @sidebar_open, do: "width: 256px; min-width: 200px; max-width: 500px;", else: "width: 0px; display: none;"}
+          data-sidebar-open={@sidebar_open}
+          class="dark-glass border-r border-cyan-500/30 flex flex-col flex-none overflow-hidden z-40 relative"
         >
           <div class="flex-1 overflow-y-auto p-4 overflow-x-hidden sidebar-content">
             <%!-- Public Channels Section --%>
@@ -1511,11 +1626,15 @@ end
                     </button>
                   </div>
                 </div>
-              <ul class="space-y-0.5">
+              <ul class="space-y-0.5" id="public-channels-list" phx-hook="Sortable" data-group="public">
                 <%= for channel <- @public_channels do %>
-                  <li>
+                  <li draggable="true" data-id={channel.id} class="cursor-move">
                     <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"flex items-center px-2 py-1.5 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors #{active_channel_class(channel, @current_channel)}"}>
-                      <span class="mr-1">#</span>
+                      <%= if channel.icon_path do %>
+                        <img src={channel.icon_path} class="w-5 h-5 rounded-full object-cover mr-2 flex-shrink-0" />
+                      <% else %>
+                        <span class="mr-2 text-gray-500">#</span>
+                      <% end %>
                       <span class="truncate"><%= channel.name %></span>
                     </a>
                   </li>
@@ -1530,13 +1649,17 @@ end
                 <%!-- leave a small spacer to visually align --%>
                 <div class="w-24"></div>
               </div>
-              <ul class="space-y-0.5">
+              <ul class="space-y-0.5" id="private-channels-list" phx-hook="Sortable" data-group="private">
                 <%= for channel <- @private_channels do %>
-                  <li>
+                  <li draggable="true" data-id={channel.id} class="cursor-move">
                     <a href="#" phx-click="switch_channel" phx-value-channel_id={channel.id} class={"flex items-center px-2 py-1.5 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors #{active_channel_class(channel, @current_channel)}"}>
-                      <svg class="w-3 h-3 mr-1.5 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                      </svg>
+                      <%= if channel.icon_path do %>
+                        <img src={channel.icon_path} class="w-5 h-5 rounded-full object-cover mr-2 flex-shrink-0" />
+                      <% else %>
+                        <svg class="w-3 h-3 mr-2 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                      <% end %>
                       <span class="truncate"><%= channel.name %></span>
                     </a>
                   </li>
@@ -1545,17 +1668,51 @@ end
             </div>
           </div>
           <!-- Handle -->
-          <div class="resize-handle absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-blue-500/50 transition-colors z-20"></div>
+          <div class="resize-handle absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-blue-500/50 transition-colors z-20 flex items-center justify-center">
+            <div class="w-1 h-8 bg-gray-400/50 rounded-full"></div>
+          </div>
         </div>
+        
+        <%!-- Collapsed sidebar indicator/handle --%>
+        <div 
+          id="sidebar-collapsed-handle"
+          phx-update="ignore"
+          class="hidden w-1 h-full bg-gray-600/30 hover:bg-blue-500/50 cursor-pointer flex-shrink-0 transition-colors"
+          title="Click to expand sidebar"
+        ></div>
 
         <%!-- Main chat area with glass theme --%>
         <div class="flex-1 flex flex-col">
           <%!-- Channel header with glass theme --%>
-          <div class="p-2 border-b border-cyan-500/30 flex items-center justify-between dark-glass shadow-sm h-14">
+          <div class="p-2 border-b border-cyan-500/30 flex items-center justify-between dark-glass shadow-sm h-14 relative z-30">
             <div class="flex items-center gap-3 flex-1 min-w-0">
-              <button phx-click="toggle_sidebar" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-              </button>
+              <form phx-change="validate_channel_icon" phx-drop-target={@uploads.channel_icon.ref} class="flex items-center relative group/icon-upload">
+                <.live_file_input upload={@uploads.channel_icon} class="hidden" id="channel-icon-input" />
+                
+                <%= if @current_channel.icon_path do %>
+                  <div class="relative">
+                    <button type="button" phx-click="toggle_sidebar" class="relative" title="Toggle Sidebar (Drag & Drop to change icon)">
+                       <img src={@current_channel.icon_path} class="w-10 h-10 rounded-full object-cover" />
+                    </button>
+                    <%= if Forum.can_manage_channel?(@current_user, @current_channel) do %>
+                      <button type="button" phx-click="remove_channel_icon" class="absolute -top-1 -right-1 w-5 h-5 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover/icon-upload:opacity-100 transition-opacity" title="Remove icon">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      </button>
+                    <% end %>
+                  </div>
+                <% else %>
+                  <%= if Forum.can_manage_channel?(@current_user, @current_channel) do %>
+                    <button type="button" onclick="this.parentElement.querySelector('input[type=file]').click()" class="cursor-pointer w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center border border-gray-600 hover:border-blue-500 transition-colors text-gray-400 hover:text-blue-400" title="Click or Drag & Drop to Upload Channel Icon">
+                       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    </button>
+                  <% else %>
+                    <button type="button" phx-click="toggle_sidebar" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center border border-gray-600 text-gray-400" title="Toggle Sidebar">
+                      <span class="text-lg font-bold">#</span>
+                    </button>
+                  <% end %>
+                <% end %>
+              </form>
+
               <div class="min-w-0">
                 <h1 class="text-lg font-bold text-gray-800 dark:text-gray-200 truncate flex items-center gap-2">
                   #<%= @current_channel.name %>
@@ -1575,10 +1732,46 @@ end
                 </div>
                 <div class="flex items-center -space-x-1">
                   <%= for user <- Enum.take(assigns[:online_users] || [], 5) do %>
-                    <div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 border border-white text-[10px] flex items-center justify-center text-gray-800 dark:text-gray-200" title={user.name}><%= String.first(user.name || "?") %></div>
+                    <div class="relative group/avatar z-0 hover:z-10">
+                      <%= avatar_tag(user, size_class: "w-6 h-6 cursor-pointer transition-transform hover:scale-110") %>
+                      
+                      <!-- User Hover Card -->
+                      <div class="absolute right-0 top-full mt-2 w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 opacity-0 invisible group-hover/avatar:opacity-100 group-hover/avatar:visible transition-all duration-200 p-4 pointer-events-none group-hover/avatar:pointer-events-auto text-left">
+                        <div class="flex items-start space-x-4 mb-3">
+                          <%= avatar_tag(user, size_class: "w-20 h-20") %>
+                          <div class="flex-1 min-w-0">
+                            <div class="font-bold text-white text-lg truncate"><%= Map.get(user, :name) || Map.get(user, :email) || "Unknown" %></div>
+                            <%= if Map.get(user, :inserted_at) do %>
+                              <div class="text-xs text-gray-400">Joined <%= Calendar.strftime(user.inserted_at, "%b %Y") %></div>
+                            <% end %>
+                            <%= if Map.get(user, :role) do %>
+                              <div class={[
+                                "mt-1 inline-block px-2 py-0.5 rounded text-xs font-bold border",
+                                case user.role do
+                                  "admin" -> "bg-red-900 text-red-200 border-red-700"
+                                  "gm" -> "bg-purple-900 text-purple-200 border-purple-700"
+                                  "editor" -> "bg-blue-900 text-blue-200 border-blue-700"
+                                  "moderator" -> "bg-green-900 text-green-200 border-green-700"
+                                  "member" -> "bg-gray-700 text-gray-200 border-gray-600"
+                                  _ -> "bg-gray-700 text-gray-300 border-gray-600"
+                                end
+                              ]}>
+                                <%= String.upcase(user.role) %>
+                              </div>
+                            <% end %>
+                          </div>
+                        </div>
+                        
+                        <%= if Map.get(user, :bio) do %>
+                          <div class="text-sm text-gray-300 border-t border-gray-700 pt-2 break-words">
+                            <%= user.bio %>
+                          </div>
+                        <% end %>
+                      </div>
+                    </div>
                   <% end %>
                   <%= if Enum.count(assigns[:online_users] || []) > 5 do %>
-                    <div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 border border-white text-[10px] flex items-center justify-center text-gray-800 dark:text-gray-200">+<%= Enum.count(assigns[:online_users] || []) - 5 %></div>
+                    <div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 border border-white text-[10px] flex items-center justify-center text-gray-800 dark:text-gray-200 z-0 relative">+<%= Enum.count(assigns[:online_users] || []) - 5 %></div>
                   <% end %>
                 </div>
               </div>
@@ -1594,18 +1787,21 @@ end
                 </button>
               <% end %>
               
-              <%!-- Members and Delete buttons --%>
-              <%!-- Only show members management for private channels or user-created channels. Public system channels shouldn't expose members UI. --%>
-              <%= if @current_user && String.downcase(@current_channel.name) != "general" && (
-                    Map.get(@current_user, :is_admin, false) || @current_user.role == "admin" ||
-                    ( @current_channel.is_private && ((Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id) || (Map.has_key?(@current_channel, :created_by_id) && @current_channel.created_by_id == @current_user.id)) )
-                  ) do %>
-                <button phx-click="open_members_modal" phx-value-channel_id={@current_channel.id} class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors flex items-center gap-1.5" title="Manage Members">
+              <%!-- Members button - visible to all channel members/moderators --%>
+              <%= if @current_user && @current_channel.is_private do %>
+                <button phx-click="open_members_modal" phx-value-channel_id={@current_channel.id} class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors flex items-center gap-1.5" title="View Members">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
                   </svg>
                   Members
                 </button>
+              <% end %>
+              
+              <%!-- Delete button - only for admins and channel owners --%>
+              <%= if @current_user && String.downcase(@current_channel.name) != "general" && (
+                    Map.get(@current_user, :is_admin, false) || @current_user.role == "admin" ||
+                    ( @current_channel.is_private && ((Map.has_key?(@current_channel, :owner_id) && @current_channel.owner_id == @current_user.id) || (Map.has_key?(@current_channel, :created_by_id) && @current_channel.created_by_id == @current_user.id)) )
+                  ) do %>
                 <button 
                   phx-click="show_delete_channel_confirm" 
                   class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors flex items-center gap-1.5"
@@ -1908,14 +2104,20 @@ end
           </div>
 
           <div class="space-y-3">
-            <div class="grid grid-cols-3 gap-4 font-medium text-sm text-gray-500 dark:text-gray-300 border-b pb-2">
+            <% can_manage = Forum.can_manage_channel?(@current_user, @editing_channel) %>
+            <% can_moderate = Forum.can_moderate_channel?(@current_user, @editing_channel) %>
+            <% show_actions = can_manage || can_moderate %>
+            
+            <div class={"grid gap-4 font-medium text-sm text-gray-500 dark:text-gray-300 border-b pb-2 " <> if(show_actions, do: "grid-cols-3", else: "grid-cols-2")}>
               <div>Member</div>
               <div>Role</div>
-              <div class="text-right">Actions</div>
+              <%= if show_actions do %>
+                <div class="text-right">Actions</div>
+              <% end %>
             </div>
 
             <%= for member <- (@channel_members || []) do %>
-              <div class="grid grid-cols-3 gap-4 items-center py-2 border-b">
+              <div class={"grid gap-4 items-center py-2 border-b " <> if(show_actions, do: "grid-cols-3", else: "grid-cols-2")}>
                 <div class="flex items-center gap-3">
                   <%= if member.user do %>
                     <%= avatar_tag(member.user, size_class: "w-8 h-8") %>
@@ -1946,11 +2148,11 @@ end
                     <% else %>
                       <%= if is_nil(member.id) and member.role == "owner" do %>
                         <div class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Owner</div>
-                                           <% else %>
+                      <% else %>
                         <%= if member.user_id == @current_user.id do %>
                           <div class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200"><%= String.capitalize(member.role) %></div>
                         <% else %>
-                          <%= if Forum.can_manage_channel?(@current_user, @editing_channel) do %>
+                          <%= if can_manage do %>
                             <form phx-change="change_member_role" phx-submit="noop" class="inline-block">
                               <input type="hidden" name="member_id" value={member.id} />
                               <select name="new_role" class="p-1 rounded bg-gray-100 dark:bg-gray-700 text-sm border">
@@ -1967,33 +2169,35 @@ end
                   <% end %>
                 </div>
 
-                <div class="text-right">
-                  <div class="inline-flex gap-2">
-                    <%= if member.role == "invited" do %>
-                      <button phx-click="revoke_invite" phx-value-invite_id={Map.get(member, :_invite_id)} class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs">Revoke Invite</button>
-                    <% else %>
-                      <%!-- Only show member-management actions for real ChannelMember records (member.id present). Owner pseudo entries don't get manage buttons here. --%>
-                      <%= if member.id && member.user_id != @current_user.id do %>
-                        <%!-- Moderators cannot ban/kick the Owner --%>
-                        <%= if Forum.can_moderate_channel?(@current_user, @editing_channel) && member.role != "owner" && member.user_id != @editing_channel.owner_id do %>
-                          <%= if member.is_banned do %>
-                            <button phx-click="unban_member" phx-value-member_id={member.id} class="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs">Unban</button>
-                          <% else %>
-                            <button phx-click="ban_member" phx-value-member_id={member.id} class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs">Ban</button>
+                <%= if show_actions do %>
+                  <div class="text-right">
+                    <div class="inline-flex gap-2">
+                      <%= if member.role == "invited" do %>
+                        <button phx-click="revoke_invite" phx-value-invite_id={Map.get(member, :_invite_id)} class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs">Revoke Invite</button>
+                      <% else %>
+                        <%!-- Only show member-management actions for real ChannelMember records (member.id present). Owner pseudo entries don't get manage buttons here. --%>
+                        <%= if member.id && member.user_id != @current_user.id do %>
+                          <%!-- Moderators cannot ban/kick the Owner --%>
+                          <%= if can_moderate && member.role != "owner" && member.user_id != @editing_channel.owner_id do %>
+                            <%= if member.is_banned do %>
+                              <button phx-click="unban_member" phx-value-member_id={member.id} class="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs">Unban</button>
+                            <% else %>
+                              <button phx-click="ban_member" phx-value-member_id={member.id} class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs">Ban</button>
+                            <% end %>
+                            <button phx-click="kick_member" phx-value-member_id={member.id} class="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-xs">Kick</button>
                           <% end %>
-                          <button phx-click="kick_member" phx-value-member_id={member.id} class="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-xs">Kick</button>
                         <% end %>
-                      <% end %>
 
-                      <%!-- Only show Make Owner button if member is not already the owner --%>
-                      <%= if member.role != "owner" && @editing_channel.owner_id != member.user_id && member.user_id != @current_user.id do %>
-                        <%= if Forum.can_manage_channel?(@current_user, @editing_channel) do %>
-                          <button phx-click="transfer_ownership" phx-value-new_owner_id={member.user_id} class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs">Make Owner</button>
+                        <%!-- Only show Make Owner button if member is not already the owner --%>
+                        <%= if member.role != "owner" && @editing_channel.owner_id != member.user_id && member.user_id != @current_user.id do %>
+                          <%= if can_manage do %>
+                            <button phx-click="transfer_ownership" phx-value-new_owner_id={member.user_id} class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs">Make Owner</button>
+                          <% end %>
                         <% end %>
                       <% end %>
-                    <% end %>
+                    </div>
                   </div>
-                </div>
+                <% end %>
               </div>
             <% end %>
           </div>
@@ -2224,8 +2428,18 @@ end
               <div class="flex-1 min-w-0">
                 <div class="font-bold text-white text-lg truncate"><%= @message.user.name || @message.user.email %></div>
                 <div class="text-xs text-gray-400">Joined <%= Calendar.strftime(@message.user.inserted_at, "%b %Y") %></div>
-                <%= if @message.user.role in ["admin", "gm", "editor"] do %>
-                  <div class="mt-1 inline-block px-2 py-0.5 rounded text-xs font-bold bg-blue-900 text-blue-200 border border-blue-700">
+                <%= if @message.user.role do %>
+                  <div class={[
+                    "mt-1 inline-block px-2 py-0.5 rounded text-xs font-bold border",
+                    case @message.user.role do
+                      "admin" -> "bg-red-900 text-red-200 border-red-700"
+                      "gm" -> "bg-purple-900 text-purple-200 border-purple-700"
+                      "editor" -> "bg-blue-900 text-blue-200 border-blue-700"
+                      "moderator" -> "bg-green-900 text-green-200 border-green-700"
+                      "member" -> "bg-gray-700 text-gray-200 border-gray-600"
+                      _ -> "bg-gray-700 text-gray-300 border-gray-600"
+                    end
+                  ]}>
                     <%= String.upcase(@message.user.role) %>
                   </div>
                 <% end %>
@@ -2233,14 +2447,10 @@ end
             </div>
             
             <%= if Map.get(@message.user, :bio) do %>
-              <div class="text-sm text-gray-300 mb-3 border-t border-gray-700 pt-2 break-words">
+              <div class="text-sm text-gray-300 border-t border-gray-700 pt-2 break-words">
                 <%= @message.user.bio %>
               </div>
             <% end %>
-            
-            <div class="flex justify-between text-xs text-gray-500 border-t border-gray-700 pt-2">
-              <span>Messages: <%= if Ecto.assoc_loaded?(@message.user.chat_messages), do: length(@message.user.chat_messages), else: "..." %></span>
-            </div>
           </div>
         </div>
         <div class="flex-1">
@@ -2321,9 +2531,10 @@ end
           <%= if Ecto.assoc_loaded?(@message.attachments) && length(@message.attachments) > 0 do %>
             <div class="mt-2 flex flex-wrap gap-2">
               <%= for attachment <- @message.attachments do %>
+                <% is_video = String.starts_with?(Map.get(attachment, :content_type) || Map.get(attachment, :file_type) || "", "video") %>
                 <div class="relative group/item">
-                  <div class="h-48 w-auto flex items-center justify-center rounded-lg overflow-hidden border border-transparent hover:border-gray-200 dark:hover:border-gray-700 bg-transparent">
-                    <PhoenixAppWeb.Components.MediaPreview.media_preview attachment={attachment} class="max-h-48 max-w-xs object-contain" show_filename={false} />
+                  <div class={if(is_video, do: "w-auto flex items-center justify-center rounded-lg overflow-hidden border border-transparent hover:border-gray-200 dark:hover:border-gray-700 bg-transparent", else: "h-48 w-auto flex items-center justify-center rounded-lg overflow-hidden border border-transparent hover:border-gray-200 dark:hover:border-gray-700 bg-transparent")}>
+                    <PhoenixAppWeb.Components.MediaPreview.media_preview attachment={attachment} class={if(is_video, do: "max-w-full", else: "max-h-48 max-w-xs object-contain")} show_filename={false} />
                   </div>
                   
                   <%= if @current_user && (@current_user.id == attachment.user_id || @current_user.id == @message.user_id || @current_user.role in ["admin", "gm", "editor"] || Map.get(@current_user, :is_admin, false)) do %>
@@ -2438,6 +2649,20 @@ end
     """
   end
 
+  defp refresh_message(socket, nil), do: socket
+  defp refresh_message(socket, message_id) do
+    case Forum.get_message(message_id) do
+      nil -> socket
+      message -> 
+        # Always refresh the root message to ensure nested replies are updated
+        root_id = get_root_message_id(message)
+        case Forum.get_message(root_id) do
+          nil -> socket
+          root -> stream_insert(socket, :messages, root)
+        end
+    end
+  end
+
   defp get_root_message_id(%{reply_to_id: nil, id: id}), do: id
   defp get_root_message_id(%{reply_to_id: parent_id}) do
     case Forum.get_message(parent_id) do
@@ -2445,6 +2670,24 @@ end
       parent -> get_root_message_id(parent)
     end
   end
+  defp sort_channels(public_channels, private_channels, user) do
+    order = user.channel_order || []
+    
+    # Helper to get sort index
+    get_sort_index = fn channel ->
+      if String.downcase(channel.name) == "general" do
+        -1 # Always first
+      else
+        Enum.find_index(order, &(&1 == channel.id)) || 9999 # Default to end if not in order
+      end
+    end
+    
+    sorted_public = Enum.sort_by(public_channels, get_sort_index)
+    sorted_private = Enum.sort_by(private_channels, get_sort_index)
+    
+    {sorted_public, sorted_private}
+  end
+
   defp can_delete_channel?(user, channel) do
     # Protect General channel
     if String.downcase(channel.name) == "general" do

@@ -47,9 +47,13 @@ const QuillEditorHook = {
       }
     });
 
-    // Set initial content from hidden input
-    const initialContent = this.el.querySelector('input[type="hidden"]')?.value;
-    if (initialContent) {
+    // Get the hidden input by ID (it's a sibling of the Quill container)
+    const editorId = this.el.id;
+    const hiddenInput = document.getElementById(`${editorId}-input`) as HTMLInputElement;
+    
+    // Set initial content from hidden input or data attribute
+    const initialContent = hiddenInput?.value || this.el.dataset.initialContent;
+    if (initialContent && initialContent.trim()) {
       try {
         const delta = JSON.parse(initialContent);
         this.quill.setContents(delta);
@@ -61,20 +65,24 @@ const QuillEditorHook = {
 
     // Handle text changes
     let autosaveTimeout: NodeJS.Timeout;
-    this.quill.on('text-change', () => {
-      // Get content as Delta (Quill's native format)
-      const delta = this.quill.getContents();
-      const html = this.quill.root.innerHTML;
+    this.quill.on('text-change', (_delta: any, _oldDelta: any, source: string) => {
+      // Only handle user-initiated changes
+      if (source !== 'user') return;
       
-      // Update hidden input
-      const hiddenInput = this.el.querySelector('input[type="hidden"]');
+      // Get content as HTML (more portable for forms)
+      const html = this.quill.root.innerHTML;
+      const contents = this.quill.getContents();
+      
+      // Update hidden input with HTML content
       if (hiddenInput) {
-        hiddenInput.value = JSON.stringify(delta);
+        hiddenInput.value = html;
+        // Dispatch input event for LiveView form validation
+        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
       // Send change event to LiveView
       this.pushEvent('editor-change', {
-        delta: delta,
+        delta: contents,
         html: html,
         text: this.quill.getText()
       });
@@ -84,7 +92,7 @@ const QuillEditorHook = {
         clearTimeout(autosaveTimeout);
         autosaveTimeout = setTimeout(() => {
           this.pushEvent('editor-autosave', {
-            delta: delta,
+            delta: contents,
             html: html
           });
         }, config.autosaveDelay);

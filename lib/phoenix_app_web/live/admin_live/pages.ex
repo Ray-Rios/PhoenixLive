@@ -2,6 +2,7 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
   alias PhoenixApp.Content.Page
+  alias PhoenixAppWeb.Components.AdminSidebar
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
@@ -83,9 +84,8 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
 
   def render(assigns) do
     ~H"""
-    <div data-responsive-content class="min-h-screen pointer-events-none" style="padding-top: 30px; padding-bottom: 48px;">
-      <div class="w-full max-w-[90%] mx-auto px-4 py-8 mt-16 pointer-events-auto">
-        <div class="max-w-6xl mx-auto">
+    <AdminSidebar.admin_layout current_path="/admin/pages">
+      <div class="max-w-6xl mx-auto">
           <div class="auth-glass-panel p-8 rounded-xl">
             <div class="flex justify-between items-center mb-8">
               <h1 class="text-3xl font-bold text-white">Pages</h1>
@@ -113,9 +113,18 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
                 <!-- Content Section -->
                 <div class="glass-dark p-6 rounded-lg space-y-4">
                   <h3 class="text-lg font-semibold text-white mb-4">Content</h3>
-                  <div>
-                    <.input field={@form[:content]} type="textarea" label="Page Content" placeholder="Write your page content... (Markdown supported)" rows="12" autocomplete="off" />
+                  <div id="page-content-editor-wrapper" class="quill-editor-wrapper" phx-update="ignore">
+                    <div id="page-content-editor" 
+                         phx-hook="QuillEditor" 
+                         data-placeholder="Write your page content..."
+                         data-initial-content={Phoenix.HTML.Form.input_value(@form, :content)}
+                         class="quill-editor bg-gray-800 text-white rounded-lg min-h-[400px]">
+                    </div>
                   </div>
+                  <input type="hidden" name={@form[:content].name} id="page-content-editor-input" value={Phoenix.HTML.Form.input_value(@form, :content)} />
+                  <%= for {msg, _} <- @form[:content].errors do %>
+                    <.error><%= msg %></.error>
+                  <% end %>
                 </div>
 
                 <!-- Layout & Design Section -->
@@ -233,9 +242,8 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
               <% end %>
             </div>
           </div>
-        </div>
       </div>
-    </div>
+    </AdminSidebar.admin_layout>
     """
   end
 end

@@ -5,7 +5,7 @@ defmodule PhoenixApp.Content do
 
   import Ecto.Query, warn: false
   alias PhoenixApp.Repo
-  alias PhoenixApp.Content.{Post, Page}
+  alias PhoenixApp.Content.{Post, Page, UserMedia}
 
   # Posts
   def list_posts do
@@ -188,6 +188,10 @@ defmodule PhoenixApp.Content do
 
   # Admin functions
 
+  def count_pages do
+    Repo.aggregate(Page, :count, :id)
+  end
+
   def count_posts_by_status(status) when status in [:published, :draft] do
     is_published = case status do
       :published -> true
@@ -208,5 +212,11 @@ defmodule PhoenixApp.Content do
     end
     from(c in Comment, where: c.is_approved == ^is_approved)
     |> Repo.aggregate(:count)
+  end
+
+  # User Media
+  def list_user_media(user) do
+    from(m in UserMedia, where: m.user_id == ^user.id, order_by: [desc: m.inserted_at])
+    |> Repo.all()
   end
 end

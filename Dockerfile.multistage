@@ -119,7 +119,7 @@ COPY priv/static/robots.txt ./priv/static/
 COPY priv/static/sitemap.xml ./priv/static/
 
 # Compile application (ignore unavailable optional dependencies)
-RUN mix do deps.loadpaths --no-deps-check, compile
+RUN mix deps.loadpaths --no-deps-check + compile
 
 # Digest assets for production
 RUN mix phx.digest

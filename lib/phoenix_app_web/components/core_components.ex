@@ -104,7 +104,7 @@ defmodule PhoenixAppWeb.CoreComponents do
       data-auto-dismiss="3000"
       data-key={@kind}
       role="alert"
-      style={"position: fixed; top: #{@top_position}px; right: 20px; z-index: 99999;"}
+      style={"position: fixed; top: #{@top_position}px; right: 8px; z-index: 99999;"}
       class={[
         "flash-notice w-80 sm:w-96 rounded-lg p-3 ring-1 cursor-pointer shadow-2xl backdrop-blur-sm",
         "hidden transition-all duration-300 ease-out pointer-events-auto",

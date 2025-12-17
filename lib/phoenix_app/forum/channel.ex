@@ -19,6 +19,7 @@ defmodule PhoenixApp.Forum.Channel do
     field :max_participants, :integer, default: 50
     field :invite_code, :string
     field :settings, :map, default: %{}
+    field :icon_path, :string
 
     # Legacy field - keeping for backwards compatibility
     field :created_by_id, :binary_id
@@ -35,7 +36,7 @@ defmodule PhoenixApp.Forum.Channel do
 
   def changeset(channel, attrs) do
     channel
-    |> cast(attrs, [:name, :description, :topic, :is_private, :position, :channel_type, :created_by_id, :owner_id, :is_public, :is_user_created, :max_participants, :invite_code, :settings])
+    |> cast(attrs, [:name, :description, :topic, :is_private, :position, :channel_type, :created_by_id, :owner_id, :is_public, :is_user_created, :max_participants, :invite_code, :settings, :icon_path])
     |> validate_required([:name])
     |> validate_length(:name, min: 1, max: 100)
     |> validate_inclusion(:channel_type, ["text", "voice", "video", "stream"])

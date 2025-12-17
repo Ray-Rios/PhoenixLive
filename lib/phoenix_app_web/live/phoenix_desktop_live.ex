@@ -200,7 +200,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       
       case PhoenixApp.Accounts.update_audio_preferences(socket.assigns.current_user, %{notification_sound_enabled: new_value}) do
         {:ok, updated_user} ->
-          {:noreply, assign(socket, current_user: updated_user)}
+          {:noreply, 
+           socket
+           |> assign(current_user: updated_user)
+           |> push_event("notification_sound_toggled", %{enabled: new_value})}
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "Failed to update audio preferences")}
       end
@@ -211,7 +214,15 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
 
   def handle_event("update_volume", %{"volume" => volume_str}, socket) do
     if socket.assigns.current_user do
-      volume = String.to_float(volume_str) / 100.0
+      # Handle both integer strings ("50") and float strings ("0.5")
+      volume = case Float.parse(volume_str) do
+        {val, _} -> val / 100.0
+        :error -> 
+          case Integer.parse(volume_str) do
+            {val, _} -> val / 100.0
+            :error -> 0.5
+          end
+      end
       
       case PhoenixApp.Accounts.update_audio_preferences(socket.assigns.current_user, %{master_volume: volume}) do
         {:ok, updated_user} ->
@@ -573,6 +584,19 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       {:noreply, assign(socket, :windows, windows)}
     else
       _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("open_file", %{"url" => url}, socket) when not is_nil(url) and url != "" do
+    {:noreply, push_event(socket, "open_url", %{url: url})}
+  end
+
+  def handle_event("open_file", %{"path" => path}, socket) do
+    url = resolve_virtual_path_to_url(path, socket.assigns.current_user)
+    if url do
+      {:noreply, push_event(socket, "open_url", %{url: url})}
+    else
+      {:noreply, put_flash(socket, :error, "Cannot open file")}
     end
   end
 
@@ -1038,14 +1062,30 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   end
 
   defp get_user_drive_contents(path, user) do
-    real_path = get_real_path(path, user)
-    
-    # Ensure directory exists
-    if !File.exists?(real_path) do
-      File.mkdir_p!(real_path)
+    if path == "user://" do
+      PhoenixApp.Files.list_all_user_content(user)
+      |> Enum.map(fn file ->
+        %{
+          id: file.id,
+          name: file.filename,
+          type: :file,
+          icon: get_file_icon(file.filename, :file),
+          path: "user://#{file.filename}",
+          size: format_size(file.size),
+          modified: file.inserted_at,
+          url: file.url
+        }
+      end)
+    else
+      real_path = get_real_path(path, user)
+      
+      # Ensure directory exists
+      if !File.exists?(real_path) do
+        File.mkdir_p!(real_path)
+      end
+      
+      list_contents(real_path, path)
     end
-    
-    list_contents(real_path, path)
   end
 
   defp get_root_drive_contents(path, user) do
@@ -1054,6 +1094,24 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       list_contents(real_path, path)
     else
       []
+    end
+  end
+
+  defp resolve_virtual_path_to_url(path, user) do
+    cond do
+      String.starts_with?(path, "user://") ->
+        filename = String.replace_prefix(path, "user://", "")
+        "/uploads/users/#{user.id}/#{filename}"
+        
+      String.starts_with?(path, "public://") ->
+        filename = String.replace_prefix(path, "public://", "")
+        "/uploads/public/#{filename}"
+        
+      String.starts_with?(path, "root://") ->
+        filename = String.replace_prefix(path, "root://", "")
+        "/uploads/#{filename}"
+        
+      true -> nil
     end
   end
 

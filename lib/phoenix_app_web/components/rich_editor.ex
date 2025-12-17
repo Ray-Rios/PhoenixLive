@@ -27,25 +27,37 @@ defmodule PhoenixAppWeb.Components.RichEditor do
   
   * `:id` (required) - Unique identifier for the editor instance
   * `:value` - Initial content (can be HTML string or Quill Delta JSON)
+  * `:content` - Alias for value (for convenience)
   * `:field` - Phoenix.HTML.Form field (alternative to value)
   * `:placeholder` - Placeholder text
   * `:on_change` - Event name to fire when content changes
   * `:on_autosave` - Event name to fire for autosave
   * `:autosave_delay` - Delay in milliseconds before autosave (default: 30000)
   * `:readonly` - Whether editor is read-only (default: false)
+  * `:min_height` - Minimum height of the editor (default: "400px")
   * `:class` - Additional CSS classes
   """
   attr :id, :string, required: true
   attr :value, :string, default: ""
+  attr :content, :string, default: nil
   attr :field, Phoenix.HTML.FormField, default: nil
   attr :placeholder, :string, default: "Start writing..."
   attr :on_change, :string, default: nil
   attr :on_autosave, :string, default: nil
   attr :autosave_delay, :integer, default: 30000
   attr :readonly, :boolean, default: false
+  attr :min_height, :string, default: "400px"
   attr :class, :string, default: ""
 
   def rich_editor(assigns) do
+    # Support both :value and :content attribute names
+    assigns = 
+      if assigns.content do
+        assign(assigns, :value, assigns.content)
+      else
+        assigns
+      end
+    
     # If field is provided, use it; otherwise use value
     assigns = 
       if assigns.field do
@@ -80,7 +92,9 @@ defmodule PhoenixAppWeb.Components.RichEditor do
         data-placeholder={@placeholder}
         data-autosave-delay={@autosave_delay}
         data-readonly={to_string(@readonly)}
-        class="quill-editor bg-white rounded-lg border border-gray-300 min-h-[400px]"
+        data-initial-content={@value}
+        style={"min-height: #{@min_height};"}
+        class="quill-editor bg-gray-800 text-white rounded-lg border border-gray-700"
       >
         <!-- Quill will inject its toolbar and editor here -->
       </div>
@@ -140,5 +154,24 @@ defmodule PhoenixAppWeb.Components.RichEditor do
       }
     </style>
     """
+  end
+  
+  @doc """
+  Alias for rich_editor - renders a Quill.js WYSIWYG editor.
+  """
+  attr :id, :string, required: true
+  attr :value, :string, default: ""
+  attr :content, :string, default: nil
+  attr :field, Phoenix.HTML.FormField, default: nil
+  attr :placeholder, :string, default: "Start writing..."
+  attr :on_change, :string, default: nil
+  attr :on_autosave, :string, default: nil
+  attr :autosave_delay, :integer, default: 30000
+  attr :readonly, :boolean, default: false
+  attr :min_height, :string, default: "400px"
+  attr :class, :string, default: ""
+  
+  def quill_editor(assigns) do
+    rich_editor(assigns)
   end
 end

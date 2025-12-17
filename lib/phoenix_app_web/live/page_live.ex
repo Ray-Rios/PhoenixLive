@@ -1,8 +1,11 @@
 defmodule PhoenixAppWeb.PageLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
+  alias PhoenixAppWeb.Components.RichEditor
 
   on_mount {PhoenixAppWeb.UserAuth, :default}
+
+  @allowed_roles ["admin", "gm", "editor"]
 
   def mount(%{"slug" => slug}, _session, socket) do
     page = Content.get_page_by_slug(slug)
@@ -17,7 +20,11 @@ defmodule PhoenixAppWeb.PageLive do
         if page.is_published or (socket.assigns.current_user && socket.assigns.current_user.is_admin) do
           {:ok, assign(socket,
             page: page,
-            page_title: page.title
+            page_title: page.title,
+            editing: false,
+            saving: false,
+            last_saved: nil,
+            pending_content: nil
           )}
         else
           {:ok, socket
@@ -25,6 +32,97 @@ defmodule PhoenixAppWeb.PageLive do
            |> push_navigate(to: "/")}
         end
     end
+  end
+
+  # Check if user can edit content
+  defp can_edit?(%{current_user: nil}), do: false
+  defp can_edit?(%{current_user: user}) do
+    user.role in @allowed_roles or Map.get(user, :is_admin, false)
+  end
+  defp can_edit?(_), do: false
+
+  # Toggle edit mode
+  def handle_event("toggle_edit", _params, socket) do
+    if can_edit?(socket.assigns) do
+      {:noreply, assign(socket, editing: !socket.assigns.editing)}
+    else
+      {:noreply, put_flash(socket, :error, "You don't have permission to edit.")}
+    end
+  end
+
+  # Handle inline title edit
+  def handle_event("update_title", %{"value" => title}, socket) do
+    if can_edit?(socket.assigns) do
+      page = socket.assigns.page
+      case Content.update_page(page, %{title: title}) do
+        {:ok, updated_page} ->
+          {:noreply, assign(socket, page: updated_page, last_saved: DateTime.utc_now())}
+        {:error, _} ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Handle Quill editor content changes (real-time save)
+  def handle_event("editor-change", %{"html" => html}, socket) do
+    if can_edit?(socket.assigns) and socket.assigns.editing do
+      {:noreply, assign(socket, pending_content: html)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Handle auto-save from editor
+  def handle_event("editor-autosave", %{"html" => html}, socket) do
+    if can_edit?(socket.assigns) and socket.assigns.editing do
+      socket = assign(socket, saving: true)
+      page = socket.assigns.page
+      
+      case Content.update_page(page, %{content: html}) do
+        {:ok, updated_page} ->
+          {:noreply, 
+           socket
+           |> assign(page: updated_page, saving: false, last_saved: DateTime.utc_now())
+           |> push_event("content-saved", %{})}
+        {:error, _} ->
+          {:noreply, assign(socket, saving: false)}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Manual save
+  def handle_event("save_content", _params, socket) do
+    if can_edit?(socket.assigns) and socket.assigns.editing do
+      content = socket.assigns[:pending_content] || socket.assigns.page.content
+      socket = assign(socket, saving: true)
+      page = socket.assigns.page
+      
+      case Content.update_page(page, %{content: content}) do
+        {:ok, updated_page} ->
+          {:noreply, 
+           socket
+           |> assign(page: updated_page, saving: false, last_saved: DateTime.utc_now(), editing: false)
+           |> put_flash(:info, "Content saved!")}
+        {:error, _} ->
+          {:noreply, 
+           socket
+           |> assign(saving: false)
+           |> put_flash(:error, "Failed to save.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Cancel editing
+  def handle_event("cancel_edit", _params, socket) do
+    # Reload the page to discard any unsaved changes
+    page = Content.get_page!(socket.assigns.page.id)
+    {:noreply, assign(socket, editing: false, page: page, pending_content: nil)}
   end
 
   def render(assigns) do
@@ -59,8 +157,64 @@ defmodule PhoenixAppWeb.PageLive do
               </div>
             <% end %>
 
-            <!-- Title -->
-            <h1 class="text-4xl font-bold text-white mb-6"><%= @page.title %></h1>
+            <!-- Title with Edit Button -->
+            <div class="flex items-center justify-between mb-6">
+              <%= if @editing do %>
+                <input
+                  type="text"
+                  value={@page.title}
+                  phx-blur="update_title"
+                  phx-keyup="update_title"
+                  phx-key="Enter"
+                  class="text-4xl font-bold text-white bg-transparent border-b-2 border-blue-500 focus:outline-none focus:border-blue-400 w-full"
+                  placeholder="Page title..."
+                />
+              <% else %>
+                <h1 class="text-4xl font-bold text-white"><%= @page.title %></h1>
+              <% end %>
+              
+              <!-- Edit/Save/Cancel Buttons for Authorized Users -->
+              <%= if can_edit?(assigns) do %>
+                <%= if @editing do %>
+                  <div class="flex items-center gap-2 ml-4">
+                    <!-- Save Status Indicator -->
+                    <span :if={@saving} class="text-yellow-400 text-sm animate-pulse">Saving...</span>
+                    <span :if={@last_saved && !@saving} class="text-green-400 text-sm">
+                      Saved <%= Calendar.strftime(@last_saved, "%H:%M:%S") %>
+                    </span>
+                    
+                    <button
+                      type="button"
+                      phx-click="save_content"
+                      class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                      Save & Exit
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="cancel_edit"
+                      class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                <% else %>
+                  <button
+                    type="button"
+                    phx-click="toggle_edit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Edit Page
+                  </button>
+                <% end %>
+              <% end %>
+            </div>
             
             <!-- Excerpt or Meta Description -->
             <%= if @page.excerpt do %>
@@ -83,10 +237,21 @@ defmodule PhoenixAppWeb.PageLive do
 
             <hr class="border-gray-700 mb-8" />
             
-            <!-- Content -->
-            <div class="text-gray-200 leading-relaxed text-lg">
-              <%= PhoenixAppWeb.Markdown.render(@page.content) %>
-            </div>
+            <!-- Content: WYSIWYG Editor or Rendered View -->
+            <%= if @editing do %>
+              <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+                <RichEditor.quill_editor
+                  id={"page-editor-#{@page.id}"}
+                  content={@page.content}
+                  placeholder="Write your page content..."
+                  min_height="400px"
+                />
+              </div>
+            <% else %>
+              <div class="text-gray-200 leading-relaxed text-lg">
+                <%= PhoenixAppWeb.Markdown.render(@page.content) %>
+              </div>
+            <% end %>
           </article>
         </div>
       </div>

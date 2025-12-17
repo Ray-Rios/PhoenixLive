@@ -282,7 +282,7 @@ print_status "Namespaces ready"
 echo "🔨 Building production Docker image with BuildKit..."
 
 # Use multi-stage Dockerfile for faster builds
-docker build -f Dockerfile.multistage -t "phoenixapp:prod" --progress=plain --build-arg "MIX_ENV=prod" .
+docker build --no-cache -f Dockerfile.multistage -t "phoenixapp:prod" --progress=plain --build-arg "MIX_ENV=prod" .
 print_status "Production image built: phoenixapp:prod"
 
 # Deploy SSL infrastructure first

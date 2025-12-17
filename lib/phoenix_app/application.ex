@@ -31,6 +31,7 @@ defmodule PhoenixApp.Application do
       PhoenixApp.PresenceTracker,
       PhoenixApp.Accounts.RateLimit,
       PhoenixApp.RateLimiter,
+      PhoenixApp.NotFoundTracker,
       PhoenixAppWeb.Endpoint
     ] ++ redis_children()
 

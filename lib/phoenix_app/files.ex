@@ -14,6 +14,43 @@ defmodule PhoenixApp.Files do
     |> Repo.all()
   end
 
+  def list_all_user_content(user) do
+    files = list_user_files(user)
+    media = PhoenixApp.Content.list_user_media(user)
+    
+    # Normalize
+    normalized_files = Enum.map(files, fn f -> 
+      %{
+        id: f.id,
+        filename: f.filename,
+        original_filename: f.original_filename,
+        file_size: f.file_size,
+        content_type: f.content_type,
+        url: PhoenixApp.UserFileUpload.url({f.file, f}, :original),
+        inserted_at: f.inserted_at,
+        type: :file,
+        source: f
+      }
+    end)
+    
+    normalized_media = Enum.map(media, fn m -> 
+      %{
+        id: m.id,
+        filename: m.filename,
+        original_filename: m.original_filename,
+        file_size: m.file_size,
+        content_type: m.mime_type,
+        url: m.url,
+        inserted_at: m.inserted_at,
+        type: :media,
+        source: m
+      }
+    end)
+    
+    (normalized_files ++ normalized_media)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, Date})
+  end
+
   def get_user_file!(user, id) do
     from(f in UserFile, where: f.user_id == ^user.id and f.id == ^id)
     |> Repo.one!()
@@ -55,15 +92,34 @@ defmodule PhoenixApp.Files do
   end
 
   def get_file_stats(user) do
-    query = from f in UserFile, where: f.user_id == ^user.id
+    file_query = from f in UserFile, where: f.user_id == ^user.id
+    media_query = from m in PhoenixApp.Content.UserMedia, where: m.user_id == ^user.id
     
+    file_stats = %{
+      count: Repo.aggregate(file_query, :count) || 0,
+      size: Repo.aggregate(file_query, :sum, :file_size) || 0,
+      images: Repo.aggregate(from(f in file_query, where: like(f.content_type, "image/%")), :count) || 0,
+      videos: Repo.aggregate(from(f in file_query, where: like(f.content_type, "video/%")), :count) || 0,
+      audio: Repo.aggregate(from(f in file_query, where: like(f.content_type, "audio/%")), :count) || 0,
+      documents: Repo.aggregate(from(f in file_query, where: f.content_type in ["application/pdf", "application/msword", "text/plain"]), :count) || 0
+    }
+
+    media_stats = %{
+      count: Repo.aggregate(media_query, :count) || 0,
+      size: Repo.aggregate(media_query, :sum, :file_size) || 0,
+      images: Repo.aggregate(from(m in media_query, where: like(m.mime_type, "image/%")), :count) || 0,
+      videos: Repo.aggregate(from(m in media_query, where: like(m.mime_type, "video/%")), :count) || 0,
+      audio: Repo.aggregate(from(m in media_query, where: like(m.mime_type, "audio/%")), :count) || 0,
+      documents: Repo.aggregate(from(m in media_query, where: m.mime_type in ["application/pdf", "application/msword", "text/plain"]), :count) || 0
+    }
+
     %{
-      total_files: Repo.aggregate(query, :count),
-      total_size: Repo.aggregate(query, :sum, :file_size) || 0,
-      images: Repo.aggregate(from(f in query, where: like(f.content_type, "image/%")), :count),
-      videos: Repo.aggregate(from(f in query, where: like(f.content_type, "video/%")), :count),
-      audio: Repo.aggregate(from(f in query, where: like(f.content_type, "audio/%")), :count),
-      documents: Repo.aggregate(from(f in query, where: f.content_type in ["application/pdf", "application/msword", "text/plain"]), :count)
+      total_files: file_stats.count + media_stats.count,
+      total_size: file_stats.size + media_stats.size,
+      images: file_stats.images + media_stats.images,
+      videos: file_stats.videos + media_stats.videos,
+      audio: file_stats.audio + media_stats.audio,
+      documents: file_stats.documents + media_stats.documents
     }
   end
 
@@ -105,14 +161,29 @@ defmodule PhoenixApp.Files do
   end
 
   def get_user_data_usage(user_id) do
-    # Get total size from UserFile uploads
-    user_files_size = from(f in UserFile, where: f.user_id == ^user_id, select: sum(f.file_size)) |> Repo.one() || 0
+    # Get total size from UserFile uploads (convert Decimal to integer)
+    user_files_size = 
+      case from(f in UserFile, where: f.user_id == ^user_id, select: sum(f.file_size)) |> Repo.one() do
+        nil -> 0
+        %Decimal{} = decimal -> Decimal.to_integer(decimal)
+        size -> size
+      end
 
-    # Get total size from UserMedia uploads
-    user_media_size = from(m in PhoenixApp.Content.UserMedia, where: m.user_id == ^user_id, select: sum(m.file_size)) |> Repo.one() || 0
+    # Get total size from UserMedia uploads (convert Decimal to integer)
+    user_media_size = 
+      case from(m in PhoenixApp.Content.UserMedia, where: m.user_id == ^user_id, select: sum(m.file_size)) |> Repo.one() do
+        nil -> 0
+        %Decimal{} = decimal -> Decimal.to_integer(decimal)
+        size -> size
+      end
 
-    # Get total size from MessageAttachment uploads
-    message_attachments_size = from(m in MessageAttachment, where: m.user_id == ^user_id, select: sum(m.file_size)) |> Repo.one() || 0
+    # Get total size from MessageAttachment uploads (convert Decimal to integer)
+    message_attachments_size = 
+      case from(m in MessageAttachment, where: m.user_id == ^user_id, select: sum(m.file_size)) |> Repo.one() do
+        nil -> 0
+        %Decimal{} = decimal -> Decimal.to_integer(decimal)
+        size -> size
+      end
 
     # Get count of files
     user_files_count = from(f in UserFile, where: f.user_id == ^user_id, select: count()) |> Repo.one() || 0
@@ -211,10 +282,10 @@ defmodule PhoenixApp.Files do
   end
 
   # File type helpers
-  def is_image?(%UserFile{content_type: content_type}), do: String.starts_with?(content_type, "image/")
-  def is_video?(%UserFile{content_type: content_type}), do: String.starts_with?(content_type, "video/")
-  def is_audio?(%UserFile{content_type: content_type}), do: String.starts_with?(content_type, "audio/")
-  def is_document?(%UserFile{content_type: content_type}) do
+  def is_image?(%{content_type: content_type}), do: String.starts_with?(content_type, "image/")
+  def is_video?(%{content_type: content_type}), do: String.starts_with?(content_type, "video/")
+  def is_audio?(%{content_type: content_type}), do: String.starts_with?(content_type, "audio/")
+  def is_document?(%{content_type: content_type}) do
     content_type in ["application/pdf", "application/msword", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
   end
 

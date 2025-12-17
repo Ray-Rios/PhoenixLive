@@ -2,6 +2,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Security
   alias PhoenixApp.RateLimiter
+  alias PhoenixAppWeb.Components.AdminSidebar
 
   @impl true
   def mount(_params, _session, socket) do
@@ -105,15 +106,15 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AdminSidebar.admin_layout current_path="/admin/security">
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Security Dashboard</h1>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Monitor login attempts and manage security controls</p>
+        <h1 class="text-3xl font-bold text-white">Security Dashboard</h1>
+        <p class="mt-2 text-sm text-gray-400">Monitor login attempts and manage security controls</p>
       </div>
 
       <!-- Statistics Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
+        <div class="dark-glass overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -123,11 +124,11 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt class="text-sm font-medium text-gray-400 truncate">
                     Attempts (Last Hour)
                   </dt>
                   <dd class="flex items-baseline">
-                    <div class="text-2xl font-semibold text-gray-900 dark:text-white">
+                    <div class="text-2xl font-semibold text-white">
                       <%= @stats.total_attempts_last_hour %>
                     </div>
                     <div class="ml-2 flex items-baseline text-sm font-semibold text-red-600">
@@ -140,7 +141,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           </div>
         </div>
 
-        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
+        <div class="dark-glass overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -150,11 +151,11 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt class="text-sm font-medium text-gray-400 truncate">
                     Attempts (Last 24h)
                   </dt>
                   <dd class="flex items-baseline">
-                    <div class="text-2xl font-semibold text-gray-900 dark:text-white">
+                    <div class="text-2xl font-semibold text-white">
                       <%= @stats.total_attempts_last_day %>
                     </div>
                     <div class="ml-2 flex items-baseline text-sm font-semibold text-red-600">
@@ -167,7 +168,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           </div>
         </div>
 
-        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
+        <div class="dark-glass overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -177,10 +178,10 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt class="text-sm font-medium text-gray-400 truncate">
                     Blocked Identifiers
                   </dt>
-                  <dd class="text-2xl font-semibold text-gray-900 dark:text-white">
+                  <dd class="text-2xl font-semibold text-white">
                     <%= @stats.blocked_identifiers %>
                   </dd>
                 </dl>
@@ -189,7 +190,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           </div>
         </div>
 
-        <div class="bg-white dark:glass-dark overflow-hidden shadow rounded-lg">
+        <div class="dark-glass overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -199,10 +200,10 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt class="text-sm font-medium text-gray-400 truncate">
                     Device Fingerprints
                   </dt>
-                  <dd class="text-2xl font-semibold text-gray-900 dark:text-white">
+                  <dd class="text-2xl font-semibold text-white">
                     <%= @stats.unique_fingerprints %>
                   </dd>
                 </dl>
@@ -213,43 +214,43 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Rate Limiter Active Blocks -->
-      <div class="bg-white dark:glass-dark shadow rounded-lg mb-8">
+      <div class="dark-glass shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+          <h3 class="text-lg leading-6 font-medium text-white mb-4">
             Rate Limiter Active Blocks
           </h3>
           <%= if Enum.empty?(@rate_limiter_blocked) do %>
-            <p class="text-sm text-gray-500 dark:text-gray-400">No active rate-limited identifiers</p>
+            <p class="text-sm text-gray-400">No active rate-limited identifiers</p>
           <% else %>
             <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table class="min-w-full divide-y divide-gray-700">
                 <thead>
                   <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Identifier
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Failed Attempts
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody class="divide-y divide-gray-700">
                   <%= for identifier <- @rate_limiter_blocked do %>
                     <tr>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-white">
                         <%= identifier %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         10+ (Auto-blocked)
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
                           phx-click="clear_rate_limiter"
                           phx-value-identifier={identifier}
-                          class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          class="text-blue-400 hover:text-blue-300"
                         >
                           Clear
                         </button>
@@ -266,46 +267,46 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       <!-- Add to Block/Allow List Forms -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <!-- Block Form -->
-        <div class="bg-white dark:glass-dark shadow rounded-lg">
+        <div class="dark-glass shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            <h3 class="text-lg leading-6 font-medium text-white mb-4">
               Block Identifier
             </h3>
             <form phx-submit="block_identifier">
               <div class="space-y-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label class="block text-sm font-medium text-gray-300">
                     Identifier (IP or Fingerprint)
                   </label>
                   <input
                     type="text"
                     name="identifier"
                     required
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     placeholder="192.168.1.1 or fingerprint hash"
                   />
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label class="block text-sm font-medium text-gray-300">
                     Type
                   </label>
                   <select
                     name="type"
                     required
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   >
                     <option value="ip">IP Address</option>
                     <option value="fingerprint">Device Fingerprint</option>
                   </select>
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label class="block text-sm font-medium text-gray-300">
                     Reason
                   </label>
                   <input
                     type="text"
                     name="reason"
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     placeholder="Suspicious activity detected"
                   />
                 </div>
@@ -321,46 +322,46 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
         </div>
 
         <!-- Allow Form -->
-        <div class="bg-white dark:glass-dark shadow rounded-lg">
+        <div class="dark-glass shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            <h3 class="text-lg leading-6 font-medium text-white mb-4">
               Add to Allowlist
             </h3>
             <form phx-submit="allow_identifier">
               <div class="space-y-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label class="block text-sm font-medium text-gray-300">
                     Identifier (IP or Fingerprint)
                   </label>
                   <input
                     type="text"
                     name="identifier"
                     required
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     placeholder="192.168.1.1 or fingerprint hash"
                   />
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label class="block text-sm font-medium text-gray-300">
                     Type
                   </label>
                   <select
                     name="type"
                     required
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   >
                     <option value="ip">IP Address</option>
                     <option value="fingerprint">Device Fingerprint</option>
                   </select>
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label class="block text-sm font-medium text-gray-300">
                     Reason
                   </label>
                   <input
                     type="text"
                     name="reason"
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     placeholder="Trusted administrator"
                   />
                 </div>
@@ -377,56 +378,56 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Blocked Identifiers Table -->
-      <div class="bg-white dark:glass-dark shadow rounded-lg mb-8">
+      <div class="dark-glass shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+          <h3 class="text-lg leading-6 font-medium text-white mb-4">
             Blocked Identifiers
           </h3>
           <%= if Enum.empty?(@blocked_identifiers) do %>
-            <p class="text-sm text-gray-500 dark:text-gray-400">No blocked identifiers</p>
+            <p class="text-sm text-gray-400">No blocked identifiers</p>
           <% else %>
             <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table class="min-w-full divide-y divide-gray-700">
                 <thead>
                   <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Identifier
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Type
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Reason
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Blocked At
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Auto
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody class="divide-y divide-gray-700">
                   <%= for blocked <- @blocked_identifiers do %>
                     <tr>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-white">
                         <%= blocked.identifier %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-700 text-gray-300">
                           <%= blocked.identifier_type %>
                         </span>
                       </td>
-                      <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 text-sm text-gray-400">
                         <%= blocked.reason || "N/A" %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         <%= Calendar.strftime(blocked.blocked_at, "%Y-%m-%d %H:%M") %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         <%= if blocked.auto_blocked, do: "Yes", else: "No" %>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -434,7 +435,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
                           phx-click="unblock_identifier"
                           phx-value-identifier={blocked.identifier}
                           phx-value-type={blocked.identifier_type}
-                          class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          class="text-blue-400 hover:text-blue-300"
                         >
                           Unblock
                         </button>
@@ -449,50 +450,50 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Allowed Identifiers Table -->
-      <div class="bg-white dark:glass-dark shadow rounded-lg mb-8">
+      <div class="dark-glass shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+          <h3 class="text-lg leading-6 font-medium text-white mb-4">
             Allowlist
           </h3>
           <%= if Enum.empty?(@allowed_identifiers) do %>
-            <p class="text-sm text-gray-500 dark:text-gray-400">No allowed identifiers</p>
+            <p class="text-sm text-gray-400">No allowed identifiers</p>
           <% else %>
             <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table class="min-w-full divide-y divide-gray-700">
                 <thead>
                   <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Identifier
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Type
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Reason
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Added At
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody class="divide-y divide-gray-700">
                   <%= for allowed <- @allowed_identifiers do %>
                     <tr>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-white">
                         <%= allowed.identifier %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-900 text-green-300">
                           <%= allowed.identifier_type %>
                         </span>
                       </td>
-                      <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 text-sm text-gray-400">
                         <%= allowed.reason || "N/A" %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         <%= Calendar.strftime(allowed.added_at, "%Y-%m-%d %H:%M") %>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -500,7 +501,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
                           phx-click="disallow_identifier"
                           phx-value-identifier={allowed.identifier}
                           phx-value-type={allowed.identifier_type}
-                          class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          class="text-red-400 hover:text-red-300"
                         >
                           Remove
                         </button>
@@ -515,49 +516,49 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       </div>
 
       <!-- Recent Failed Attempts -->
-      <div class="bg-white dark:glass-dark shadow rounded-lg">
+      <div class="dark-glass shadow rounded-lg">
         <div class="px-4 py-5 sm:p-6">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+          <h3 class="text-lg leading-6 font-medium text-white mb-4">
             Recent Failed Login Attempts
           </h3>
           <%= if Enum.empty?(@recent_failures) do %>
-            <p class="text-sm text-gray-500 dark:text-gray-400">No recent failed attempts</p>
+            <p class="text-sm text-gray-400">No recent failed attempts</p>
           <% else %>
             <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table class="min-w-full divide-y divide-gray-700">
                 <thead>
                   <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Identifier
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       IP Address
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       User Agent
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Time
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody class="divide-y divide-gray-700">
                   <%= for attempt <- @recent_failures do %>
                     <tr>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-white">
                         <%= String.slice(attempt.identifier, 0..20) %><%= if String.length(attempt.identifier) > 20, do: "..." %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         <%= attempt.ip_address || "N/A" %>
                       </td>
-                      <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                      <td class="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">
                         <%= if attempt.user_agent do %>
                           <%= String.slice(attempt.user_agent, 0..50) %><%= if String.length(attempt.user_agent) > 50, do: "..." %>
                         <% else %>
                           N/A
                         <% end %>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         <%= if attempt.last_attempt_at do %>
                           <%= Calendar.strftime(attempt.last_attempt_at, "%Y-%m-%d %H:%M:%S") %>
                         <% else %>
@@ -572,7 +573,7 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
           <% end %>
         </div>
       </div>
-    </div>
+    </AdminSidebar.admin_layout>
     """
   end
 end

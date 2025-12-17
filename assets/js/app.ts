@@ -11,6 +11,7 @@ import { LiveSocket } from "phoenix_live_view";
 // Import TypeScript hooks
 import { TerminalTypewriter } from "./terminal_typewriter";
 import { FileDragDrop, FileUpload } from "./file_drag_drop";
+import { Sortable } from "./sortable_hook";
 
 // Import Three.js hooks
 import { HomeGalaxyScene } from "./threejs/galaxy-scene";
@@ -397,6 +398,13 @@ const ChatInput = {
       // Trigger input event for LiveView binding
       this.el.dispatchEvent(new Event('input', { bubbles: true }));
     });
+
+    this.handleEvent("clear_input", (payload: any) => {
+      if (this.el.id === payload.id) {
+        this.el.value = "";
+        this.el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
   },
   updated() {},
   destroyed() {}
@@ -444,26 +452,81 @@ const SidebarResizer = {
     const el = this.el as HTMLElement;
     const handle = el.querySelector('.resize-handle') as HTMLElement;
     const content = el.querySelector('.sidebar-content') as HTMLElement;
+    const collapsedHandle = document.getElementById('sidebar-collapsed-handle');
     
     if (!handle) return;
 
     let isResizing = false;
     let startX = 0;
     let startWidth = 0;
-    let lastWidth = 256; // Default width
-    let isCollapsed = false;
-    let clickThreshold = 5; // Pixels to distinguish click from drag
+    const DEFAULT_WIDTH = 220;
+    const MIN_WIDTH = 50; // Minimum visible width
+    const MAX_WIDTH = 500;
+    const COLLAPSE_THRESHOLD = 80; // Below this, collapse completely
+    const clickThreshold = 5; // Pixels to distinguish click from drag
 
-    // Restore state from localStorage
-    const savedWidth = localStorage.getItem('forum_sidebar_width');
-    const savedCollapsed = localStorage.getItem('forum_sidebar_collapsed');
-
-    if (savedWidth) {
-      lastWidth = parseInt(savedWidth);
-      if (!savedCollapsed || savedCollapsed === 'false') {
-        el.style.width = `${lastWidth}px`;
+    // Initialize sidebar state from localStorage
+    const initSidebar = () => {
+      const savedWidth = localStorage.getItem('forum_sidebar_width');
+      const savedCollapsed = localStorage.getItem('forum_sidebar_collapsed');
+      
+      if (savedCollapsed === 'true') {
+        // Start collapsed
+        el.style.width = '0px';
+        el.style.display = 'none';
+        if (content) content.style.display = 'none';
+        if (collapsedHandle) collapsedHandle.classList.remove('hidden');
+      } else {
+        // Start open with saved or default width
+        const width = savedWidth ? parseInt(savedWidth) : DEFAULT_WIDTH;
+        el.style.width = `${width}px`;
+        el.style.display = 'flex';
+        if (content) content.style.display = 'block';
+        if (collapsedHandle) collapsedHandle.classList.add('hidden');
       }
-    }
+    };
+
+    // Apply initial state
+    initSidebar();
+
+    const collapse = () => {
+      el.style.width = '0px';
+      el.style.display = 'none';
+      if (content) content.style.display = 'none';
+      if (collapsedHandle) collapsedHandle.classList.remove('hidden');
+      localStorage.setItem('forum_sidebar_collapsed', 'true');
+    };
+
+    const expand = (width?: number) => {
+      const savedWidth = localStorage.getItem('forum_sidebar_width');
+      const targetWidth = width || (savedWidth ? parseInt(savedWidth) : DEFAULT_WIDTH);
+      el.style.width = `${targetWidth}px`;
+      el.style.display = 'flex';
+      if (content) content.style.display = 'block';
+      if (collapsedHandle) collapsedHandle.classList.add('hidden');
+      localStorage.setItem('forum_sidebar_collapsed', 'false');
+      if (width) {
+        localStorage.setItem('forum_sidebar_width', width.toString());
+      }
+    };
+
+    // Re-apply state on updates (since phx-update="ignore" might be removed)
+    this.updated = () => {
+      const savedCollapsed = localStorage.getItem('forum_sidebar_collapsed');
+      if (savedCollapsed === 'true') {
+        el.style.width = '0px';
+        el.style.display = 'none';
+        if (content) content.style.display = 'none';
+        if (collapsedHandle) collapsedHandle.classList.remove('hidden');
+      } else {
+        const savedWidth = localStorage.getItem('forum_sidebar_width');
+        const width = savedWidth ? parseInt(savedWidth) : DEFAULT_WIDTH;
+        el.style.width = `${width}px`;
+        el.style.display = 'flex';
+        if (content) content.style.display = 'block';
+        if (collapsedHandle) collapsedHandle.classList.add('hidden');
+      }
+    };
 
     const onMouseDown = (e: MouseEvent) => {
       isResizing = true;
@@ -476,6 +539,7 @@ const SidebarResizer = {
       // Prevent text selection during drag
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'col-resize';
+      e.preventDefault();
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -484,17 +548,189 @@ const SidebarResizer = {
       const dx = e.clientX - startX;
       let newWidth = startWidth + dx;
       
-      // Constraints
-      if (newWidth < 100) newWidth = 10; // Snap to collapse
-      if (newWidth > 600) newWidth = 600; // Max width
+      // Clamp to valid range, allow dragging to near-zero for collapse gesture
+      if (newWidth < MIN_WIDTH) newWidth = Math.max(0, newWidth);
+      if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
       
-      if (newWidth <= 10) {
-        if (content) content.style.display = 'none';
+      // Visual feedback while dragging
+      el.style.width = `${newWidth}px`;
+      el.style.display = 'flex';
+      
+      if (newWidth < COLLAPSE_THRESHOLD) {
+        if (content) content.style.opacity = '0.3';
       } else {
-        if (content) content.style.display = 'block';
+        if (content) {
+          content.style.opacity = '1';
+          content.style.display = 'block';
+        }
       }
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const dx = Math.abs(e.clientX - startX);
+      isResizing = false;
+      
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      if (content) content.style.opacity = '1';
+
+      // Check if it was a click (toggle) vs drag
+      if (dx < clickThreshold) {
+        // Toggle on click
+        const isCollapsed = localStorage.getItem('forum_sidebar_collapsed') === 'true';
+        if (isCollapsed) {
+          expand();
+        } else {
+          collapse();
+        }
+      } else {
+        // It was a drag - check final width
+        const currentWidth = el.offsetWidth;
+        if (currentWidth < COLLAPSE_THRESHOLD) {
+          collapse();
+        } else {
+          expand(currentWidth);
+        }
+      }
+    };
+
+    // Listen for toggle_sidebar event from the hamburger menu button
+    this.handleEvent('toggle_sidebar', () => {
+      const isCollapsed = localStorage.getItem('forum_sidebar_collapsed') === 'true';
+      if (isCollapsed) {
+        expand();
+      } else {
+        collapse();
+      }
+    });
+
+    // Allow clicking collapsed handle to expand
+    if (collapsedHandle) {
+      collapsedHandle.addEventListener('click', () => {
+        expand();
+      });
+    }
+
+    handle.addEventListener('mousedown', onMouseDown);
+  }
+};
+
+// Admin Sidebar Resizer Hook - similar to forum sidebar but with different storage keys
+const AdminSidebarResizer = {
+  mounted() {
+    const el = this.el as HTMLElement;
+    const handle = el.querySelector('.resize-handle') as HTMLElement;
+    const content = el.querySelector('.sidebar-content') as HTMLElement;
+    const collapsedHandle = document.getElementById('admin-sidebar-collapsed-handle');
+    
+    if (!handle) return;
+
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    const DEFAULT_WIDTH = 240;
+    const MIN_WIDTH = 60; // Minimum width to show icons
+    const MAX_WIDTH = 400;
+    const COLLAPSE_THRESHOLD = 100; // Below this, collapse to icon-only
+    const ICON_ONLY_WIDTH = 60;
+    const clickThreshold = 5;
+
+    // Hide labels when collapsed, show icons
+    const updateLabelsVisibility = (width: number) => {
+      const labels = el.querySelectorAll('.sidebar-label');
+      const sectionHeaders = el.querySelectorAll('.sidebar-section-header');
+      const links = el.querySelectorAll('.sidebar-link');
+      
+      if (width <= COLLAPSE_THRESHOLD) {
+        labels.forEach((label: Element) => (label as HTMLElement).style.display = 'none');
+        sectionHeaders.forEach((header: Element) => (header as HTMLElement).style.display = 'none');
+        links.forEach((link: Element) => {
+          (link as HTMLElement).style.justifyContent = 'center';
+          (link as HTMLElement).style.paddingLeft = '0';
+          (link as HTMLElement).style.paddingRight = '0';
+        });
+        el.querySelectorAll('.sidebar-icon').forEach((icon: Element) => {
+          (icon as HTMLElement).style.marginRight = '0';
+        });
+      } else {
+        labels.forEach((label: Element) => (label as HTMLElement).style.display = 'block');
+        sectionHeaders.forEach((header: Element) => (header as HTMLElement).style.display = 'block');
+        links.forEach((link: Element) => {
+          (link as HTMLElement).style.justifyContent = 'flex-start';
+          (link as HTMLElement).style.paddingLeft = '0.75rem';
+          (link as HTMLElement).style.paddingRight = '0.75rem';
+        });
+        el.querySelectorAll('.sidebar-icon').forEach((icon: Element) => {
+          (icon as HTMLElement).style.marginRight = '0.75rem';
+        });
+      }
+    };
+
+    // Initialize sidebar state from localStorage
+    const initSidebar = () => {
+      const savedWidth = localStorage.getItem('admin_sidebar_width');
+      const savedCollapsed = localStorage.getItem('admin_sidebar_collapsed');
+      
+      if (savedCollapsed === 'true') {
+        // Start in icon-only mode
+        el.style.width = `${ICON_ONLY_WIDTH}px`;
+        updateLabelsVisibility(ICON_ONLY_WIDTH);
+        if (collapsedHandle) collapsedHandle.classList.add('hidden');
+      } else {
+        const width = savedWidth ? parseInt(savedWidth) : DEFAULT_WIDTH;
+        el.style.width = `${width}px`;
+        updateLabelsVisibility(width);
+        if (collapsedHandle) collapsedHandle.classList.add('hidden');
+      }
+    };
+
+    initSidebar();
+
+    const collapse = () => {
+      el.style.width = `${ICON_ONLY_WIDTH}px`;
+      updateLabelsVisibility(ICON_ONLY_WIDTH);
+      localStorage.setItem('admin_sidebar_collapsed', 'true');
+    };
+
+    const expand = (width?: number) => {
+      const savedWidth = localStorage.getItem('admin_sidebar_width');
+      const targetWidth = width || (savedWidth ? parseInt(savedWidth) : DEFAULT_WIDTH);
+      el.style.width = `${targetWidth}px`;
+      updateLabelsVisibility(targetWidth);
+      localStorage.setItem('admin_sidebar_collapsed', 'false');
+      if (width && width > COLLAPSE_THRESHOLD) {
+        localStorage.setItem('admin_sidebar_width', width.toString());
+      }
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = el.offsetWidth;
+      
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const dx = e.clientX - startX;
+      let newWidth = startWidth + dx;
+      
+      if (newWidth < MIN_WIDTH) newWidth = MIN_WIDTH;
+      if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
       
       el.style.width = `${newWidth}px`;
+      updateLabelsVisibility(newWidth);
     };
 
     const onMouseUp = (e: MouseEvent) => {
@@ -508,30 +744,30 @@ const SidebarResizer = {
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
 
-      // Check if it was a click (toggle)
       if (dx < clickThreshold) {
-        // If clicking the handle, we want to collapse it (since handle is only visible when open)
-        this.pushEvent("toggle_sidebar", {});
-      } else {
-        // It was a drag, save the new state
-        const currentWidth = el.offsetWidth;
-        if (currentWidth <= 100) {
-          // Dragged to collapse - trigger server event to close fully
-          this.pushEvent("toggle_sidebar", {});
+        // Toggle on click
+        const isCollapsed = localStorage.getItem('admin_sidebar_collapsed') === 'true';
+        if (isCollapsed) {
+          expand();
         } else {
-          isCollapsed = false;
-          lastWidth = currentWidth;
-          localStorage.setItem('forum_sidebar_width', lastWidth.toString());
-          localStorage.setItem('forum_sidebar_collapsed', 'false');
+          collapse();
+        }
+      } else {
+        // It was a drag
+        const currentWidth = el.offsetWidth;
+        if (currentWidth <= COLLAPSE_THRESHOLD) {
+          collapse();
+        } else {
+          expand(currentWidth);
         }
       }
     };
 
-    const toggleSidebar = () => {
-      // This is called when clicking the handle.
-      // Since handle is only visible when open, we always collapse.
-      this.pushEvent("toggle_sidebar", {});
-    };
+    if (collapsedHandle) {
+      collapsedHandle.addEventListener('click', () => {
+        expand();
+      });
+    }
 
     handle.addEventListener('mousedown', onMouseDown);
   }
@@ -549,7 +785,9 @@ const Hooks = {
   OpacitySlider,              // Opacity slider for avatar border
   AudioHook,                  // Audio notification system
   FullscreenContainer,        // Prevents body scrolling on fullscreen pages
-  SidebarResizer,             // Handles sidebar resizing and toggling
+  SidebarResizer,             // Handles forum sidebar resizing and toggling
+  AdminSidebarResizer,        // Handles admin sidebar resizing and toggling
+  Sortable,                   // Drag and drop for channel reordering
   // Background Scenes
   HomeGalaxyScene,            // Default galaxy background
   NebulaScene,                // Colorful nebula with gas clouds
@@ -765,3 +1003,9 @@ document.addEventListener('submit', (ev) => {
     // ignore form submit logging errors
   }
 }, true);
+
+window.addEventListener("phx:open_url", (e: any) => {
+  if (e.detail && e.detail.url) {
+    window.open(e.detail.url, '_blank');
+  }
+});

@@ -719,6 +719,103 @@ html, body {
   @apply opacity-100;
 }
 
-.glass-dark {
-  @apply bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700;
+/* ==================== QUILL EDITOR DARK MODE STYLES ==================== */
+/* Toolbar styling */
+.quill-editor .ql-toolbar {
+  @apply bg-gray-900 border-gray-700 rounded-t-lg;
+}
+
+.quill-editor .ql-toolbar button,
+.quill-editor .ql-toolbar .ql-picker-label {
+  @apply text-gray-300;
+}
+
+.quill-editor .ql-toolbar button:hover,
+.quill-editor .ql-toolbar .ql-picker-label:hover,
+.quill-editor .ql-toolbar button.ql-active,
+.quill-editor .ql-toolbar .ql-picker-label.ql-active {
+  @apply text-blue-400;
+}
+
+.quill-editor .ql-toolbar button svg .ql-stroke,
+.quill-editor .ql-toolbar .ql-picker-label svg .ql-stroke {
+  stroke: #9ca3af;
+}
+
+.quill-editor .ql-toolbar button:hover svg .ql-stroke,
+.quill-editor .ql-toolbar .ql-picker-label:hover svg .ql-stroke,
+.quill-editor .ql-toolbar button.ql-active svg .ql-stroke {
+  stroke: #60a5fa;
+}
+
+.quill-editor .ql-toolbar button svg .ql-fill,
+.quill-editor .ql-toolbar .ql-picker-label svg .ql-fill {
+  fill: #9ca3af;
+}
+
+.quill-editor .ql-toolbar button:hover svg .ql-fill,
+.quill-editor .ql-toolbar .ql-picker-label:hover svg .ql-fill,
+.quill-editor .ql-toolbar button.ql-active svg .ql-fill {
+  fill: #60a5fa;
+}
+
+/* Picker dropdowns */
+.quill-editor .ql-picker-options {
+  @apply bg-gray-800 border-gray-700;
+}
+
+.quill-editor .ql-picker-item {
+  @apply text-gray-300;
+}
+
+.quill-editor .ql-picker-item:hover {
+  @apply bg-gray-700 text-white;
+}
+
+/* Editor container */
+.quill-editor .ql-container {
+  @apply bg-gray-800 border-gray-700 rounded-b-lg;
+  font-size: 16px;
+  min-height: 300px;
+}
+
+.quill-editor .ql-editor {
+  @apply text-gray-200;
+  min-height: 300px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.quill-editor .ql-editor.ql-blank::before {
+  @apply text-gray-500;
+  font-style: normal;
+}
+
+/* Code blocks */
+.quill-editor .ql-editor pre.ql-syntax {
+  @apply bg-gray-900 text-green-400 rounded-lg;
+}
+
+/* Links */
+.quill-editor .ql-editor a {
+  @apply text-blue-400;
+}
+
+/* Blockquotes */
+.quill-editor .ql-editor blockquote {
+  @apply border-l-4 border-blue-500 pl-4 italic text-gray-400;
+}
+
+/* Tooltips */
+.quill-editor .ql-tooltip {
+  @apply bg-gray-800 border-gray-700 text-gray-200 rounded-lg shadow-lg;
+}
+
+.quill-editor .ql-tooltip input[type=text] {
+  @apply bg-gray-700 border-gray-600 text-white rounded;
+}
+
+.quill-editor .ql-tooltip a.ql-action::after,
+.quill-editor .ql-tooltip a.ql-remove::before {
+  @apply text-blue-400;
 }

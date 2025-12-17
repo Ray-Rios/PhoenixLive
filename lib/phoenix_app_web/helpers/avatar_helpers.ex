@@ -18,9 +18,13 @@ defmodule PhoenixAppWeb.AvatarHelpers do
   """
   def avatar_tag(user, opts \\ []) do
     size_class = Keyword.get(opts, :size_class, "w-10 h-10")
-    shape = user.avatar_shape || "circle"
-    color = user.avatar_color || "#3B82F6"
-    opacity = (user.avatar_opacity || 100) / 100
+    
+    # Safely get values whether user is a struct or a map
+    shape = Map.get(user, :avatar_shape) || "circle"
+    color = Map.get(user, :avatar_color) || "#3B82F6"
+    opacity = (Map.get(user, :avatar_opacity) || 100) / 100
+    avatar_url = Map.get(user, :avatar_url)
+    name = Map.get(user, :name)
     
     # Convert hex color to rgba with opacity
     rgba_color = hex_to_rgba(color, opacity)
@@ -38,18 +42,20 @@ defmodule PhoenixAppWeb.AvatarHelpers do
       shape_classes: shape_classes,
       color: color,
       rgba_color: rgba_color,
-      initial: get_user_initial(user)
+      initial: get_user_initial(user),
+      avatar_url: avatar_url,
+      name: name
     }
 
     cond do
       # Priority 1: Custom uploaded avatar
-      user.avatar_url && String.trim(user.avatar_url) != "" ->
+      avatar_url && String.trim(avatar_url) != "" ->
         ~H"""
-        <img src={@user.avatar_url} alt={@user.name || "Avatar"} class={"#{@size_class} object-cover border #{@shape_classes}"} style={"border-color: #{@rgba_color}; box-shadow: 0 0 15px #{@rgba_color}"} />
+        <img src={@avatar_url} alt={@name || "Avatar"} class={"#{@size_class} object-cover border #{@shape_classes}"} style={"border-color: #{@rgba_color}; box-shadow: 0 0 15px #{@rgba_color}"} />
         """
 
       # Priority 2: Generated color/shape avatar
-      user.avatar_color || user.avatar_shape ->
+      Map.get(user, :avatar_color) || Map.get(user, :avatar_shape) ->
         ~H"""
         <div class={"#{@size_class} flex items-center justify-center text-white font-bold #{@shape_classes} border"} style={"background-color: #{@color}; border-color: #{@rgba_color}; box-shadow: 0 0 15px #{@rgba_color}"}>
           <%= @initial %>
@@ -98,11 +104,14 @@ defmodule PhoenixAppWeb.AvatarHelpers do
   Gets the user's initial for generated avatars.
   """
   def get_user_initial(user) do
+    name = Map.get(user, :name)
+    email = Map.get(user, :email)
+    
     cond do
-      user.name && String.trim(user.name) != "" ->
-        user.name |> String.first() |> String.upcase()
-      user.email && String.trim(user.email) != "" ->
-        user.email |> String.first() |> String.upcase()
+      name && String.trim(name) != "" ->
+        name |> String.first() |> String.upcase()
+      email && String.trim(email) != "" ->
+        email |> String.first() |> String.upcase()
       true ->
         "?"
     end
@@ -112,9 +121,10 @@ defmodule PhoenixAppWeb.AvatarHelpers do
   Returns just the avatar URL string (for APIs or direct URL access).
   """
   def avatar_url(user) do
+    avatar_url = Map.get(user, :avatar_url)
     cond do
-      user.avatar_url && String.trim(user.avatar_url) != "" ->
-        user.avatar_url
+      avatar_url && String.trim(avatar_url) != "" ->
+        avatar_url
       true ->
         "/uploads/public/images/default_avatar.jpg"
     end
@@ -124,6 +134,7 @@ defmodule PhoenixAppWeb.AvatarHelpers do
   Checks if user has a custom uploaded avatar.
   """
   def has_custom_avatar?(user) do
-    user.avatar_url && String.trim(user.avatar_url) != ""
+    avatar_url = Map.get(user, :avatar_url)
+    avatar_url && String.trim(avatar_url) != ""
   end
 end

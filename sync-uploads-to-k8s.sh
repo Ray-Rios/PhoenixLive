@@ -29,6 +29,10 @@ fi
 
 echo "📦 Using pod: $POD"
 
+# Remove existing uploads directory in pod
+echo "🗑️  Removing old uploads..."
+kubectl exec -n $NAMESPACE $POD -- sh -c 'rm -rf /app/uploads/*'
+
 # Sync uploads from Windows to pod
 echo "⬆️  Uploading uploads..."
 cd "$LOCAL_UPLOADS_DIR" && tar czf - . | kubectl exec -i -n $NAMESPACE $POD -- sh -c '

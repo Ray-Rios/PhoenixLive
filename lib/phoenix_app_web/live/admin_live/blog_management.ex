@@ -3,6 +3,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   alias PhoenixApp.Content
   alias PhoenixApp.Content.Post
   alias PhoenixApp.Content.Media
+  alias PhoenixAppWeb.Components.AdminSidebar
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
@@ -312,9 +313,8 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   @impl true
   def render(assigns) do
     ~H"""
-    <div data-responsive-content class="min-h-screen pointer-events-none" style="padding-top: 30px; padding-bottom: 48px;">
-      <div class="w-full max-w-[90%] mx-auto px-4 py-8 mt-16 pointer-events-auto">
-        <div class="max-w-6xl mx-auto">
+    <AdminSidebar.admin_layout current_path="/admin/blog-management">
+      <div class="max-w-6xl mx-auto">
           <div class="auth-glass-panel p-8 rounded-xl">
             <div class="flex justify-between items-center mb-8">
               <h1 class="text-3xl font-bold text-white">Blog Management</h1>
@@ -375,8 +375,19 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                       📷 Insert Media
                     </button>
                   </div>
-                  <.input field={@form[:content]} type="textarea" label="" placeholder="Write your post content here... (Supports Markdown)" rows="15" autocomplete="off" />
-                  <div class="text-xs text-gray-400 mt-1">Supports Markdown formatting</div>
+                  
+                  <div id="blog-post-editor-wrapper" class="quill-editor-wrapper" phx-update="ignore">
+                    <div id="blog-post-editor" 
+                         phx-hook="QuillEditor" 
+                         data-placeholder="Write your post content here..."
+                         data-initial-content={Phoenix.HTML.Form.input_value(@form, :content)}
+                         class="quill-editor bg-gray-800 text-white rounded-lg min-h-[400px]">
+                    </div>
+                  </div>
+                  <input type="hidden" name={@form[:content].name} id="blog-post-editor-input" value={Phoenix.HTML.Form.input_value(@form, :content)} />
+                  <%= for {msg, _} <- @form[:content].errors do %>
+                    <.error><%= msg %></.error>
+                  <% end %>
                 </div>
 
                 <div>
@@ -533,19 +544,18 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
               </div>
             <% end %>
           </div>
+          
+          <!-- Media Picker Modal -->
+          <%= if @show_media_picker do %>
+            <.live_component 
+              module={PhoenixAppWeb.MediaPickerComponent} 
+              id="media-picker" 
+              current_user={@current_user}
+            />
+          <% end %>
           </div>
-        </div>
       </div>
-    </div>
-
-      <!-- Media Picker Modal -->
-      <%= if @show_media_picker do %>
-        <.live_component 
-          module={PhoenixAppWeb.MediaPickerComponent} 
-          id="media-picker" 
-          current_user={@current_user}
-        />
-      <% end %>
+    </AdminSidebar.admin_layout>
     """
   end
 end

@@ -1,12 +1,14 @@
 defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
+  alias PhoenixAppWeb.Components.AdminSidebar
 
   # Ensure current_user is loaded and authenticated
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
   @impl true
   def mount(_params, _session, socket) do
+    # Force recompile to ensure sidebar is rendered
     # Check if current_user exists and is admin
     current_user = socket.assigns[:current_user]
 
@@ -22,31 +24,47 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
       true ->
         # Load users for admin
         users = Accounts.list_users()
+        default_role = PhoenixApp.Settings.get_option("default_user_role", "member")
         
         {:ok, assign(socket, 
           users: users, 
           page_title: "User Management", 
           confirm_delete_user_id: nil, 
-          default_role: "member"
+          default_role: default_role
         )}
     end
   end
 
   @impl true
   def handle_event("change_default_role", %{"default_role" => role}, socket) do
-    {:noreply, assign(socket, default_role: role)}
+    require Logger
+    Logger.info("Changing default role to: #{inspect(role)}")
+    
+    case PhoenixApp.Settings.set_option("default_user_role", role) do
+      {:ok, option} ->
+        Logger.info("Successfully updated default role: #{inspect(option)}")
+        {:noreply, assign(socket, default_role: role) |> put_flash(:info, "Default role updated to #{role}")}
+      {:error, changeset} ->
+        Logger.error("Failed to set default role: #{inspect(changeset)}")
+        {:noreply, put_flash(socket, :error, "Failed to update default role")}
+    end
   end
 
   @impl true
   def handle_event("change_role", %{"role" => role, "user_id" => user_id}, socket) do
+    require Logger
+    Logger.info("Changing user role. User ID: #{user_id}, New Role: #{role}")
+    
     user = Accounts.get_user!(user_id)
     
     case Accounts.update_user_role(user, role) do
-      {:ok, _updated_user} ->
+      {:ok, updated_user} ->
+        Logger.info("Successfully updated user role: #{inspect(updated_user)}")
         users = Accounts.list_users()
         {:noreply, assign(socket, users: users) |> put_flash(:info, "User role updated successfully")}
 
-      {:error, _changeset} ->
+      {:error, changeset} ->
+        Logger.error("Failed to update user role: #{inspect(changeset)}")
         {:noreply, put_flash(socket, :error, "Failed to update user role")}
     end
   end
@@ -96,6 +114,11 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
     {:noreply, assign(socket, confirm_delete_user_id: nil)}
   end
 
+  @impl true
+  def handle_event("prevent_submit", _params, socket) do
+    {:noreply, socket}
+  end
+
   # Helper function to determine user role
   defp get_user_role(user) do
     cond do
@@ -108,30 +131,30 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
-      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <div class="max-w-7xl mx-auto">
+    <AdminSidebar.admin_layout current_path="/admin/user-management">
+      <div class="max-w-7xl mx-auto">
           <h1 class="text-3xl font-bold text-white mb-8">User Management</h1>
           
           <!-- Default Role Setting -->
           <div class="auth-glass-panel rounded-lg p-6 mb-6">
             <h2 class="text-lg font-semibold text-white mb-4">Default Role Settings</h2>
-            <div class="flex items-center space-x-4">
-              <label class="text-sm font-medium text-gray-300">Default role for new users:</label>
-              <select 
-                phx-change="change_default_role"
-                name="default_role"
-                class="glass-dark text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500"
-              >
-                <option value="guest" selected={@default_role == "guest"}>Guest</option>
-                <option value="member" selected={@default_role == "member"}>Member</option>
-                <option value="moderator" selected={@default_role == "moderator"}>Moderator</option>
-                <option value="editor" selected={@default_role == "editor"}>Editor</option>
-                <option value="gm" selected={@default_role == "gm"}>GM</option>
-                <option value="admin" selected={@default_role == "admin"}>Admin</option>
-              </select>
-              <span class="text-xs text-gray-400">Currently set to: <strong><%= String.capitalize(@default_role) %></strong></span>
-            </div>
+            <form phx-change="change_default_role" phx-submit="prevent_submit">
+              <div class="flex items-center space-x-4">
+                <label class="text-sm font-medium text-gray-300">Default role for new users:</label>
+                <select 
+                  name="default_role"
+                  class="glass-dark text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500"
+                >
+                  <option value="guest" selected={@default_role == "guest"}>Guest</option>
+                  <option value="member" selected={@default_role == "member"}>Member</option>
+                  <option value="moderator" selected={@default_role == "moderator"}>Moderator</option>
+                  <option value="editor" selected={@default_role == "editor"}>Editor</option>
+                  <option value="gm" selected={@default_role == "gm"}>GM</option>
+                  <option value="admin" selected={@default_role == "admin"}>Admin</option>
+                </select>
+                <span class="text-xs text-gray-400">Currently set to: <strong><%= String.capitalize(@default_role) %></strong></span>
+              </div>
+            </form>
           </div>
           
           <div class="auth-glass-panel rounded-lg shadow-lg">
@@ -196,20 +219,21 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
                       <td class="px-6 py-4 whitespace-nowrap text-sm">
                         <%= if user.id != @current_user.id do %>
                           <div class="flex flex-col lg:flex-row gap-2">
-                            <select 
-                              phx-change="change_role"
-                              phx-value-user_id={user.id}
-                              name="role"
-                              class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
-                            >
-                              <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
-                              <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
-                              <option value="member" selected={get_user_role(user) == "member"}>Member</option>
-                              <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
-                              <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
-                              <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
-                              <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
-                            </select>
+                            <form phx-change="change_role" phx-submit="prevent_submit" class="inline-block">
+                              <input type="hidden" name="user_id" value={user.id} />
+                              <select 
+                                name="role"
+                                class="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500"
+                              >
+                                <option value="banned" selected={get_user_role(user) == "banned"}>BANNED</option>
+                                <option value="guest" selected={get_user_role(user) == "guest"}>Guest</option>
+                                <option value="member" selected={get_user_role(user) == "member"}>Member</option>
+                                <option value="moderator" selected={get_user_role(user) == "moderator"}>Moderator</option>
+                                <option value="editor" selected={get_user_role(user) == "editor"}>Editor</option>
+                                <option value="gm" selected={get_user_role(user) == "gm"}>GM</option>
+                                <option value="admin" selected={get_user_role(user) == "admin"}>Admin</option>
+                              </select>
+                            </form>
                             
                             <button 
                               phx-click="toggle_status" 
@@ -256,9 +280,8 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
               </div>
             </div>
           </div>
-        </div>
       </div>
-    </div>
+    </AdminSidebar.admin_layout>
     """
   end
 end

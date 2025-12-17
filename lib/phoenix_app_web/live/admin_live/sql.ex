@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.AdminLive.SQL do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Repo
+  alias PhoenixAppWeb.Components.AdminSidebar
 
   def mount(_params, _session, socket) do
     if socket.assigns.current_user && socket.assigns.current_user.is_admin do
@@ -240,9 +241,8 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
 
   def render(assigns) do
     ~H"""
-    <div data-responsive-content class="min-h-screen" style="padding-top: 30px; padding-bottom: 48px;">
-      <div class="w-full max-w-[85%] mx-auto px-4 py-8 relative z-10 mt-[50px]">
-        <div class="max-w-7xl mx-auto">
+    <AdminSidebar.admin_layout current_path="/admin/sql">
+      <div class="max-w-7xl mx-auto">
           <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold text-white">SQL Management Console</h1>
             <div class="text-sm text-gray-400">
@@ -564,8 +564,7 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
             </div>
           <% end %>
         </div>
-      </div>
-    </div>
+      </AdminSidebar.admin_layout>
 
     <script>
       window.addEventListener('phx:download_csv', (e) => {
