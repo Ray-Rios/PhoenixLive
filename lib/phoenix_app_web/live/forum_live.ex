@@ -67,7 +67,7 @@ defmodule PhoenixAppWeb.ForumLive do
         auto_scroll_enabled: true,
         sidebar_open: true
       )
-      |> stream(:messages, [])
+      |> stream(:messages, [], dom_id: fn m -> "messages-#{m.id}" end)
       |> allow_upload(:forum_attachment,
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
         max_entries: 5,
@@ -123,7 +123,8 @@ defmodule PhoenixAppWeb.ForumLive do
       
       # Handle channel switching and presence tracking
       # Only unsubscribe if we are tracking a DIFFERENT channel
-      if socket.assigns[:tracked_channel_id] && socket.assigns.tracked_channel_id != channel_id do
+      # IMPORTANT: Compare channel.id (UUID) not channel_id (string from params)
+      if socket.assigns[:tracked_channel_id] && socket.assigns.tracked_channel_id != channel.id do
         PubSub.unsubscribe(PhoenixApp.PubSub, "channel:#{socket.assigns.tracked_channel_id}")
         PubSub.unsubscribe(PhoenixApp.PubSub, "presence:channel:#{socket.assigns.tracked_channel_id}")
         if connected?(socket) do
@@ -132,7 +133,7 @@ defmodule PhoenixAppWeb.ForumLive do
       end
       
       # Subscribe to new channel if not already tracked
-      if socket.assigns[:tracked_channel_id] != channel_id do
+      if socket.assigns[:tracked_channel_id] != channel.id do
         PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel_id}")
         PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel_id}")
 
@@ -180,7 +181,7 @@ defmodule PhoenixAppWeb.ForumLive do
         online_users: online_users,
         can_moderate: can_moderate
       )
-      |> stream(:messages, messages, reset: true)}
+      |> stream(:messages, messages, reset: true, dom_id: fn m -> "messages-#{m.id}" end)}
     else
       # User doesn't have access - redirect to general channel
       general_channel = Forum.get_or_create_default_channel()
@@ -236,7 +237,7 @@ defmodule PhoenixAppWeb.ForumLive do
         online_users: online_users,
         tracked_channel_id: channel.id
       )
-      |> stream(:messages, messages, reset: true)}
+      |> stream(:messages, messages, reset: true, dom_id: fn m -> "messages-#{m.id}" end)}
     else
       {:noreply, socket}
     end
@@ -664,9 +665,9 @@ defmodule PhoenixAppWeb.ForumLive do
           current_channel: channel,
           page_title: "Forum - #{channel.name}"
         )
-        |> stream(:messages, [], reset: true)
+        |> stream(:messages, [], reset: true, dom_id: fn m -> "messages-#{m.id}" end)
         
-        {:noreply, push_navigate(socket, to: "/forum/#{channel.id}")}
+        {:noreply, push_patch(socket, to: "/forum/#{channel.id}")}
         
       {:error, changeset} ->
         {:noreply, assign(socket, channel_form: to_form(changeset))}
@@ -696,7 +697,7 @@ defmodule PhoenixAppWeb.ForumLive do
 
   def handle_event("switch_channel", %{"channel_id" => channel_id}, socket) do
     # Just navigate, let handle_params take care of subscription/unsubscription
-    {:noreply, push_navigate(socket, to: "/forum/#{channel_id}")}
+    {:noreply, push_patch(socket, to: "/forum/#{channel_id}")}
   end
 
   # Channel CRUD Events
@@ -807,7 +808,7 @@ defmodule PhoenixAppWeb.ForumLive do
              current_channel: default,
              show_delete_channel_confirm: false
            )
-           |> stream(:messages, Forum.list_messages(default.id), reset: true)
+           |> stream(:messages, Forum.list_messages(default.id), reset: true, dom_id: fn m -> "messages-#{m.id}" end)
            |> put_flash(:info, "Channel '#{channel.name}' deleted successfully. All messages and files have been removed.")
            |> push_navigate(to: ~p"/forum/#{default.id}")}
 
@@ -863,7 +864,7 @@ defmodule PhoenixAppWeb.ForumLive do
       # If deleted channel was current, navigate to default
       if socket.assigns.current_channel.id == channel.id do
         default = Forum.get_or_create_default_channel()
-        {:noreply, socket |> assign(current_channel: default) |> stream(:messages, Forum.list_messages(default.id), reset: true) |> push_navigate(to: ~p"/forum/#{default.id}")}
+        {:noreply, socket |> assign(current_channel: default) |> stream(:messages, Forum.list_messages(default.id), reset: true, dom_id: fn m -> "messages-#{m.id}" end) |> push_navigate(to: ~p"/forum/#{default.id}")}
       else
         {:noreply, put_flash(socket, :info, "Channel deleted")}
       end
@@ -1415,14 +1416,32 @@ defmodule PhoenixAppWeb.ForumLive do
   def handle_info({:reaction_added, reaction}, socket) do
     case Forum.get_message(reaction.message_id) do
       nil -> {:noreply, socket}
-      message -> {:noreply, stream_insert(socket, :messages, message)}
+      message -> 
+        if message.reply_to_id do
+          root_id = get_root_message_id(message)
+          case Forum.get_message(root_id) do
+            nil -> {:noreply, socket}
+            root -> {:noreply, stream_insert(socket, :messages, root)}
+          end
+        else
+          {:noreply, stream_insert(socket, :messages, message)}
+        end
     end
   end
 
   def handle_info({:reaction_removed, reaction}, socket) do
     case Forum.get_message(reaction.message_id) do
       nil -> {:noreply, socket}
-      message -> {:noreply, stream_insert(socket, :messages, message)}
+      message -> 
+        if message.reply_to_id do
+          root_id = get_root_message_id(message)
+          case Forum.get_message(root_id) do
+            nil -> {:noreply, socket}
+            root -> {:noreply, stream_insert(socket, :messages, root)}
+          end
+        else
+          {:noreply, stream_insert(socket, :messages, message)}
+        end
     end
   end
 
@@ -1568,7 +1587,7 @@ defmodule PhoenixAppWeb.ForumLive do
         page_title: "Forum - #{default_channel.name}",
         can_moderate: Forum.can_moderate_channel?(socket.assigns.current_user, default_channel)
       )
-      |> stream(:messages, Forum.list_messages(default_channel.id), reset: true)
+      |> stream(:messages, Forum.list_messages(default_channel.id), reset: true, dom_id: fn m -> "messages-#{m.id}" end)
       
       # Refresh online users list for the new channel
       online_users = PhoenixAppWeb.Presence.list("presence:channel:#{default_channel.id}") |> Enum.map(fn {uid, meta} ->
@@ -2830,7 +2849,7 @@ defmodule PhoenixAppWeb.ForumLive do
               <button 
                 type="button" 
                 class="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
-                phx-click="toggle_reaction"
+                phx-click={JS.push("toggle_reaction") |> JS.hide(to: "##{@id}")}
                 phx-value-message_id={@message_id}
                 phx-value-emoji={emoji}
               >
