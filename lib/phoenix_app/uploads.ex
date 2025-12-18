@@ -275,6 +275,18 @@ defmodule PhoenixApp.Uploads do
     case File.rm(file_path) do
       :ok ->
         Logger.info("Deleted file: #{url_path}")
+
+        # Attempt to remove parent directory if empty
+        parent_dir = Path.dirname(file_path)
+        case File.ls(parent_dir) do
+          {:ok, []} -> 
+            case File.rmdir(parent_dir) do
+              :ok -> Logger.info("Removed empty directory: #{parent_dir}")
+              {:error, reason} -> Logger.warning("Failed to remove empty directory #{parent_dir}: #{inspect(reason)}")
+            end
+          _ -> :ok # Directory not empty or error listing it
+        end
+
         :ok
       
       {:error, reason} ->

@@ -56,11 +56,11 @@ config :phoenix_app, :redis_url,
 config :phoenix_app, :enable_redis, 
   System.get_env("ENABLE_REDIS", "true") == "true"
 
-# For now, use local adapter to log emails instead of SendGrid (until sender is verified)
-# To enable SendGrid, verify no-reply@phxlive.net at https://sendgrid.com/docs/for-developers/sending-email/sender-identity/
-# then change adapter to Swoosh.Adapters.Sendgrid and set SENDGRID_API_KEY env var
-config :phoenix_app, PhoenixApp.Mailer,
-  adapter: Swoosh.Adapters.Local
+# For now, use Logger adapter to log emails (until SMTP is configured via env vars)
+# Note: Swoosh.Adapters.Local causes global process conflicts in clustered deployments
+# The actual adapter is configured in runtime.exs based on SMTP_HOST env var
+# config :phoenix_app, PhoenixApp.Mailer,
+#   adapter: Swoosh.Adapters.Logger
 
 # SMTP alternative (uncomment and configure if you prefer SMTP over SendGrid):
 # config :phoenix_app, PhoenixApp.Mailer,

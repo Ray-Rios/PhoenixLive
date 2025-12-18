@@ -3,18 +3,17 @@ defmodule PhoenixAppWeb.AdminLive.Files do
   alias PhoenixApp.Files
   alias PhoenixAppWeb.Components.AdminSidebar
 
-  def mount(_params, _session, socket) do
-    if socket.assigns.current_user && socket.assigns.current_user.is_admin do
-      files = Files.list_all_user_files()
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
-      {:ok, assign(socket,
-        files: files,
-        page_title: "Media Library",
-        selected_file: nil
-      )}
-    else
-      {:ok, redirect(socket, to: "/")}
-    end
+  def mount(_params, _session, socket) do
+    # on_mount already verified admin access
+    files = Files.list_all_user_files()
+
+    {:ok, assign(socket,
+      files: files,
+      page_title: "Media Library",
+      selected_file: nil
+    )}
   end
 
   def handle_event("select_file", %{"file_id" => file_id}, socket) do

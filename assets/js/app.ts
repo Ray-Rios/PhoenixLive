@@ -1,41 +1,116 @@
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
 import "phoenix_html";
 
-// Topbar for progress indicators
-import topbar from "./topbar";
-
-// Phoenix LiveView
+// Phoenix LiveView - CONNECT IMMEDIATELY before heavy imports
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 
-// Import TypeScript hooks
+// CSRF token - get it early
+const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
+
+// Placeholder hooks object - will be populated after heavy imports load
+const Hooks: Record<string, any> = {};
+
+// Create and connect LiveSocket IMMEDIATELY with minimal hooks
+// This ensures WebSocket connection starts while heavy JS loads
+const liveSocket = new LiveSocket("/live", Socket, {
+  params: { _csrf_token: csrfToken },
+  hooks: Hooks,
+  // Connection timeout settings for faster reconnection
+  timeout: 10000, // 10 second timeout
+});
+
+// Expose liveSocket on window early
+(window as any).liveSocket = liveSocket;
+
+// Connect immediately - don't wait for heavy imports
+liveSocket.connect();
+console.log('🚀 Phoenix LiveSocket connecting (early)...');
+
+// Topbar for progress indicators
+import topbar from "./topbar";
+
+// Import lightweight TypeScript hooks (non-blocking)
 import { TerminalTypewriter } from "./terminal_typewriter";
 import { FileDragDrop, FileUpload } from "./file_drag_drop";
 import { Sortable } from "./sortable_hook";
-
-// Import Three.js hooks
-import { HomeGalaxyScene } from "./threejs/galaxy-scene";
-import { NebulaScene } from "./threejs/scenes/nebula-scene";
-import { StarfieldScene } from "./threejs/scenes/starfield-scene";
-import { VoidScene } from "./threejs/scenes/void-scene";
-import { GlobalCameraController } from "./threejs/controls/global-camera-controller";
-import { RichEditor } from "./rich_editor";
-import { BlogAutosave } from "./blog_autosave_hook";
 import { DeviceFingerprintHook } from "./device_fingerprint";
 import { GlassTheme } from "./glass_theme";
 import { BackgroundUpdater } from "./background_updater";
 import { GlobalHooks } from "./global_hooks";
 import { ProfileSettings } from "./profile_settings";
 import { ColorPicker, OpacitySlider } from "./color_picker";
-import QuillEditorHook from "./quill_editor_hook";
-import CollaborativeQuillHook from "./collaborative_quill_hook";
 import { AudioHook } from "./audio";
 
 // Import Desktop hooks
 import "./desktop";
 
-// CSRF token
-const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
+// Defer heavy Three.js and Quill imports - load them after socket connects
+// These will be loaded dynamically and added to Hooks when ready
+let HomeGalaxyScene: any = null;
+let NebulaScene: any = null;
+let StarfieldScene: any = null;
+let VoidScene: any = null;
+let GlobalCameraController: any = null;
+let RichEditor: any = null;
+let BlogAutosave: any = null;
+let QuillEditorHook: any = null;
+let CollaborativeQuillHook: any = null;
+
+// Load heavy modules asynchronously after socket is connected
+const loadHeavyModules = async () => {
+  try {
+    console.log('📦 Loading heavy modules (Three.js, Quill)...');
+    const startTime = performance.now();
+    
+    // Load Three.js scenes in parallel
+    const [galaxyMod, nebulaMod, starfieldMod, voidMod, cameraMod, richEditorMod, blogAutosaveMod, quillMod, collabQuillMod] = await Promise.all([
+      import("./threejs/galaxy-scene"),
+      import("./threejs/scenes/nebula-scene"),
+      import("./threejs/scenes/starfield-scene"),
+      import("./threejs/scenes/void-scene"),
+      import("./threejs/controls/global-camera-controller"),
+      import("./rich_editor"),
+      import("./blog_autosave_hook"),
+      import("./quill_editor_hook"),
+      import("./collaborative_quill_hook")
+    ]);
+    
+    HomeGalaxyScene = galaxyMod.HomeGalaxyScene;
+    NebulaScene = nebulaMod.NebulaScene;
+    StarfieldScene = starfieldMod.StarfieldScene;
+    VoidScene = voidMod.VoidScene;
+    GlobalCameraController = cameraMod.GlobalCameraController;
+    RichEditor = richEditorMod.RichEditor;
+    BlogAutosave = blogAutosaveMod.BlogAutosave;
+    QuillEditorHook = quillMod.default;
+    CollaborativeQuillHook = collabQuillMod.default;
+    
+    // Add to existing Hooks object
+    Object.assign(Hooks, {
+      HomeGalaxyScene,
+      NebulaScene,
+      StarfieldScene,
+      VoidScene,
+      GlobalCameraController,
+      RichEditor,
+      BlogAutosave,
+      QuillEditor: QuillEditorHook,
+      CollaborativeQuill: CollaborativeQuillHook
+    });
+    
+    const loadTime = performance.now() - startTime;
+    console.log(`✅ Heavy modules loaded in ${loadTime.toFixed(0)}ms`);
+    
+    // Trigger static scene initialization now that hooks are available
+    window.dispatchEvent(new CustomEvent('heavy-modules-loaded'));
+  } catch (error) {
+    console.error('❌ Failed to load heavy modules:', error);
+  }
+};
+
+// Start loading heavy modules after a brief delay to let socket connect first
+setTimeout(loadHeavyModules, 50);
 
 // Show progress bar on live navigation and form submits
 topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" })
@@ -773,9 +848,10 @@ const AdminSidebarResizer = {
   }
 };
 
-// Hooks object - register all hooks referenced in templates
-const Hooks = {
-  // Core/site
+// Populate the shared Hooks object (already created at top of file for early socket connection)
+// Note: Heavy modules (Three.js scenes, Quill editors) are loaded dynamically and added later
+Object.assign(Hooks, {
+  // Core/site - lightweight hooks loaded synchronously
   TerminalTypewriter,         // Used on homepage
   AutoDismissFlash,           // Flash notification auto-dismiss
   DeviceFingerprint: DeviceFingerprintHook,
@@ -788,20 +864,9 @@ const Hooks = {
   SidebarResizer,             // Handles forum sidebar resizing and toggling
   AdminSidebarResizer,        // Handles admin sidebar resizing and toggling
   Sortable,                   // Drag and drop for channel reordering
-  // Background Scenes
-  HomeGalaxyScene,            // Default galaxy background
-  NebulaScene,                // Colorful nebula with gas clouds
-  StarfieldScene,             // Hyperspace scrolling stars
-  VoidScene,                  // Minimal void with dim stars
-  GlobalCameraController,     // Global camera controls for all pages
   // Files
   FileDragDrop,
   FileUpload,
-  // Blog/editor
-  RichEditor,
-  BlogAutosave,
-  QuillEditor: QuillEditorHook,
-  CollaborativeQuill: CollaborativeQuillHook,
   // Chat
   MessageReactions,
   MessageList,
@@ -813,24 +878,16 @@ const Hooks = {
   ProfileSettings,
   // Utility
   ReloadPage
-};
+});
+// Note: HomeGalaxyScene, NebulaScene, StarfieldScene, VoidScene, GlobalCameraController,
+// RichEditor, BlogAutosave, QuillEditor, CollaborativeQuill are added dynamically
+// via loadHeavyModules() after socket connects
 
 // Disabled hooks for debugging (add back as needed):
 // MessageReactions, RichEditor, FileDragDrop, FileUpload,
 // BlogAutosave, FormHandler, FormPreserver, DeviceFingerprint
 
-// Connect LiveSocket
-const liveSocket = new LiveSocket("/live", Socket, {
-  params: { _csrf_token: csrfToken },
-  hooks: Hooks
-});
-
-// Expose liveSocket on window
-(window as any).liveSocket = liveSocket
-
-liveSocket.connect()
-
-console.log('✅ Phoenix LiveView connected');
+console.log('✅ Phoenix LiveView lightweight hooks registered');
 // Note: Three.js background scenes are mounted via Phoenix LiveView hooks
 // (phx-hook attributes) so we avoid manual initialization here which
 // can conflict with LiveView's hook lifecycle.
@@ -903,6 +960,15 @@ window.addEventListener('phx:page-loading-stop', () => {
       initializeStaticScenes();
     }
   }, 100);
+});
+
+// Also initialize static scenes when heavy modules finish loading
+window.addEventListener('heavy-modules-loaded', () => {
+  setTimeout(() => {
+    if (document.querySelector('[data-static-scene]')) {
+      initializeStaticScenes();
+    }
+  }, 50);
 });
 
 // MutationObserver fallback: if LiveView removes and re-inserts the canvas during a patch,

@@ -8,9 +8,17 @@ defmodule PhoenixAppWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket "/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]]
+  socket "/live", Phoenix.LiveView.Socket, 
+    websocket: [
+      connect_info: [session: @session_options],
+      timeout: 45_000,  # 45 second timeout (default is 60s)
+      compress: true    # Enable compression for faster data transfer
+    ]
   socket "/socket", PhoenixAppWeb.UserSocket,
-    websocket: true,
+    websocket: [
+      timeout: 45_000,
+      compress: true
+    ],
     longpoll: false
 
   # Serve user uploads from mounted PVC (/app/uploads) or local uploads folder

@@ -47,7 +47,9 @@ defmodule PhoenixAppWeb.Router do
   scope "/", PhoenixAppWeb do
     pipe_through :browser
 
-    live_session :browser,
+    # Single live_session for all LiveViews - enables seamless navigation
+    # Admin routes use :require_admin_user on_mount for access control
+    live_session :app,
     on_mount: {PhoenixAppWeb.UserAuth, :default},
     session: %{},
     layout: {PhoenixAppWeb.Layouts, :app} do
@@ -85,6 +87,22 @@ defmodule PhoenixAppWeb.Router do
     live "/profile/uploads", ProfileUploadsLive, :index
     live "/avatar", AvatarLive, :index
 
+    # Admin routes - access controlled in each LiveView's mount
+    live "/admin", AdminLive.Dashboard, :index
+    live "/admin/blog-management", AdminLive.BlogManagement, :index
+    live "/admin/blog-management/:id", AdminLive.BlogManagement, :edit
+    live "/admin/pages", AdminLive.Pages, :index
+    live "/admin/pages/:id", AdminLive.Pages, :edit
+    live "/admin/products", AdminLive.Products, :index
+    live "/admin/orders", AdminLive.Orders, :index
+    live "/admin/uploads", AdminLive.Uploads, :index
+    live "/admin/user-management", AdminLive.UserManagementLive, :index
+    live "/admin/files", AdminLive.Files, :index
+    live "/admin/sql", AdminLive.SQL, :index
+    live "/admin/security", Admin.SecurityLive, :index
+    live "/admin/api-toolbox", AdminLive.ApiToolbox, :index
+    live "/admin/custom-emojis", AdminLive.CustomEmojis, :index
+
   end
   end
 
@@ -100,35 +118,6 @@ defmodule PhoenixAppWeb.Router do
     post "/auth/2fa/verify", AuthController, :verify_2fa
     post "/auth/2fa/setup", AuthController, :setup_2fa
   end
-
-  # --------------------
-  # Admin LiveViews
-  # --------------------
-  scope "/admin", PhoenixAppWeb do
-    pipe_through :browser
-
-    live_session :admin,
-      on_mount: {PhoenixAppWeb.UserAuth, :require_admin_user},
-      layout: {PhoenixAppWeb.Layouts, :app} do
-
-      live "/", AdminLive.Dashboard, :index
-      live "/blog-management", AdminLive.BlogManagement, :index
-      live "/blog-management/:id", AdminLive.BlogManagement, :edit
-      live "/pages", AdminLive.Pages, :index
-      live "/pages/:id", AdminLive.Pages, :edit
-      live "/products", AdminLive.Products, :index
-      live "/orders", AdminLive.Orders, :index
-      live "/uploads", AdminLive.Uploads, :index
-      live "/user-management", AdminLive.UserManagementLive, :index
-      live "/files", AdminLive.Files, :index
-      live "/sql", AdminLive.SQL, :index
-      live "/security", Admin.SecurityLive, :index
-      live "/api-toolbox", AdminLive.ApiToolbox, :index
-      live "/custom-emojis", AdminLive.CustomEmojis, :index
-    end
-  end
-
-
 
   # --------------------
   # GraphQL API Authentication

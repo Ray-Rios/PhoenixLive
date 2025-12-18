@@ -3,23 +3,22 @@ defmodule PhoenixAppWeb.AdminLive.SQL do
   alias PhoenixApp.Repo
   alias PhoenixAppWeb.Components.AdminSidebar
 
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
+
   def mount(_params, _session, socket) do
-    if socket.assigns.current_user && socket.assigns.current_user.is_admin do
-      {:ok, assign(socket,
-        query: "",
-        results: nil,
-        error: nil,
-        history: [],
-        tables: get_tables(),
-        selected_table: nil,
-        table_info: nil,
-        saved_queries: get_saved_queries(),
-        current_tab: "console",
-        page_title: "SQL Management Console"
-      )}
-    else
-      {:ok, redirect(socket, to: "/")}
-    end
+    # on_mount already verified admin access
+    {:ok, assign(socket,
+      query: "",
+      results: nil,
+      error: nil,
+      history: [],
+      tables: get_tables(),
+      selected_table: nil,
+      table_info: nil,
+      saved_queries: get_saved_queries(),
+      current_tab: "console",
+      page_title: "SQL Management Console"
+    )}
   end
 
   def handle_event("execute_query", %{"query" => query}, socket) do

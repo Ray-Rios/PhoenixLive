@@ -3,23 +3,22 @@ defmodule PhoenixAppWeb.AdminLive.Dashboard do
   alias PhoenixApp.{Accounts, Commerce, Content, Security, RateLimiter}
   alias PhoenixAppWeb.Components.AdminSidebar
 
-  def mount(_params, _session, socket) do
-    if socket.assigns.current_user && socket.assigns.current_user.is_admin do
-      stats = get_dashboard_stats()
-      security_stats = get_security_stats()
-      server_logs = get_server_logs()
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
-      {:ok, assign(socket,
-        stats: stats,
-        security_stats: security_stats,
-        server_logs: server_logs,
-        show_logs_modal: false,
-        page_title: "Admin Dashboard",
-        active_section: :dashboard
-      )}
-    else
-      {:ok, redirect(socket, to: "/")}
-    end
+  def mount(_params, _session, socket) do
+    # on_mount already verified admin access
+    stats = get_dashboard_stats()
+    security_stats = get_security_stats()
+    server_logs = get_server_logs()
+
+    {:ok, assign(socket,
+      stats: stats,
+      security_stats: security_stats,
+      server_logs: server_logs,
+      show_logs_modal: false,
+      page_title: "Admin Dashboard",
+      active_section: :dashboard
+    )}
   end
 
   def handle_event("toggle_logs_modal", _params, socket) do

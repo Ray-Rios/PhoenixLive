@@ -4,19 +4,17 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
   alias PhoenixApp.RateLimiter
   alias PhoenixAppWeb.Components.AdminSidebar
 
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
+
   @impl true
   def mount(_params, _session, socket) do
-    # Ensure user is admin
-    if socket.assigns[:current_user] && socket.assigns.current_user.is_admin do
-      if connected?(socket) do
-        # Update stats every 5 seconds
-        :timer.send_interval(5000, self(), :update_stats)
-      end
-
-      {:ok, load_security_data(socket)}
-    else
-      {:ok, socket |> put_flash(:error, "Access denied") |> redirect(to: "/")}
+    # on_mount already verified admin access
+    if connected?(socket) do
+      # Update stats every 5 seconds
+      :timer.send_interval(5000, self(), :update_stats)
     end
+
+    {:ok, load_security_data(socket)}
   end
 
   @impl true

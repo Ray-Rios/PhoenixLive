@@ -37,10 +37,9 @@ defmodule PhoenixAppWeb.ForumLive do
         public_channels: public_channels,
         private_channels: all_private_channels,
         current_channel: default_channel,
-        pinned_messages: [], # Will be populated in handle_params
+        pinned_messages: [],
         current_message: "",
-        online_users: [], # Will be populated in handle_params
-        # last read id and last seen timestamp used to display read markers
+        online_users: [],
         last_read_message_id: nil,
         last_seen_at: nil,
         typing_users: MapSet.new(),
@@ -48,6 +47,7 @@ defmodule PhoenixAppWeb.ForumLive do
         creating_user_channel: false,
         channel_form: to_form(Forum.change_channel(%Forum.Channel{})),
         page_title: "Forum - #{default_channel.name}",
+        can_moderate: Forum.can_moderate_channel?(user, default_channel),
         show_channel_modal: false,
         editing_channel: nil,
         message_attachments: [],
@@ -71,7 +71,7 @@ defmodule PhoenixAppWeb.ForumLive do
       |> allow_upload(:forum_attachment,
         accept: ~w(.jpg .jpeg .png .gif .webp .pdf .mp4 .webm .mov .avi .mp3 .wav .ogg .m4a .flac .zip .tar .gz),
         max_entries: 5,
-        max_file_size: 100_000_000,  # 100MB for video files
+        max_file_size: 100_000_000,
         auto_upload: true
       )
       |> allow_upload(:reply_attachment,
@@ -93,10 +93,6 @@ defmodule PhoenixAppWeb.ForumLive do
         auto_upload: true,
         progress: &handle_channel_icon_progress/3
       )
-      
-      can_moderate = Forum.can_moderate_channel?(user, default_channel)
-
-      socket = assign(socket, can_moderate: can_moderate)
 
       {:ok, socket}
     else
@@ -106,140 +102,150 @@ defmodule PhoenixAppWeb.ForumLive do
 
   @impl true
   def handle_params(%{"channel_id" => channel_id}, _uri, socket) do
-    channel = Forum.get_channel!(channel_id)
-    user = socket.assigns.current_user
-    
-    # Check if user has access to this channel
-    has_access = can_access_channel?(channel, user)
-    
-    if has_access do
-      messages = Forum.list_messages(channel_id)
-      # populate last_read_message_id if we have a channel membership record
-      last_read = case Forum.get_channel_member(channel_id, user && user.id) do
-        %_{} = m -> m.last_read_message_id
-        _ -> nil
-      end
-      active_stream = Forum.get_active_stream(channel_id)
+    # Skip heavy work in disconnected state - mount will re-run when connected
+    if not connected?(socket) do
+      {:noreply, assign(socket, loading: true)}
+    else
+      channel = Forum.get_channel!(channel_id)
+      user = socket.assigns.current_user
       
-      # Handle channel switching and presence tracking
-      # Only unsubscribe if we are tracking a DIFFERENT channel
-      # IMPORTANT: Compare channel.id (UUID) not channel_id (string from params)
-      if socket.assigns[:tracked_channel_id] && socket.assigns.tracked_channel_id != channel.id do
-        PubSub.unsubscribe(PhoenixApp.PubSub, "channel:#{socket.assigns.tracked_channel_id}")
-        PubSub.unsubscribe(PhoenixApp.PubSub, "presence:channel:#{socket.assigns.tracked_channel_id}")
-        if connected?(socket) do
+      # Check if user has access to this channel
+      has_access = can_access_channel?(channel, user)
+      
+      if has_access do
+        messages = Forum.list_messages(channel_id)
+        # populate last_read_message_id if we have a channel membership record
+        last_read = case Forum.get_channel_member(channel_id, user && user.id) do
+          %_{} = m -> m.last_read_message_id
+          _ -> nil
+        end
+        active_stream = Forum.get_active_stream(channel_id)
+        
+        # Handle channel switching and presence tracking
+        # Only unsubscribe if we are tracking a DIFFERENT channel
+        if socket.assigns[:tracked_channel_id] && socket.assigns.tracked_channel_id != channel.id do
+          PubSub.unsubscribe(PhoenixApp.PubSub, "channel:#{socket.assigns.tracked_channel_id}")
+          PubSub.unsubscribe(PhoenixApp.PubSub, "presence:channel:#{socket.assigns.tracked_channel_id}")
           PhoenixAppWeb.Presence.untrack(self(), "presence:channel:#{socket.assigns.tracked_channel_id}", to_string(user.id))
         end
-      end
-      
-      # Subscribe to new channel if not already tracked
-      if socket.assigns[:tracked_channel_id] != channel.id do
-        PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel_id}")
-        PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel_id}")
+        
+        # Subscribe to new channel if not already tracked
+        if socket.assigns[:tracked_channel_id] != channel.id do
+          PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel_id}")
+          PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel_id}")
 
-        if connected?(socket) and user do
-          Logger.info("handle_params tracking presence for user #{user.id} in channel #{channel_id}")
-          case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel_id}", to_string(user.id), %{
-            name: user.name || user.email,
-            email: user.email,
-            avatar_url: user.avatar_url,
-            avatar_color: user.avatar_color,
-            avatar_shape: user.avatar_shape,
-            avatar_opacity: user.avatar_opacity,
-            role: user.role,
-            bio: Map.get(user, :bio),
-            inserted_at: user.inserted_at,
-            online_at: DateTime.utc_now()
-          }) do
-            {:ok, _} -> Logger.info("Successfully tracked user #{user.id}")
-            {:error, reason} -> Logger.error("Failed to track user #{user.id}: #{inspect(reason)}")
+          if user do
+            Logger.info("handle_params tracking presence for user #{user.id} in channel #{channel_id}")
+            case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel_id}", to_string(user.id), %{
+              name: user.name || user.email,
+              email: user.email,
+              avatar_url: user.avatar_url,
+              avatar_color: user.avatar_color,
+              avatar_shape: user.avatar_shape,
+              avatar_opacity: user.avatar_opacity,
+              role: user.role,
+              bio: Map.get(user, :bio),
+              inserted_at: user.inserted_at,
+              online_at: DateTime.utc_now()
+            }) do
+              {:ok, _} -> Logger.info("Successfully tracked user #{user.id}")
+              {:error, reason} -> Logger.error("Failed to track user #{user.id}: #{inspect(reason)}")
+            end
           end
         end
+
+        # Refresh presence list for new channel
+        presences = PhoenixAppWeb.Presence.list("presence:channel:#{channel_id}")
+        Logger.info("handle_params presences for channel #{channel_id}: #{inspect(Map.keys(presences))}")
+        online_users = Enum.map(presences, fn {uid, meta} ->
+          metas = Map.get(meta, :metas, [])
+          latest = List.last(metas) || %{}
+          Map.put(latest, :id, uid)
+        end)
+        
+        can_moderate = Forum.can_moderate_channel?(user, channel)
+        pinned_messages = Forum.list_pinned_messages(channel.id)
+
+        {:noreply, 
+         socket
+         |> assign(
+          current_channel: channel,
+          tracked_channel_id: channel.id,
+          pinned_messages: pinned_messages,
+          last_read_message_id: last_read,
+          active_stream: active_stream,
+          page_title: "Chat - #{channel.name}",
+          online_users: online_users,
+          can_moderate: can_moderate,
+          loading: false
+        )
+        |> stream(:messages, messages, reset: true, dom_id: fn m -> "messages-#{m.id}" end)}
+      else
+        # User doesn't have access - redirect to general channel
+        general_channel = Forum.get_or_create_default_channel()
+        
+        socket = socket
+          |> put_flash(:error, "You don't have access to that channel")
+          |> push_navigate(to: "/forum/#{general_channel.id}")
+        
+        {:noreply, socket}
       end
-
-      # Refresh presence list for new channel
-      presences = PhoenixAppWeb.Presence.list("presence:channel:#{channel_id}")
-      Logger.info("handle_params presences for channel #{channel_id}: #{inspect(Map.keys(presences))}")
-      online_users = Enum.map(presences, fn {uid, meta} ->
-        metas = Map.get(meta, :metas, [])
-        latest = List.last(metas) || %{}
-        Map.put(latest, :id, uid)
-      end)
-      
-      can_moderate = Forum.can_moderate_channel?(user, channel)
-      pinned_messages = Forum.list_pinned_messages(channel.id)
-
-      {:noreply, 
-       socket
-       |> assign(
-        current_channel: channel,
-        tracked_channel_id: channel.id,
-        pinned_messages: pinned_messages,
-        last_read_message_id: last_read,
-        active_stream: active_stream,
-        page_title: "Chat - #{channel.name}",
-        online_users: online_users,
-        can_moderate: can_moderate
-      )
-      |> stream(:messages, messages, reset: true, dom_id: fn m -> "messages-#{m.id}" end)}
-    else
-      # User doesn't have access - redirect to general channel
-      general_channel = Forum.get_or_create_default_channel()
-      
-      socket = socket
-        |> put_flash(:error, "You don't have access to that channel")
-        |> push_navigate(to: "/forum/#{general_channel.id}")
-      
-      {:noreply, socket}
     end
   end
 
   def handle_params(_params, _uri, socket) do
-    if socket.assigns[:current_channel] do
-      channel = socket.assigns.current_channel
-      messages = Forum.list_messages(channel.id)
-      pinned_messages = Forum.list_pinned_messages(channel.id)
-      
-      # Subscribe to channel updates and presence updates if not already tracked
-      if socket.assigns[:tracked_channel_id] != channel.id do
-        PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel.id}")
-        PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel.id}")
+    # Skip heavy work in disconnected state
+    if not connected?(socket) do
+      {:noreply, assign(socket, loading: true)}
+    else
+      if socket.assigns[:current_channel] do
+        channel = socket.assigns.current_channel
+        messages = Forum.list_messages(channel.id)
+        pinned_messages = Forum.list_pinned_messages(channel.id)
+        
+        # Subscribe to channel updates and presence updates if not already tracked
+        if socket.assigns[:tracked_channel_id] != channel.id do
+          PubSub.subscribe(PhoenixApp.PubSub, "channel:#{channel.id}")
+          PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel.id}")
 
-        if connected?(socket) and socket.assigns.current_user do
-          case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel.id}", to_string(socket.assigns.current_user.id), %{
-            name: socket.assigns.current_user.name || socket.assigns.current_user.email,
-            online_at: DateTime.utc_now()
-          }) do
-            {:ok, _} -> Logger.info("Successfully tracked user #{socket.assigns.current_user.id}")
-            {:error, reason} -> Logger.error("Failed to track user #{socket.assigns.current_user.id}: #{inspect(reason)}")
+          if socket.assigns.current_user do
+            case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel.id}", to_string(socket.assigns.current_user.id), %{
+              name: socket.assigns.current_user.name || socket.assigns.current_user.email,
+              online_at: DateTime.utc_now()
+            }) do
+              {:ok, _} -> Logger.info("Successfully tracked user #{socket.assigns.current_user.id}")
+              {:error, reason} -> Logger.error("Failed to track user #{socket.assigns.current_user.id}: #{inspect(reason)}")
+            end
           end
         end
-      end
-      
-      last_read = case Forum.get_channel_member(channel.id, socket.assigns.current_user && socket.assigns.current_user.id) do
-        %_{} = m -> m.last_read_message_id
-        _ -> nil
-      end
+        
+        last_read = case Forum.get_channel_member(channel.id, socket.assigns.current_user && socket.assigns.current_user.id) do
+          %_{} = m -> m.last_read_message_id
+          _ -> nil
+        end
 
-      # Fetch online users
-      presences = PhoenixAppWeb.Presence.list("presence:channel:#{channel.id}")
-      online_users = Enum.map(presences, fn {user_id, meta} ->
-        metas = Map.get(meta, :metas, [])
-        latest = List.last(metas) || %{}
-        %{id: user_id, name: latest.name, online_at: latest.online_at}
-      end)
+        # Fetch online users
+        presences = PhoenixAppWeb.Presence.list("presence:channel:#{channel.id}")
+        online_users = Enum.map(presences, fn {user_id, meta} ->
+          metas = Map.get(meta, :metas, [])
+          latest = List.last(metas) || %{}
+          %{id: user_id, name: latest.name, online_at: latest.online_at}
+        end)
 
-      {:noreply, 
-       socket
-       |> assign( 
-        pinned_messages: pinned_messages, 
-        last_read_message_id: last_read, 
-        online_users: online_users,
-        tracked_channel_id: channel.id
-      )
-      |> stream(:messages, messages, reset: true, dom_id: fn m -> "messages-#{m.id}" end)}
-    else
-      {:noreply, socket}
+        {:noreply, 
+         socket
+         |> assign( 
+          pinned_messages: pinned_messages, 
+          last_read_message_id: last_read, 
+          online_users: online_users,
+          tracked_channel_id: channel.id,
+          can_moderate: Forum.can_moderate_channel?(socket.assigns.current_user, channel),
+          loading: false
+        )
+        |> stream(:messages, messages, reset: true, dom_id: fn m -> "messages-#{m.id}" end)}
+      else
+        {:noreply, assign(socket, loading: false)}
+      end
     end
   end
 

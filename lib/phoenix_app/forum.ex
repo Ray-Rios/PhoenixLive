@@ -66,6 +66,11 @@ defmodule PhoenixApp.Forum do
     |> Repo.update()
     |> case do
       {:ok, updated_channel} ->
+        # If icon_path changed, delete the old icon file
+        if channel.icon_path && channel.icon_path != updated_channel.icon_path do
+          PhoenixApp.Uploads.delete_file(channel.icon_path)
+        end
+
         pubsub_broadcast("chat:channels", {:channel_updated, updated_channel})
         {:ok, updated_channel}
       error -> error

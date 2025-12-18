@@ -159,9 +159,11 @@ if smtp_host != "" do
   no_mx_lookups: false,
   tls_options: tls_options_base
 else
-  # No SMTP configured: use local mailbox preview (Swoosh mailbox preview route or logs)
+  # No SMTP configured: use Logger adapter (cluster-safe, just logs emails)
+  # Note: Swoosh.Adapters.Local uses global processes which cause conflicts in clustered deployments
   config :phoenix_app, PhoenixApp.Mailer,
-    adapter: Swoosh.Adapters.Local
+    adapter: Swoosh.Adapters.Logger,
+    level: :info
 end
 
 # -------------------------------------------------

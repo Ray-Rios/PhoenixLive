@@ -41,10 +41,12 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   pubsub_server: PhoenixApp.PubSub
 
 # ----------------------------
-# Mailer
+# Mailer (default - overridden by runtime.exs in prod)
+# Using Logger adapter as default since Local adapter causes global process conflicts in clusters
 # ----------------------------
 config :phoenix_app, PhoenixApp.Mailer,
-  adapter: Swoosh.Adapters.Local
+  adapter: Swoosh.Adapters.Logger,
+  level: :info
 
 # ----------------------------
 # Esbuild (JS bundler)

@@ -7,11 +7,15 @@ defmodule PhoenixAppWeb.AdminLive.CustomEmojis do
   alias PhoenixApp.Forum
   alias PhoenixAppWeb.Components.AdminSidebar
 
+  on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
+
   @impl true
   def mount(_params, _session, socket) do
+    # on_mount already verified admin access
+    # Additional check for emoji management permissions
     user = socket.assigns.current_user
     
-    if user && Forum.can_manage_emojis?(user) do
+    if Forum.can_manage_emojis?(user) do
       custom_emojis = Forum.list_custom_emojis()
       
       {:ok, assign(socket,
