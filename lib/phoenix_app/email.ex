@@ -6,10 +6,8 @@ defmodule PhoenixApp.Email do
   alias PhoenixApp.Email.Service
 
   def send_password_reset_email(%{password_reset_token: token} = user) when not is_nil(token) do
-    case Service.send_password_reset_email(user, token) do
-      {:ok, _} -> {:ok, "Password reset email sent"}
-      {:error, reason} -> {:error, reason}
-    end
+    {:ok, _} = Service.send_password_reset_email(user, token)
+    {:ok, "Password reset email sent"}
   end
 
   def send_password_reset_email(_user) do

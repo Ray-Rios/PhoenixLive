@@ -11,7 +11,7 @@ defmodule PhoenixAppWeb.ForumLive do
     user = socket.assigns.current_user
 
     if user do
-      # Get all channels
+      # Get all channels - needed for both static and live render
       all_channels = Forum.list_channels()
       
       # Split channels strictly by is_private flag
@@ -30,8 +30,11 @@ defmodule PhoenixAppWeb.ForumLive do
       # Default channel should be first public or first private accessible
       default_channel = List.first(public_channels) || List.first(all_private_channels) || Forum.get_or_create_default_channel()
 
-      # Subscribe to global channel updates only
-      Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "chat:channels")
+      # Only subscribe to PubSub when connected (not in static render)
+      # Note: user_sessions disconnect is handled by UserAuth.on_mount hook
+      if connected?(socket) do
+        Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "chat:channels")
+      end
 
       socket = assign(socket,
         public_channels: public_channels,
@@ -65,7 +68,8 @@ defmodule PhoenixAppWeb.ForumLive do
         show_invite_modal: false,
         tracked_channel_id: nil,
         auto_scroll_enabled: true,
-        sidebar_open: true
+        sidebar_open: true,
+        loading: not connected?(socket)
       )
       |> stream(:messages, [], dom_id: fn m -> "messages-#{m.id}" end)
       |> allow_upload(:forum_attachment,
@@ -209,12 +213,21 @@ defmodule PhoenixAppWeb.ForumLive do
           PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{channel.id}")
 
           if socket.assigns.current_user do
-            case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel.id}", to_string(socket.assigns.current_user.id), %{
-              name: socket.assigns.current_user.name || socket.assigns.current_user.email,
+            user = socket.assigns.current_user
+            case PhoenixAppWeb.Presence.track(self(), "presence:channel:#{channel.id}", to_string(user.id), %{
+              name: user.name || user.email,
+              email: user.email,
+              avatar_url: user.avatar_url,
+              avatar_color: user.avatar_color,
+              avatar_shape: user.avatar_shape,
+              avatar_opacity: user.avatar_opacity,
+              role: user.role,
+              bio: Map.get(user, :bio),
+              inserted_at: user.inserted_at,
               online_at: DateTime.utc_now()
             }) do
-              {:ok, _} -> Logger.info("Successfully tracked user #{socket.assigns.current_user.id}")
-              {:error, reason} -> Logger.error("Failed to track user #{socket.assigns.current_user.id}: #{inspect(reason)}")
+              {:ok, _} -> Logger.info("Successfully tracked user #{user.id}")
+              {:error, reason} -> Logger.error("Failed to track user #{user.id}: #{inspect(reason)}")
             end
           end
         end
@@ -224,12 +237,12 @@ defmodule PhoenixAppWeb.ForumLive do
           _ -> nil
         end
 
-        # Fetch online users
+        # Fetch online users with full avatar info
         presences = PhoenixAppWeb.Presence.list("presence:channel:#{channel.id}")
         online_users = Enum.map(presences, fn {user_id, meta} ->
           metas = Map.get(meta, :metas, [])
           latest = List.last(metas) || %{}
-          %{id: user_id, name: latest.name, online_at: latest.online_at}
+          Map.merge(latest, %{id: user_id})
         end)
 
         {:noreply, 
@@ -267,15 +280,22 @@ defmodule PhoenixAppWeb.ForumLive do
     user = socket.assigns.current_user
     channel = socket.assigns.current_channel
 
-    # Debug logging
-    Logger.info("User attempting to send message - is_admin: #{inspect(Map.get(user, :is_admin))}, role: #{inspect(Map.get(user, :role))}, channel is_private: #{channel.is_private}")
-
-    # Prevent banned users from sending messages
-    if user && Map.get(user, :role) == "banned" do
-      {:noreply, put_flash(socket, :error, "You are banned from posting messages.")}
+    # Re-fetch user from database to check for ban status (socket user might be stale)
+    fresh_user = PhoenixApp.Accounts.get_user(user.id)
+    
+    # Check if user has been banned or disabled since page load
+    if fresh_user == nil or fresh_user.status != "active" or fresh_user.role == "banned" do
+      Logger.info("Blocked message from banned/disabled user #{user.id}")
+      {:noreply, 
+       socket
+       |> put_flash(:error, "Your account has been suspended.")
+       |> redirect(to: "/auth/logout")}
     else
+      # Debug logging
+      Logger.info("User attempting to send message - is_admin: #{inspect(Map.get(user, :is_admin))}, role: #{inspect(Map.get(user, :role))}, channel is_private: #{channel.is_private}")
+
       # Check if user has access to post in this channel
-      if !can_access_channel?(channel, user) do
+      if !can_access_channel?(channel, fresh_user) do
         Logger.warning("User #{user.id} denied access to channel #{channel.id}")
         {:noreply, put_flash(socket, :error, "You don't have permission to post in this channel.")}
       else
@@ -573,18 +593,23 @@ defmodule PhoenixAppWeb.ForumLive do
         {:noreply, put_flash(socket, :error, "Message not found")}
         
       message ->
-        user = socket.assigns.current_user
+        # Don't allow pinning replies - only top-level messages can be pinned
+        if message.reply_to_id != nil and not message.is_pinned do
+          {:noreply, put_flash(socket, :error, "Replies cannot be pinned. Pin the original message instead.")}
+        else
+          user = socket.assigns.current_user
 
-        case Forum.toggle_message_pin(user, message) do
-          {:ok, updated_message} ->
-            status = if updated_message.is_pinned, do: "pinned", else: "unpinned"
-            {:noreply, put_flash(socket, :info, "Message #{status}")}
-          
-          {:error, :forbidden} ->
-            {:noreply, put_flash(socket, :error, "Permission denied")}
+          case Forum.toggle_message_pin(user, message) do
+            {:ok, updated_message} ->
+              status = if updated_message.is_pinned, do: "pinned", else: "unpinned"
+              {:noreply, put_flash(socket, :info, "Message #{status}")}
             
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to update pin status")}
+            {:error, :forbidden} ->
+              {:noreply, put_flash(socket, :error, "Permission denied")}
+              
+            {:error, _} ->
+              {:noreply, put_flash(socket, :error, "Failed to update pin status")}
+          end
         end
     end
   end
@@ -615,20 +640,13 @@ defmodule PhoenixAppWeb.ForumLive do
       message ->
         user = socket.assigns.current_user
         
-        # Check if user already reacted with this emoji
-        has_reacted = Enum.any?(message.reactions, fn r -> 
-          r.user_id == user.id && r.emoji == emoji 
-        end)
-
-        # Remove any existing reactions from this user first (one reaction per user)
-        Forum.remove_all_user_reactions(message, user)
-        
-        # Only add if they didn't already have this reaction (toggle behavior)
-        if !has_reacted do
-          Forum.add_reaction(message, user, emoji)
+        # Toggle reaction - allows up to 5 different emoji reactions per user per message
+        case Forum.toggle_reaction(message, user, emoji) do
+          {:error, :limit_reached} ->
+            {:noreply, put_flash(socket, :error, "You can only add up to 5 reactions per message. Remove one to add another.")}
+          _ ->
+            {:noreply, socket}
         end
-        
-        {:noreply, socket}
     end
   end
 
@@ -1382,7 +1400,10 @@ defmodule PhoenixAppWeb.ForumLive do
       root_id = get_root_message_id(message)
       case Forum.get_message(root_id) do
         nil -> {:noreply, socket} # Root message deleted, ignore
-        root -> {:noreply, stream_insert(socket, :messages, root)}
+        root -> 
+          # Update pinned messages if root (or any ancestor) is pinned
+          socket = update_pinned_message_if_needed(socket, root)
+          {:noreply, stream_insert(socket, :messages, root)}
       end
     else
       # Messages are stored oldest -> newest. When a new message arrives we should
@@ -1423,11 +1444,17 @@ defmodule PhoenixAppWeb.ForumLive do
     case Forum.get_message(reaction.message_id) do
       nil -> {:noreply, socket}
       message -> 
+        # Update pinned messages if this message (or its parent) is pinned
+        socket = update_pinned_message_if_needed(socket, message)
+        
         if message.reply_to_id do
           root_id = get_root_message_id(message)
           case Forum.get_message(root_id) do
             nil -> {:noreply, socket}
-            root -> {:noreply, stream_insert(socket, :messages, root)}
+            root -> 
+              # Also update pinned if root is pinned
+              socket = update_pinned_message_if_needed(socket, root)
+              {:noreply, stream_insert(socket, :messages, root)}
           end
         else
           {:noreply, stream_insert(socket, :messages, message)}
@@ -1439,11 +1466,17 @@ defmodule PhoenixAppWeb.ForumLive do
     case Forum.get_message(reaction.message_id) do
       nil -> {:noreply, socket}
       message -> 
+        # Update pinned messages if this message (or its parent) is pinned
+        socket = update_pinned_message_if_needed(socket, message)
+        
         if message.reply_to_id do
           root_id = get_root_message_id(message)
           case Forum.get_message(root_id) do
             nil -> {:noreply, socket}
-            root -> {:noreply, stream_insert(socket, :messages, root)}
+            root -> 
+              # Also update pinned if root is pinned
+              socket = update_pinned_message_if_needed(socket, root)
+              {:noreply, stream_insert(socket, :messages, root)}
           end
         else
           {:noreply, stream_insert(socket, :messages, message)}
@@ -1466,7 +1499,11 @@ defmodule PhoenixAppWeb.ForumLive do
   end
 
   def handle_info({:message_deleted, %PhoenixApp.Forum.Message{} = message}, socket) do
+    # Remove the deleted message from pinned list if it was pinned
     pinned_messages = Enum.filter(socket.assigns.pinned_messages, &(&1.id != message.id))
+    
+    # Also update pinned messages if the deleted message was a reply to a pinned message
+    pinned_messages = update_pinned_messages_for_deleted_reply(pinned_messages, message)
     
     socket = assign(socket, pinned_messages: pinned_messages)
 
@@ -1484,7 +1521,18 @@ defmodule PhoenixAppWeb.ForumLive do
 
   def handle_info({:message_deleted, message_id}, socket) do
     # Fallback for legacy calls or if message struct wasn't passed
+    # Remove from pinned if the message itself was pinned
     pinned_messages = Enum.filter(socket.assigns.pinned_messages, &(&1.id != message_id))
+    
+    # Also refresh any pinned message that contained this as a reply
+    pinned_messages = Enum.map(pinned_messages, fn pinned_msg ->
+      if message_contains_reply?(pinned_msg, message_id) do
+        Forum.get_message(pinned_msg.id) || pinned_msg
+      else
+        pinned_msg
+      end
+    end)
+    
     {:noreply, 
      socket 
      |> assign(pinned_messages: pinned_messages)
@@ -1582,8 +1630,17 @@ defmodule PhoenixAppWeb.ForumLive do
       # also subscribe to presence topic and track our presence in it
       PubSub.subscribe(PhoenixApp.PubSub, "presence:channel:#{default_channel.id}")
       if connected?(socket) and socket.assigns.current_user do
-        PhoenixAppWeb.Presence.track(self(), "presence:channel:#{default_channel.id}", to_string(socket.assigns.current_user.id), %{
-          name: socket.assigns.current_user.name || socket.assigns.current_user.email,
+        user = socket.assigns.current_user
+        PhoenixAppWeb.Presence.track(self(), "presence:channel:#{default_channel.id}", to_string(user.id), %{
+          name: user.name || user.email,
+          email: user.email,
+          avatar_url: user.avatar_url,
+          avatar_color: user.avatar_color,
+          avatar_shape: user.avatar_shape,
+          avatar_opacity: user.avatar_opacity,
+          role: user.role,
+          bio: Map.get(user, :bio),
+          inserted_at: user.inserted_at,
           online_at: DateTime.utc_now()
         })
       end
@@ -1595,11 +1652,11 @@ defmodule PhoenixAppWeb.ForumLive do
       )
       |> stream(:messages, Forum.list_messages(default_channel.id), reset: true, dom_id: fn m -> "messages-#{m.id}" end)
       
-      # Refresh online users list for the new channel
+      # Refresh online users list for the new channel with full avatar info
       online_users = PhoenixAppWeb.Presence.list("presence:channel:#{default_channel.id}") |> Enum.map(fn {uid, meta} ->
         metas = Map.get(meta, :metas, [])
         latest = List.last(metas) || %{}
-        %{id: uid, name: latest.name, online_at: latest.online_at}
+        Map.merge(latest, %{id: uid})
       end)
 
       {:noreply, assign(socket, online_users: online_users) |> push_navigate(to: "/forum/#{default_channel.id}")}
@@ -1675,6 +1732,15 @@ defmodule PhoenixAppWeb.ForumLive do
   def render(assigns) do
     ~H"""
     <PhoenixAppWeb.Components.PageContainer.fullscreen_container>
+      <%= if @loading do %>
+        <%!-- Loading state while WebSocket connects --%>
+        <div class="flex-1 flex items-center justify-center">
+          <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+            <p class="text-gray-400">Connecting to chat...</p>
+          </div>
+        </div>
+      <% else %>
       <div class="flex-1 flex flex-row overflow-hidden">
         <%!-- Sidebar with glass theme --%>
         <div 
@@ -1890,14 +1956,21 @@ defmodule PhoenixAppWeb.ForumLive do
             
             <%!-- Pinned Messages Section (Scrollable) --%>
             <%= if length(@pinned_messages) > 0 do %>
-              <div class="bg-gray-100/50 dark:bg-gray-800/50 border border-gray-700 p-2 mb-4 rounded-lg">
-                <div class="text-xs font-bold text-yellow-500 mb-2 flex items-center gap-1">
-                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+              <div class="dark-glass border border-yellow-500/30 p-3 mb-4 rounded-lg shadow-lg">
+                <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
                   PINNED MESSAGES
                 </div>
-                <div class="space-y-2">
+                <div class="space-y-3">
                   <%= for message <- @pinned_messages do %>
-                    <div class="bg-white/5 dark:bg-black/20 rounded p-2 border border-gray-200/10 dark:border-gray-700/30">
+                    <div class="bg-black/20 rounded-lg p-3 border border-yellow-500/10 hover:border-yellow-500/30 transition-colors">
+                      <%!-- Show context if this is a pinned reply --%>
+                      <%= if message.reply_to_id do %>
+                        <div class="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                          Reply to a message
+                        </div>
+                      <% end %>
                       <.message_item 
                         message={message} 
                         current_user={@current_user} 
@@ -2417,6 +2490,7 @@ defmodule PhoenixAppWeb.ForumLive do
         </div>
       </div>
     <% end %>
+    <% end %>
     </PhoenixAppWeb.Components.PageContainer.fullscreen_container>
     """
   end
@@ -2560,7 +2634,7 @@ defmodule PhoenixAppWeb.ForumLive do
                 </button>
               <% end %>
 
-              <%= if @can_moderate do %>
+              <%= if @can_moderate and is_nil(@message.reply_to_id) do %>
                 <button 
                   type="button"
                   phx-click="toggle_pin" 
@@ -2659,21 +2733,24 @@ defmodule PhoenixAppWeb.ForumLive do
                 <span class="text-xs text-gray-600 dark:text-gray-400 ml-1"><%= count %></span>
               </button>
             <% end %>
-            <%!-- Quick add reaction button (shows on message hover) --%>
-            <div class="relative opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
-                type="button"
-                phx-click={JS.toggle(to: "#reaction-dropdown-#{@message.id}", in: "fade-in-scale", out: "fade-out-scale")}
-                class="flex items-center px-2 py-0.5 rounded-full text-sm hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"
-                title="Add reaction"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <%!-- Quick add reaction button (shows on message hover, hidden when user has 5 reactions) --%>
+            <% user_reaction_count = Enum.count(@message.reactions, fn r -> r.user_id == @current_user.id end) %>
+            <%= if user_reaction_count < 5 do %>
+              <div class="relative opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                  type="button"
+                  phx-click={JS.toggle(to: "#reaction-dropdown-#{@message.id}", in: "fade-in-scale", out: "fade-out-scale")}
+                  class="flex items-center px-2 py-0.5 rounded-full text-sm hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                  title="Add reaction"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                 </svg>
               </button>
               <%!-- Full emoji reaction dropdown with categories --%>
               <.reaction_emoji_picker id={"reaction-dropdown-#{@message.id}"} message_id={@message.id} />
             </div>
+            <% end %>
           </div>
           
           <%!-- Collapsible Replies removed (using recursive Nested Replies below) --%>
@@ -2890,6 +2967,60 @@ defmodule PhoenixAppWeb.ForumLive do
       parent -> get_root_message_id(parent)
     end
   end
+
+  # Helper to update a message in the pinned_messages list if it exists there
+  defp update_pinned_message_if_needed(socket, message) do
+    pinned_messages = socket.assigns.pinned_messages
+    
+    # Check if this message is in the pinned list
+    if Enum.any?(pinned_messages, &(&1.id == message.id)) do
+      updated_pinned = Enum.map(pinned_messages, fn m ->
+        if m.id == message.id, do: message, else: m
+      end)
+      assign(socket, pinned_messages: updated_pinned)
+    else
+      # Check if any pinned message contains this as a reply (nested)
+      # We need to refresh the whole pinned message to get updated replies
+      updated_pinned = Enum.map(pinned_messages, fn pinned_msg ->
+        if message_contains_reply?(pinned_msg, message.id) do
+          # Refresh the pinned message from DB to get updated reply data
+          Forum.get_message(pinned_msg.id) || pinned_msg
+        else
+          pinned_msg
+        end
+      end)
+      assign(socket, pinned_messages: updated_pinned)
+    end
+  end
+
+  # Check if a message contains a specific reply (recursively)
+  defp message_contains_reply?(message, reply_id) do
+    replies = if Ecto.assoc_loaded?(message.replies), do: message.replies, else: []
+    Enum.any?(replies, fn r ->
+      r.id == reply_id || message_contains_reply?(r, reply_id)
+    end)
+  end
+
+  # Update pinned messages when a reply is deleted (refresh parent if needed)
+  defp update_pinned_messages_for_deleted_reply(pinned_messages, deleted_message) do
+    # If the deleted message was a reply, check if its parent is pinned
+    if deleted_message.reply_to_id do
+      Enum.map(pinned_messages, fn pinned_msg ->
+        # Check if this pinned message contains the deleted reply
+        if message_contains_reply?(pinned_msg, deleted_message.id) or 
+           pinned_msg.id == deleted_message.reply_to_id or
+           get_root_message_id(deleted_message) == pinned_msg.id do
+          # Refresh the pinned message from DB to get updated reply data
+          Forum.get_message(pinned_msg.id) || pinned_msg
+        else
+          pinned_msg
+        end
+      end)
+    else
+      pinned_messages
+    end
+  end
+
   defp sort_channels(public_channels, private_channels, user) do
     order = user.channel_order || []
     

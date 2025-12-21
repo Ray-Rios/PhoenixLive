@@ -5,6 +5,7 @@ defmodule PhoenixAppWeb.UserAuth do
 
   use Phoenix.Component
   import Phoenix.LiveView
+  require Logger
 
   alias PhoenixApp.Accounts
 
@@ -18,30 +19,65 @@ defmodule PhoenixAppWeb.UserAuth do
   """
   def on_mount(:default, _params, session, socket) do
     socket = assign_current_user(socket, session)
-    {:cont, socket}
+    user = socket.assigns.current_user
+    
+    # For authenticated users, always check status and subscribe to disconnect events
+    if user do
+      if user.status != "active" or user.role == "banned" do
+        {:halt,
+         socket
+         |> put_flash(:error, "Your account has been suspended.")
+         |> logout()}
+      else
+        socket = setup_disconnect_subscription(socket, user)
+        {:cont, socket}
+      end
+    else
+      {:cont, socket}
+    end
   end
 
   def on_mount(:require_authenticated_user, _params, session, socket) do
     socket = assign_current_user(socket, session)
+    user = socket.assigns.current_user
 
-    if socket.assigns.current_user do
-      {:cont, socket}
-    else
-      {:halt, push_navigate(socket, to: "/login")}
+    cond do
+      # Check if user is banned or disabled
+      user && (user.status != "active" or user.role == "banned") ->
+        {:halt,
+         socket
+         |> put_flash(:error, "Your account has been suspended.")
+         |> logout()}
+
+      user ->
+        socket = setup_disconnect_subscription(socket, user)
+        {:cont, socket}
+
+      true ->
+        {:halt, push_navigate(socket, to: "/login")}
     end
   end
 
   def on_mount(:require_admin_user, _params, session, socket) do
     socket = assign_current_user(socket, session)
+    user = socket.assigns.current_user
 
     cond do
-      socket.assigns.current_user == nil ->
+      user == nil ->
         {:halt, push_navigate(socket, to: "/login")}
 
-      not socket.assigns.current_user.is_admin ->
+      # Check if user is banned or disabled (even if they were admin)
+      user.status != "active" or user.role == "banned" ->
+        {:halt,
+         socket
+         |> put_flash(:error, "Your account has been suspended.")
+         |> logout()}
+
+      not user.is_admin ->
         {:halt, push_navigate(socket, to: "/")}
 
       true ->
+        socket = setup_disconnect_subscription(socket, user)
         {:cont, socket}
     end
   end
@@ -57,10 +93,54 @@ defmodule PhoenixAppWeb.UserAuth do
     socket
     |> Phoenix.LiveView.push_event("clear-session", %{}) # JS hook can clear local storage if used
     |> assign(:current_user, nil)
-    |> Phoenix.LiveView.push_navigate(to: "/login")
+    |> Phoenix.LiveView.redirect(to: "/auth/logout") # Use controller logout to clear cookie
   end
 
   # --- Helpers ---
+
+  # Sets up PubSub subscription and hook for disconnect events
+  # Only attaches hook once per socket lifecycle (tracked via assign)
+  defp setup_disconnect_subscription(socket, user) do
+    # Only set up once - check if we've already done this
+    already_attached = socket.assigns[:auth_hook_attached] == true
+    
+    if already_attached do
+      socket
+    else
+      if connected?(socket) do
+        Logger.debug("UserAuth: subscribing user #{user.id} to disconnect topic")
+        # Use Phoenix.PubSub directly for cluster-wide message delivery
+        Phoenix.PubSub.subscribe(PhoenixApp.PubSub, "user_sessions:#{user.id}")
+      end
+      
+      socket
+      |> assign(:auth_hook_attached, true)
+      |> attach_hook(:auth_security, :handle_info, &handle_auth_info/2)
+    end
+  end
+
+  # Handle Phoenix.PubSub broadcasts (plain map format)
+  defp handle_auth_info(%{event: "disconnect"} = msg, socket) do
+    require Logger
+    user_id = socket.assigns.current_user && socket.assigns.current_user.id
+    Logger.info("Received disconnect broadcast for user #{user_id}: #{inspect(msg)}")
+    {:halt,
+     socket
+     |> put_flash(:error, "Your session has been terminated.")
+     |> logout()}
+  end
+  
+  # Fallback for Phoenix.Socket.Broadcast format (from Endpoint.broadcast)
+  defp handle_auth_info(%Phoenix.Socket.Broadcast{topic: "user_sessions:" <> _, event: "disconnect"}, socket) do
+    require Logger
+    Logger.info("Received disconnect broadcast (Broadcast struct) for user #{socket.assigns.current_user && socket.assigns.current_user.id}")
+    {:halt,
+     socket
+     |> put_flash(:error, "Your session has been terminated.")
+     |> logout()}
+  end
+  
+  defp handle_auth_info(_, socket), do: {:cont, socket}
 
   defp assign_current_user(socket, %{"user_id" => user_id}) do
     assign_new(socket, :current_user, fn ->

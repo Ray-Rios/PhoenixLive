@@ -2,7 +2,7 @@ defmodule PhoenixAppWeb.ShopLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Commerce
 
-  on_mount {PhoenixAppWeb.UserAuth, :default}
+  # Note: on_mount :default is handled by router's live_session
 
   def mount(_params, _session, socket) do
     products = Commerce.list_products()

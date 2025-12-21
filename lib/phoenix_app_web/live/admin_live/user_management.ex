@@ -2,6 +2,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
   alias PhoenixAppWeb.Components.AdminSidebar
+  require Logger
 
   # Ensure current_user is loaded and authenticated
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
@@ -85,7 +86,8 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
         users = Accounts.list_users()
         {:noreply, assign(socket, users: users) |> put_flash(:info, "User status updated successfully")}
 
-      {:error, _changeset} ->
+      {:error, changeset} ->
+        Logger.error("Failed to update user status: #{inspect(changeset)}")
         {:noreply, put_flash(socket, :error, "Failed to update user status")}
     end
   end
@@ -191,8 +193,13 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300"><%= user.email %></td>
                       <td class="px-6 py-4 whitespace-nowrap">
-                        <span class={"px-2 inline-flex text-xs leading-5 font-semibold rounded-full #{if (user.status || "active") == "active", do: "bg-green-100 text-green-800", else: "bg-red-100 text-red-800"}"}>
-                          <%= String.capitalize(user.status || "active") %>
+                        <span class={"px-2 inline-flex text-xs leading-5 font-semibold rounded-full #{case user.status do
+                          "active" -> "bg-green-100 text-green-800"
+                          "pending" -> "bg-yellow-100 text-yellow-800"
+                          "disabled" -> "bg-red-100 text-red-800"
+                          _ -> "bg-gray-100 text-gray-800"
+                        end}"}>
+                          <%= String.capitalize(user.status || "pending") %>
                         </span>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
@@ -239,8 +246,13 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
                               phx-click="toggle_status" 
                               phx-value-user_id={user.id}
                               class={"px-3 py-1 text-xs font-medium rounded-md transition-colors #{if user.status == "active", do: "bg-yellow-600 hover:bg-yellow-700 text-white", else: "bg-green-600 hover:bg-green-700 text-white"}"}
+                              title={if user.status == "pending", do: "Manually activate this user (bypasses email verification)", else: nil}
                             >
-                              <%= if user.status == "active", do: "Disable", else: "Enable" %>
+                              <%= case user.status do %>
+                                <% "active" -> %>Disable
+                                <% "pending" -> %>Activate
+                                <% _ -> %>Enable
+                              <% end %>
                             </button>
                             
                             <%= if @confirm_delete_user_id == user.id do %>

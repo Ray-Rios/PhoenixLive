@@ -24,7 +24,15 @@ defmodule PhoenixAppWeb.AuthLive do
 
     # If user is already logged in, redirect to desktop
     if current_user do
-      {:ok, redirect(socket, to: ~p"/desktop")}
+      # Check if user is banned/disabled before redirecting
+      if current_user.status != "active" or current_user.role == "banned" do
+        # If banned, force logout via controller to clear session
+        {:ok, 
+         socket
+         |> redirect(to: "/auth/logout?reason=suspended")}
+      else
+        {:ok, redirect(socket, to: ~p"/desktop")}
+      end
     else
       form_data = %{}
       form = to_form(form_data, as: "user")

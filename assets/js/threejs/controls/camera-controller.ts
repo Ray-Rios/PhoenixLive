@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class CameraController {
-  private camera: THREE.PerspectiveCamera;
+  public camera: THREE.PerspectiveCamera;  // Public so GlobalCameraController can update it
   private renderer: THREE.WebGLRenderer | null = null;
   private element: HTMLElement;
   private controls: any;

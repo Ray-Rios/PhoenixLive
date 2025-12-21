@@ -647,18 +647,27 @@ defmodule PhoenixApp.Forum do
   Toggles a reaction on a message. If the user has already reacted with this emoji,
   the reaction is removed. Otherwise, a new reaction is added.
   """
+  @max_reactions_per_user 5
+
   def toggle_reaction(message, user, emoji) do
     case Repo.get_by(Reaction, message_id: message.id, user_id: user.id, emoji: emoji) do
       nil ->
-        # No existing reaction - add it
-        %Reaction{}
-        |> Reaction.changeset(%{message_id: message.id, user_id: user.id, emoji: emoji})
-        |> Repo.insert()
-        |> case do
-          {:ok, reaction} ->
-            pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
-            {:ok, :added, reaction}
-          error -> error
+        # No existing reaction with this emoji - check if user is at limit
+        user_reaction_count = count_user_reactions(message.id, user.id)
+        
+        if user_reaction_count >= @max_reactions_per_user do
+          {:error, :limit_reached}
+        else
+          # Add the reaction
+          %Reaction{}
+          |> Reaction.changeset(%{message_id: message.id, user_id: user.id, emoji: emoji})
+          |> Repo.insert()
+          |> case do
+            {:ok, reaction} ->
+              pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
+              {:ok, :added, reaction}
+            error -> error
+          end
         end
       reaction ->
         # Existing reaction - remove it
@@ -671,18 +680,41 @@ defmodule PhoenixApp.Forum do
     end
   end
 
+  @doc """
+  Counts how many reactions a user has on a specific message.
+  """
+  def count_user_reactions(message_id, user_id) do
+    from(r in Reaction,
+      where: r.message_id == ^message_id and r.user_id == ^user_id,
+      select: count(r.id)
+    )
+    |> Repo.one()
+  end
+
+  @doc """
+  Returns the maximum number of reactions allowed per user per message.
+  """
+  def max_reactions_per_user, do: @max_reactions_per_user
+
   def add_reaction(message, user, emoji) do
     case Repo.get_by(Reaction, message_id: message.id, user_id: user.id, emoji: emoji) do
       nil ->
-        %Reaction{}
-        |> Reaction.changeset(%{message_id: message.id, user_id: user.id, emoji: emoji})
-        |> Repo.insert()
-        |> case do
-          {:ok, reaction} ->
-            reaction = Repo.preload(reaction, :user)
-            pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
-            {:ok, reaction}
-          error -> error
+        # Check if user is at limit
+        user_reaction_count = count_user_reactions(message.id, user.id)
+        
+        if user_reaction_count >= @max_reactions_per_user do
+          {:error, :limit_reached}
+        else
+          %Reaction{}
+          |> Reaction.changeset(%{message_id: message.id, user_id: user.id, emoji: emoji})
+          |> Repo.insert()
+          |> case do
+            {:ok, reaction} ->
+              reaction = Repo.preload(reaction, :user)
+              pubsub_broadcast("channel:#{message.channel_id}", {:reaction_added, reaction})
+              {:ok, reaction}
+            error -> error
+          end
         end
       reaction ->
         {:ok, reaction}

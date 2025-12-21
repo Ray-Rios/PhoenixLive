@@ -77,6 +77,8 @@ defmodule PhoenixApp.Accounts.User do
     |> unique_constraint(:email, message: "An account with this email already exists")
     |> put_email_verification_token()
     |> put_password_hash()
+    # New users start as "pending" until email is verified
+    |> put_change(:status, "pending")
   end
 
   # Enhanced email validation
@@ -107,8 +109,8 @@ defmodule PhoenixApp.Accounts.User do
   defp validate_name(changeset) do
     changeset
     |> validate_length(:name, min: 2, max: 100)
-    |> validate_format(:name, ~r/^[a-zA-Z0-9\s\-_\.]+$/, 
-        message: "Name can only contain letters, numbers, spaces, hyphens, underscores, and periods")
+    |> validate_format(:name, ~r/^[a-zA-Z0-9\-_\.]+$/, 
+        message: "Name can only contain letters, numbers, hyphens, underscores, and periods (no spaces)")
     |> unique_constraint(:name, 
         name: :users_name_unique_index,
         message: "This username is already taken. Please choose a different one.")
@@ -348,6 +350,8 @@ defmodule PhoenixApp.Accounts.User do
     |> change()
     |> put_change(:email_verified_at, DateTime.utc_now() |> DateTime.truncate(:second))
     |> put_change(:email_verification_token, nil)
+    # Activate user after email verification (unless manually disabled)
+    |> put_change(:status, if(user.status == "disabled", do: "disabled", else: "active"))
   end
 
   # Lock account changeset

@@ -27,6 +27,8 @@ defmodule PhoenixApp.Application do
       pubsub_child,
       PhoenixAppWeb.Presence,
       {Finch, name: PhoenixApp.Finch},
+      # Task.Supervisor for async email sending
+      {Task.Supervisor, name: PhoenixApp.EmailTaskSupervisor},
       PhoenixApp.UserSession,
       PhoenixApp.PresenceTracker,
       PhoenixApp.Accounts.RateLimit,

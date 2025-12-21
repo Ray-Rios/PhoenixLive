@@ -362,6 +362,104 @@ defmodule PhoenixApp.Accounts do
     user
     |> User.role_changeset(%{is_admin: is_admin, role: role_value})
     |> Repo.update()
+    |> case do
+      {:ok, updated_user} ->
+        # If user is banned, disconnect all sessions immediately and cleanup
+        if role_value == "banned" do
+          disconnect_user_sessions(updated_user)
+          cleanup_banned_user(updated_user)
+        end
+        {:ok, updated_user}
+      error -> error
+    end
+  end
+
+  def cleanup_banned_user(%User{id: user_id} = user) do
+    require Logger
+    Logger.info("Cleaning up banned user #{user_id}")
+
+    Repo.transaction(fn ->
+      import Ecto.Query
+      
+      # 1. Delete all forum messages
+      {deleted_count, _} = Repo.delete_all(from(m in PhoenixApp.Forum.Message, where: m.user_id == ^user_id))
+      Logger.info("Deleted #{deleted_count} forum messages for banned user #{user_id}")
+
+      # 2. Delete all reactions
+      {deleted_reactions, _} = Repo.delete_all(from(r in PhoenixApp.Forum.Reaction, where: r.user_id == ^user_id))
+      Logger.info("Deleted #{deleted_reactions} reactions for banned user #{user_id}")
+
+      # 3. Delete User Files records
+      {files_deleted, _} = Repo.delete_all(from(f in PhoenixApp.Files.UserFile, where: f.user_id == ^user_id))
+      Logger.info("Deleted #{files_deleted} user files records for banned user #{user_id}")
+
+      # 4. Delete Posts (Blog/Content)
+      {posts_deleted, _} = Repo.delete_all(from(p in PhoenixApp.Content.Post, where: p.user_id == ^user_id))
+      Logger.info("Deleted #{posts_deleted} posts for banned user #{user_id}")
+
+      # 5. Delete Comments
+      {comments_deleted, _} = Repo.delete_all(from(c in PhoenixApp.Content.Comment, where: c.user_id == ^user_id))
+      Logger.info("Deleted #{comments_deleted} comments for banned user #{user_id}")
+
+      # 6. Delete Game Chat Messages (Legacy)
+      if table_exists?("game_chat_messages") and column_exists?("game_chat_messages", "user_id") do
+        res = Repo.query!("DELETE FROM game_chat_messages WHERE user_id = $1", [user_id])
+        Logger.info("Deleted #{res.num_rows} rows from game_chat_messages for banned user #{user_id}")
+      end
+
+      # 7. Delete Game Events (Legacy)
+      if table_exists?("game_events") do
+        cond do
+          column_exists?("game_events", "user_id") ->
+            res = Repo.query!("DELETE FROM game_events WHERE user_id = $1", [user_id])
+            Logger.info("Deleted #{res.num_rows} rows from game_events for banned user #{user_id}")
+          column_exists?("game_events", "player_id") ->
+            res = Repo.query!("DELETE FROM game_events WHERE player_id = $1", [user_id])
+            Logger.info("Deleted #{res.num_rows} rows from game_events for banned user #{user_id}")
+          true -> :ok
+        end
+      end
+
+      # 8. Delete Game Sessions
+      if table_exists?("game_sessions") do
+        {sessions_deleted, _} = Repo.delete_all(from(gs in PhoenixApp.Game.GameSession, where: gs.user_id == ^user_id))
+        Logger.info("Deleted #{sessions_deleted} game sessions for banned user #{user_id}")
+      end
+
+      # 9. Delete Device Fingerprints & Login Attempts
+      {fp_deleted, _} = Repo.delete_all(from(df in PhoenixApp.Security.DeviceFingerprint, where: df.user_id == ^user_id))
+      {login_deleted, _} = Repo.delete_all(from(la in PhoenixApp.Security.LoginAttempt, where: la.user_id == ^user_id))
+      Logger.info("Deleted #{fp_deleted} fingerprints and #{login_deleted} login attempts for banned user #{user_id}")
+
+      # 10. Delete Tokens
+      {tokens_deleted, _} = Repo.delete_all(from(t in PhoenixApp.Accounts.UserToken, where: t.user_id == ^user_id))
+      Logger.info("Deleted #{tokens_deleted} user tokens for banned user #{user_id}")
+
+      # 11. Clear avatar URL in database
+      user
+      |> User.avatar_changeset(%{avatar_url: nil, avatar_file: nil})
+      |> Repo.update()
+    end)
+    |> case do
+      {:ok, _} ->
+        # 12. Delete user's upload directory from filesystem
+        user_upload_dir = PhoenixApp.Uploads.user_dir(user_id)
+        case File.rm_rf(user_upload_dir) do
+          {:ok, _files} ->
+            Logger.info("Removed upload directory for banned user #{user_id}: #{user_upload_dir}")
+          {:error, reason, _} ->
+            Logger.error("Failed to remove upload directory for banned user #{user_id}: #{inspect(reason)}")
+        end
+      {:error, reason} ->
+        Logger.error("Failed to cleanup banned user #{user_id}: #{inspect(reason)}")
+    end
+  end
+
+  def disconnect_user_sessions(%User{id: user_id}) do
+    require Logger
+    Logger.info("Broadcasting disconnect to user_sessions:#{user_id}")
+    # Use Phoenix.PubSub directly for cluster-wide message delivery
+    Phoenix.PubSub.broadcast(PhoenixApp.PubSub, "user_sessions:#{user_id}", %{event: "disconnect", user_id: user_id})
   end
 
   def count_users do
@@ -430,15 +528,32 @@ defmodule PhoenixApp.Accounts do
   end
 
   def enable_user(%User{} = user) do
+    # When admin enables a user, also verify their email (acts like admin bypass)
+    attrs = %{status: "active"}
+    
+    # If email not yet verified, verify it now
+    attrs = if is_nil(user.email_verified_at) do
+      Map.put(attrs, :email_verified_at, DateTime.utc_now())
+    else
+      attrs
+    end
+    
     user
-    |> User.status_changeset(%{status: "active"})
+    |> User.admin_changeset(attrs)
     |> Repo.update()
   end
 
   def disable_user(%User{} = user) do
-    user
+    result = user
     |> User.status_changeset(%{status: "disabled"})
     |> Repo.update()
+    
+    case result do
+      {:ok, updated_user} ->
+        disconnect_user_sessions(updated_user)
+        {:ok, updated_user}
+      error -> error
+    end
   end
 
   # ---------------------

@@ -28,10 +28,15 @@ defmodule PhoenixAppWeb.AuthController do
   end
 
   # Logs out the user and returns them to homepage
-  def logout(conn, _params) do
+  def logout(conn, params) do
+    {flash_type, message} = case params["reason"] do
+      "suspended" -> {:error, "Your account has been suspended."}
+      _ -> {:info, "You have been logged out"}
+    end
+
     conn
     |> clear_session()
-    |> put_flash(:info, "You have been logged out")
+    |> put_flash(flash_type, message)
     |> redirect(to: ~p"/")
   end
 end

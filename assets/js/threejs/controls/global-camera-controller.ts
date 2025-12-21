@@ -11,8 +11,16 @@ export const GlobalCameraController = {
   isLoggedIn: false,
   animationId: null as number | null,
   controlElement: null as HTMLElement | null,
+  _isMounted: false,
 
   mounted(this: any) {
+    // Prevent duplicate mounting
+    if (this._isMounted) {
+      console.log('🎥 Global Camera Controller already mounted, skipping');
+      return;
+    }
+    this._isMounted = true;
+    
     console.log('🎥 Global Camera Controller mounted');
 
     // Check if user is logged in by looking for user data
@@ -35,41 +43,47 @@ export const GlobalCameraController = {
     const controlLayer = document.getElementById('camera-control-canvas');
     if (controlLayer) {
       // For now, keep the global controls as primary
-      console.log('� Found additional control layer, but using global controls');
+      console.log('📍 Found additional control layer, but using global controls');
     }
 
     // Start animation loop for camera updates (runs even if controller not yet attached)
     this.startAnimationLoop();
 
     // Listen for scene initialization to take control of their cameras
-    window.addEventListener('scene-initialized', (event: any) => {
+    this._sceneInitHandler = (event: any) => {
       if (event.detail && event.detail.scene && event.detail.camera) {
         console.log('🎬 Scene initialized, updating camera reference');
         this.activeScene = event.detail.scene;
-        this.camera = event.detail.camera;
-
-        const sceneCanvas: HTMLElement | null = event.detail.canvas || null;
-
-        // If we don't have a controller yet, create one
-        // Otherwise, just update the camera reference - keep the same controller!
-        if (!this.controller) {
-          this.controlElement = sceneCanvas;
-          this.controller = new CameraController(this.camera, this.controlElement || undefined);
+        
+        // Update the camera reference in the existing controller
+        // IMPORTANT: Keep the controller attached to document.body so it receives
+        // mouse events even when clicking over UI elements on top of the canvas
+        if (this.controller) {
+          // Update the camera that the controller manipulates
+          this.controller.camera = event.detail.camera;
+          console.log('🔄 Updated controller camera reference to scene camera');
+        } else {
+          // If no controller exists (shouldn't happen), create one on document.body
+          this.camera = event.detail.camera;
+          this.controller = new CameraController(this.camera); // document.body
           this.controller.setAutoRotate(true, 0.0005);
           console.log('🎮 Camera controller created for 3D scene with auto-rotation');
-        } else {
-          // Just update the camera reference, don't recreate the controller
-          this.controller.camera = this.camera;
-          console.log('🔄 Camera reference updated for new scene');
         }
+        
+        // Also store the camera reference
+        this.camera = event.detail.camera;
 
         // Enable camera controls for all users on all pages with 3D scenes
         console.log('✅ Camera controls active for 3D scene');
       }
-    });
+    };
+    window.addEventListener('scene-initialized', this._sceneInitHandler);
+    
+    // Check if a scene has already been initialized before this hook mounted
+    this.checkForExistingScene();
 
     // Listen for camera state requests from other components
-    window.addEventListener('request-camera-state', (event: any) => {
+    this._cameraStateHandler = (event: any) => {
       if (event.detail && typeof event.detail.callback === 'function') {
         event.detail.callback({
           position: this.camera.position.clone(),
@@ -79,9 +93,31 @@ export const GlobalCameraController = {
           }
         });
       }
-    });
+    };
+    window.addEventListener('request-camera-state', this._cameraStateHandler);
 
     console.log('✅ Global camera controller initialized');
+  },
+
+  updated(this: any) {
+    // No action needed on update since we use phx-update="ignore"
+    console.log('🔄 Global Camera Controller updated (no action needed)');
+  },
+
+  checkForExistingScene(this: any) {
+    // Look for an already-initialized scene (in case scene mounted before this controller)
+    const canvas = document.getElementById('global-background-canvas');
+    if (canvas && (canvas as any)._threeJSHook) {
+      const hook = (canvas as any)._threeJSHook;
+      if (hook.camera) {
+        console.log('🔍 Found existing scene, updating camera reference');
+        this.activeScene = hook;
+        this.camera = hook.camera;
+        if (this.controller) {
+          this.controller.camera = hook.camera;
+        }
+      }
+    }
   },
 
   createGlobalControlLayer(this: any) {
@@ -121,6 +157,8 @@ export const GlobalCameraController = {
   destroyed(this: any) {
     console.log('🗑️ Global Camera Controller destroyed');
     
+    this._isMounted = false;
+    
     if (this.animationId !== null) {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
@@ -128,6 +166,17 @@ export const GlobalCameraController = {
     
     if (this.controller && typeof this.controller.dispose === 'function') {
       this.controller.dispose();
+      this.controller = null;
+    }
+    
+    // Remove window event listeners
+    if (this._sceneInitHandler) {
+      window.removeEventListener('scene-initialized', this._sceneInitHandler);
+      this._sceneInitHandler = null;
+    }
+    if (this._cameraStateHandler) {
+      window.removeEventListener('request-camera-state', this._cameraStateHandler);
+      this._cameraStateHandler = null;
     }
   }
 };

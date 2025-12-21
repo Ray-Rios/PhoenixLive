@@ -1,7 +1,7 @@
 defmodule PhoenixAppWeb.HomeLive do
   use PhoenixAppWeb, :live_view
 
-  on_mount {PhoenixAppWeb.UserAuth, :default}
+  # Note: on_mount :default is handled by router's live_session
 
   def mount(_params, _session, socket) do
     # If user is logged in and has a cached location, redirect there

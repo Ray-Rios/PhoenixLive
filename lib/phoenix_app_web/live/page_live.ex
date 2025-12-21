@@ -3,7 +3,7 @@ defmodule PhoenixAppWeb.PageLive do
   alias PhoenixApp.Content
   alias PhoenixAppWeb.Components.RichEditor
 
-  on_mount {PhoenixAppWeb.UserAuth, :default}
+  # Note: on_mount :default is handled by router's live_session
 
   @allowed_roles ["admin", "gm", "editor"]
 

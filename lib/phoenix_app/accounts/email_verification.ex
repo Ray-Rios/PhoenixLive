@@ -176,18 +176,14 @@ defmodule PhoenixApp.Accounts.EmailVerification do
     # Generate a 6-digit verification code
     verification_code = generate_verification_code(user.email_verification_token)
     
-    case PhoenixApp.Email.Service.send_verification_email(user, verification_code) do
-      {:ok, message} ->
-        # Update the sent timestamp
-        user
-        |> Ecto.Changeset.change(email_verification_sent_at: DateTime.utc_now() |> DateTime.truncate(:second))
-        |> Repo.update()
-        
-        {:ok, message}
-      
-      {:error, reason} ->
-        {:error, "Failed to send verification email: #{reason}"}
-    end
+    {:ok, message} = PhoenixApp.Email.Service.send_verification_email(user, verification_code)
+    
+    # Update the sent timestamp
+    user
+    |> Ecto.Changeset.change(email_verification_sent_at: DateTime.utc_now() |> DateTime.truncate(:second))
+    |> Repo.update()
+    
+    {:ok, message}
   end
 
   # Generate a consistent 6-digit code from the token

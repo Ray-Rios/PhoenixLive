@@ -117,21 +117,19 @@ defmodule PhoenixAppWeb.Components.MediaPreview do
   # Audio preview with HTML5 player and download button
   defp audio_preview(assigns) do
     ~H"""
-    <div class="audio-preview max-w-md group">
-      <div class="rounded-lg p-4 transition-all">
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center flex-1 min-w-0 mr-3">
-            <svg class="w-6 h-6 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-            </svg>
-            <span class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-              <%= @attachment.file_name %>
-            </span>
-          </div>
+    <div class="audio-preview w-full min-w-[320px] max-w-xl group">
+      <div class="dark-glass rounded-lg p-4 transition-all">
+        <div class="flex items-center gap-3 mb-3">
+          <svg class="w-6 h-6 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+          </svg>
+          <span class="text-sm font-medium text-gray-200 truncate flex-1">
+            <%= @attachment.file_name %>
+          </span>
           <a 
             href={@attachment.url_path} 
             download
-            class="flex-shrink-0 p-2 text-blue-500 hover:text-blue-600 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors opacity-0 group-hover:opacity-100 transition-opacity"
+            class="flex-shrink-0 p-2 text-blue-500 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
             title="Download audio"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -139,12 +137,12 @@ defmodule PhoenixAppWeb.Components.MediaPreview do
             </svg>
           </a>
         </div>
-        <audio controls class="w-full">
+        <audio controls class="w-full h-10" style="min-width: 280px;">
           <source src={@attachment.url_path} type={@attachment.file_type || "audio/mpeg"} />
           Your browser does not support the audio element.
         </audio>
         <%= if @show_filename do %>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <p class="text-xs text-gray-400 mt-2">
             <%= format_file_size(@attachment.file_size) %>
           </p>
         <% end %>

@@ -1,6 +1,10 @@
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
 import "phoenix_html";
 
+// App version for cache debugging
+const APP_VERSION = "2025.12.20.1";
+console.log(`🔧 PhoenixApp v${APP_VERSION}`);
+
 // Phoenix LiveView - CONNECT IMMEDIATELY before heavy imports
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";

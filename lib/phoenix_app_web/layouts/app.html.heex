@@ -1,8 +1,8 @@
 <div class="min-h-screen">
-  <!-- Global Hooks -->
-  <div id="global-camera-hook" phx-hook="GlobalCameraController" class="hidden" aria-hidden="true"></div>
-  <div id="glass-theme-hook" phx-hook="GlassTheme" class="hidden" aria-hidden="true"></div>
-  <div id="background-updater-hook" phx-hook="BackgroundUpdater" class="hidden" aria-hidden="true"></div>
+  <!-- Global Hooks - phx-update="ignore" prevents re-mounting on navigation -->
+  <div id="global-camera-hook" phx-hook="GlobalCameraController" phx-update="ignore" class="hidden" aria-hidden="true"></div>
+  <div id="glass-theme-hook" phx-hook="GlassTheme" phx-update="ignore" class="hidden" aria-hidden="true"></div>
+  <div id="background-updater-hook" phx-hook="BackgroundUpdater" phx-update="ignore" class="hidden" aria-hidden="true"></div>
 
   <!-- Background rendering moved to root layout to avoid LiveView patches replacing the canvas -->
   <!-- Background preference logic temporarily disabled until migration adds DB columns -->
