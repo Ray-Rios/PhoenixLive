@@ -4,6 +4,7 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   alias PhoenixApp.Content.Post
   alias PhoenixApp.Content.Media
   alias PhoenixAppWeb.Components.AdminSidebar
+  alias PhoenixAppWeb.Components.BlockEditor
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
@@ -198,6 +199,9 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     
     case Content.delete_post(post) do
       {:ok, _post} ->
+        # Delete uploaded files for this blog post
+        PhoenixApp.Uploads.delete_content_uploads("blog", id)
+        
         posts = Content.list_posts()
         {:noreply, assign(socket, posts: posts) |> put_flash(:info, "Post deleted successfully!")}
       
@@ -376,15 +380,14 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                     </button>
                   </div>
                   
-                  <div id="blog-post-editor-wrapper" class="quill-editor-wrapper" phx-update="ignore">
-                    <div id="blog-post-editor" 
-                         phx-hook="QuillEditor" 
-                         data-placeholder="Write your post content here..."
-                         data-initial-content={Phoenix.HTML.Form.input_value(@form, :content)}
-                         class="quill-editor bg-gray-800 text-white rounded-lg min-h-[400px]">
-                    </div>
-                  </div>
-                  <input type="hidden" name={@form[:content].name} id="blog-post-editor-input" value={Phoenix.HTML.Form.input_value(@form, :content)} />
+                  <BlockEditor.block_editor
+                    id="blog-post-editor"
+                    value={Phoenix.HTML.Form.input_value(@form, :content)}
+                    field={@form[:content]}
+                    placeholder="Build your blog post content..."
+                    min_height="500px"
+                    autosave_delay={5000}
+                  />
                   <%= for {msg, _} <- @form[:content].errors do %>
                     <.error><%= msg %></.error>
                   <% end %>

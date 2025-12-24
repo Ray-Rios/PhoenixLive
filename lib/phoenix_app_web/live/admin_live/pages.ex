@@ -3,6 +3,7 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
   alias PhoenixApp.Content
   alias PhoenixApp.Content.Page
   alias PhoenixAppWeb.Components.AdminSidebar
+  alias PhoenixAppWeb.Components.BlockEditor
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
@@ -69,7 +70,11 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
   def handle_event("delete_page", %{"id" => id}, socket) do
     page = Content.get_page!(id)
     case Content.delete_page(page) do
-      {:ok, _} -> {:noreply, assign(socket, pages: Content.list_pages()) |> put_flash(:info, "Page deleted")}
+      {:ok, _} -> 
+        # Delete uploaded files for this page
+        PhoenixApp.Uploads.delete_content_uploads("pages", id)
+        
+        {:noreply, assign(socket, pages: Content.list_pages()) |> put_flash(:info, "Page deleted")}
       {:error, _} -> {:noreply, put_flash(socket, :error, "Failed to delete page")}
     end
   end
@@ -113,15 +118,14 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
                 <!-- Content Section -->
                 <div class="glass-dark p-6 rounded-lg space-y-4">
                   <h3 class="text-lg font-semibold text-white mb-4">Content</h3>
-                  <div id="page-content-editor-wrapper" class="quill-editor-wrapper" phx-update="ignore">
-                    <div id="page-content-editor" 
-                         phx-hook="QuillEditor" 
-                         data-placeholder="Write your page content..."
-                         data-initial-content={Phoenix.HTML.Form.input_value(@form, :content)}
-                         class="quill-editor bg-gray-800 text-white rounded-lg min-h-[400px]">
-                    </div>
-                  </div>
-                  <input type="hidden" name={@form[:content].name} id="page-content-editor-input" value={Phoenix.HTML.Form.input_value(@form, :content)} />
+                  <BlockEditor.block_editor
+                    id="page-content-editor"
+                    value={Phoenix.HTML.Form.input_value(@form, :content)}
+                    field={@form[:content]}
+                    placeholder="Build your page content..."
+                    min_height="500px"
+                    autosave_delay={5000}
+                  />
                   <%= for {msg, _} <- @form[:content].errors do %>
                     <.error><%= msg %></.error>
                   <% end %>

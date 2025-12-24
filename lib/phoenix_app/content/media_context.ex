@@ -93,4 +93,38 @@ defmodule PhoenixApp.Content.Media do
     )
     |> Repo.all()
   end
+
+  @doc "Get a single media item by ID, returns nil if not found"
+  def get_user_media(id) do
+    Repo.get(UserMedia, id)
+  end
+
+  @doc "Get media by its URL path"
+  def get_media_by_url(url) when is_binary(url) do
+    # Try to find media by url field or file_path
+    from(m in UserMedia, 
+      where: m.url == ^url or m.file_path == ^url,
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  @doc "Delete user media and optionally remove the file from filesystem"
+  def delete_user_media(%UserMedia{} = media, opts \\ []) do
+    delete_file = Keyword.get(opts, :delete_file, true)
+    
+    # Delete the record first
+    case Repo.delete(media) do
+      {:ok, deleted} ->
+        # Try to delete the physical file
+        if delete_file and media.file_path do
+          file_path = Path.join(Application.app_dir(:phoenix_app, "priv/static"), media.file_path)
+          File.rm(file_path)
+        end
+        {:ok, deleted}
+      
+      error ->
+        error
+    end
+  end
 end

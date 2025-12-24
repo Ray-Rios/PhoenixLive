@@ -10,7 +10,7 @@ defmodule PhoenixAppWeb.Components.PageContainer do
   
   ## Attributes
   - `class` - Additional CSS classes (default: "")
-  - `max_width` - Max width constraint (default: "max-w-[80%]")
+  - `max_width` - Max width constraint (default: "max-w-[90%]")
   - `glass` - Apply glass theme (default: true)
   - `center` - Center content horizontally (default: true)
   
@@ -18,7 +18,7 @@ defmodule PhoenixAppWeb.Components.PageContainer do
   - `inner_block` - Page content
   """
   attr :class, :string, default: ""
-  attr :max_width, :string, default: "max-w-[80%]"
+  attr :max_width, :string, default: "max-w-[90%]"
   attr :glass, :boolean, default: true
   attr :center, :boolean, default: true
   slot :inner_block, required: true

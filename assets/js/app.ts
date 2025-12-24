@@ -2,37 +2,23 @@
 import "phoenix_html";
 
 // App version for cache debugging
-const APP_VERSION = "2025.12.20.1";
+const APP_VERSION = "2025.12.21.2";
 console.log(`🔧 PhoenixApp v${APP_VERSION}`);
 
-// Phoenix LiveView - CONNECT IMMEDIATELY before heavy imports
+// Phoenix LiveView - import but DON'T connect until hooks are ready
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 
 // CSRF token - get it early
 const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
 
-// Placeholder hooks object - will be populated after heavy imports load
-const Hooks: Record<string, any> = {};
-
-// Create and connect LiveSocket IMMEDIATELY with minimal hooks
-// This ensures WebSocket connection starts while heavy JS loads
-const liveSocket = new LiveSocket("/live", Socket, {
-  params: { _csrf_token: csrfToken },
-  hooks: Hooks,
-  // Connection timeout settings for faster reconnection
-  timeout: 10000, // 10 second timeout
-});
-
-// Expose liveSocket on window early
-(window as any).liveSocket = liveSocket;
-
-// Connect immediately - don't wait for heavy imports
-liveSocket.connect();
-console.log('🚀 Phoenix LiveSocket connecting (early)...');
-
 // Topbar for progress indicators
 import topbar from "./topbar";
+
+// Show progress bar on live navigation and form submits
+topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" })
+window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
+window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
 // Import lightweight TypeScript hooks (non-blocking)
 import { TerminalTypewriter } from "./terminal_typewriter";
@@ -49,8 +35,11 @@ import { AudioHook } from "./audio";
 // Import Desktop hooks
 import "./desktop";
 
-// Defer heavy Three.js and Quill imports - load them after socket connects
-// These will be loaded dynamically and added to Hooks when ready
+// Global LiveSocket reference
+let liveSocket: LiveSocket | null = null;
+
+// Defer heavy Three.js and Quill imports - load them BEFORE socket connects
+// This prevents double-mount issues
 let HomeGalaxyScene: any = null;
 let NebulaScene: any = null;
 let StarfieldScene: any = null;
@@ -60,66 +49,158 @@ let RichEditor: any = null;
 let BlogAutosave: any = null;
 let QuillEditorHook: any = null;
 let CollaborativeQuillHook: any = null;
+let BlockEditorHook: any = null;
 
-// Load heavy modules asynchronously after socket is connected
-const loadHeavyModules = async () => {
+// Heavy module loading function (called after inline hooks are defined)
+async function loadHeavyModulesAndConnect() {
   try {
-    console.log('📦 Loading heavy modules (Three.js, Quill)...');
+    console.log('📦 Loading essential modules first (BlockEditor, Quill)...');
     const startTime = performance.now();
     
-    // Load Three.js scenes in parallel
-    const [galaxyMod, nebulaMod, starfieldMod, voidMod, cameraMod, richEditorMod, blogAutosaveMod, quillMod, collabQuillMod] = await Promise.all([
-      import("./threejs/galaxy-scene"),
-      import("./threejs/scenes/nebula-scene"),
-      import("./threejs/scenes/starfield-scene"),
-      import("./threejs/scenes/void-scene"),
-      import("./threejs/controls/global-camera-controller"),
+    // PHASE 1: Load essential page hooks FIRST (BlockEditor, Quill, etc.)
+    // These are needed for page functionality - load them before connecting
+    const [richEditorMod, blogAutosaveMod, quillMod, collabQuillMod, blockEditorMod] = await Promise.all([
       import("./rich_editor"),
       import("./blog_autosave_hook"),
       import("./quill_editor_hook"),
-      import("./collaborative_quill_hook")
+      import("./collaborative_quill_hook"),
+      import("./block_editor_hook")
     ]);
     
-    HomeGalaxyScene = galaxyMod.HomeGalaxyScene;
-    NebulaScene = nebulaMod.NebulaScene;
-    StarfieldScene = starfieldMod.StarfieldScene;
-    VoidScene = voidMod.VoidScene;
-    GlobalCameraController = cameraMod.GlobalCameraController;
     RichEditor = richEditorMod.RichEditor;
     BlogAutosave = blogAutosaveMod.BlogAutosave;
     QuillEditorHook = quillMod.default;
     CollaborativeQuillHook = collabQuillMod.default;
+    BlockEditorHook = blockEditorMod.default;
     
-    // Add to existing Hooks object
-    Object.assign(Hooks, {
-      HomeGalaxyScene,
-      NebulaScene,
-      StarfieldScene,
-      VoidScene,
-      GlobalCameraController,
+    const essentialLoadTime = performance.now() - startTime;
+    console.log(`✅ Essential modules loaded in ${essentialLoadTime.toFixed(0)}ms`);
+    
+    // Build Hooks object with essential hooks + placeholders for Three.js
+    const Hooks: Record<string, any> = {
+      // Essential page hooks (loaded)
       RichEditor,
       BlogAutosave,
       QuillEditor: QuillEditorHook,
-      CollaborativeQuill: CollaborativeQuillHook
+      CollaborativeQuill: CollaborativeQuillHook,
+      BlockEditor: BlockEditorHook,
+      // Lightweight hooks (imported synchronously at top)
+      TerminalTypewriter,
+      FileDragDrop,
+      FileUpload,
+      Sortable,
+      DeviceFingerprint: DeviceFingerprintHook,
+      GlassTheme,
+      BackgroundUpdater,
+      ...GlobalHooks,
+      ProfileSettings,
+      ColorPicker,
+      OpacitySlider,
+      AudioHook,
+      // Inline hooks (defined below in this file)
+      AutoDismissFlash: (window as any)._AutoDismissFlash,
+      MessageReactions: (window as any)._MessageReactions,
+      MessageList: (window as any)._MessageList,
+      DesktopWindow: (window as any).DesktopWindow,
+      ResizeHandle: (window as any).ResizeHandle,
+      ChatInput: (window as any)._ChatInput,
+      ReloadPage: (window as any)._ReloadPage,
+      FullscreenContainer: (window as any)._FullscreenContainer,
+      SidebarResizer: (window as any)._SidebarResizer,
+      AdminSidebarResizer: (window as any)._AdminSidebarResizer,
+      // Placeholder Three.js hooks - will be replaced when loaded
+      HomeGalaxyScene: { mounted() { console.log('⏳ HomeGalaxyScene loading...'); } },
+      NebulaScene: { mounted() { console.log('⏳ NebulaScene loading...'); } },
+      StarfieldScene: { mounted() { console.log('⏳ StarfieldScene loading...'); } },
+      VoidScene: { mounted() { console.log('⏳ VoidScene loading...'); } },
+      GlobalCameraController: { mounted() { console.log('⏳ GlobalCameraController loading...'); } }
+    };
+    
+    // Create and connect LiveSocket NOW - essential hooks ready
+    liveSocket = new LiveSocket("/live", Socket, {
+      params: { _csrf_token: csrfToken },
+      hooks: Hooks,
+      timeout: 10000,
     });
     
-    const loadTime = performance.now() - startTime;
-    console.log(`✅ Heavy modules loaded in ${loadTime.toFixed(0)}ms`);
+    // Expose liveSocket globally
+    (window as any).liveSocket = liveSocket;
     
-    // Trigger static scene initialization now that hooks are available
-    window.dispatchEvent(new CustomEvent('heavy-modules-loaded'));
+    // Connect NOW - page is usable immediately
+    liveSocket.connect();
+    console.log('🚀 Phoenix LiveSocket connected (essential hooks ready)');
+    
+    // PHASE 2: Load Three.js modules in background (non-blocking)
+    console.log('🎨 Loading Three.js scenes in background...');
+    Promise.all([
+      import("./threejs/galaxy-scene"),
+      import("./threejs/scenes/nebula-scene"),
+      import("./threejs/scenes/starfield-scene"),
+      import("./threejs/scenes/void-scene"),
+      import("./threejs/controls/global-camera-controller")
+    ]).then(([galaxyMod, nebulaMod, starfieldMod, voidMod, cameraMod]) => {
+      HomeGalaxyScene = galaxyMod.HomeGalaxyScene;
+      NebulaScene = nebulaMod.NebulaScene;
+      StarfieldScene = starfieldMod.StarfieldScene;
+      VoidScene = voidMod.VoidScene;
+      GlobalCameraController = cameraMod.GlobalCameraController;
+      
+      // Update hooks in the existing liveSocket
+      Hooks.HomeGalaxyScene = HomeGalaxyScene;
+      Hooks.NebulaScene = NebulaScene;
+      Hooks.StarfieldScene = StarfieldScene;
+      Hooks.VoidScene = VoidScene;
+      Hooks.GlobalCameraController = GlobalCameraController;
+      
+      const totalLoadTime = performance.now() - startTime;
+      console.log(`✅ Three.js scenes loaded in ${totalLoadTime.toFixed(0)}ms`);
+      
+      // Trigger scene initialization for any static scene containers
+      window.dispatchEvent(new CustomEvent('heavy-modules-loaded'));
+    }).catch(err => {
+      console.warn('⚠️ Three.js scenes failed to load (non-critical):', err);
+    });
+    
   } catch (error) {
-    console.error('❌ Failed to load heavy modules:', error);
+    console.error('❌ Failed to load essential modules:', error);
+    
+    // Fallback: Connect without heavy hooks so page is still usable
+    const fallbackHooks: Record<string, any> = {
+      TerminalTypewriter,
+      FileDragDrop,
+      FileUpload,
+      Sortable,
+      DeviceFingerprint: DeviceFingerprintHook,
+      GlassTheme,
+      BackgroundUpdater,
+      ...GlobalHooks,
+      ProfileSettings,
+      ColorPicker,
+      OpacitySlider,
+      AudioHook,
+      AutoDismissFlash: (window as any)._AutoDismissFlash,
+      MessageReactions: (window as any)._MessageReactions,
+      MessageList: (window as any)._MessageList,
+      DesktopWindow: (window as any).DesktopWindow,
+      ResizeHandle: (window as any).ResizeHandle,
+      ChatInput: (window as any)._ChatInput,
+      ReloadPage: (window as any)._ReloadPage,
+      FullscreenContainer: (window as any)._FullscreenContainer,
+      SidebarResizer: (window as any)._SidebarResizer,
+      AdminSidebarResizer: (window as any)._AdminSidebarResizer
+    };
+    
+    liveSocket = new LiveSocket("/live", Socket, {
+      params: { _csrf_token: csrfToken },
+      hooks: fallbackHooks,
+      timeout: 10000,
+    });
+    
+    (window as any).liveSocket = liveSocket;
+    liveSocket.connect();
+    console.log('🚀 Phoenix LiveSocket connected (fallback, without heavy hooks)');
   }
-};
-
-// Start loading heavy modules after a brief delay to let socket connect first
-setTimeout(loadHeavyModules, 50);
-
-// Show progress bar on live navigation and form submits
-topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" })
-window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
-window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
+}
 
 // Auto-dismiss flash notifications - DISABLED to let AutoDismissFlash hook handle it
 // document.addEventListener('DOMContentLoaded', () => {
@@ -852,46 +933,21 @@ const AdminSidebarResizer = {
   }
 };
 
-// Populate the shared Hooks object (already created at top of file for early socket connection)
-// Note: Heavy modules (Three.js scenes, Quill editors) are loaded dynamically and added later
-Object.assign(Hooks, {
-  // Core/site - lightweight hooks loaded synchronously
-  TerminalTypewriter,         // Used on homepage
-  AutoDismissFlash,           // Flash notification auto-dismiss
-  DeviceFingerprint: DeviceFingerprintHook,
-  GlassTheme,                 // Glass theme customization
-  BackgroundUpdater,          // Background customization
-  ColorPicker,                // Color input handler for LiveView
-  OpacitySlider,              // Opacity slider for avatar border
-  AudioHook,                  // Audio notification system
-  FullscreenContainer,        // Prevents body scrolling on fullscreen pages
-  SidebarResizer,             // Handles forum sidebar resizing and toggling
-  AdminSidebarResizer,        // Handles admin sidebar resizing and toggling
-  Sortable,                   // Drag and drop for channel reordering
-  // Files
-  FileDragDrop,
-  FileUpload,
-  // Chat
-  MessageReactions,
-  MessageList,
-  ChatInput,
-  // Desktop
-  DesktopWindow: (window as any).DesktopWindow,
-  ResizeHandle: (window as any).ResizeHandle,
-  GlobalHooks,
-  ProfileSettings,
-  // Utility
-  ReloadPage
-});
-// Note: HomeGalaxyScene, NebulaScene, StarfieldScene, VoidScene, GlobalCameraController,
-// RichEditor, BlogAutosave, QuillEditor, CollaborativeQuill are added dynamically
-// via loadHeavyModules() after socket connects
+// Register inline hooks on window so they can be accessed by loadHeavyModulesAndConnect
+(window as any)._AutoDismissFlash = AutoDismissFlash;
+(window as any)._MessageReactions = MessageReactions;
+(window as any)._MessageList = MessageList;
+(window as any)._ChatInput = ChatInput;
+(window as any)._ReloadPage = ReloadPage;
+(window as any)._FullscreenContainer = FullscreenContainer;
+(window as any)._SidebarResizer = SidebarResizer;
+(window as any)._AdminSidebarResizer = AdminSidebarResizer;
 
-// Disabled hooks for debugging (add back as needed):
-// MessageReactions, RichEditor, FileDragDrop, FileUpload,
-// BlogAutosave, FormHandler, FormPreserver, DeviceFingerprint
+// NOW that all hooks are defined, load heavy modules and connect LiveSocket
+console.log('⏳ Starting heavy module loading and LiveSocket connection...');
+loadHeavyModulesAndConnect();
 
-console.log('✅ Phoenix LiveView lightweight hooks registered');
+console.log('✅ Phoenix LiveView hooks initialization started');
 // Note: Three.js background scenes are mounted via Phoenix LiveView hooks
 // (phx-hook attributes) so we avoid manual initialization here which
 // can conflict with LiveView's hook lifecycle.
@@ -902,13 +958,20 @@ console.log('✅ Phoenix LiveView lightweight hooks registered');
 // hooks to DOM nodes it didn't render.
 const initializeStaticScenes = () => {
   try {
+    // Get hooks from liveSocket if available
+    const hooks = liveSocket ? (liveSocket as any).opts?.hooks : null;
+    if (!hooks) {
+      console.log('⏳ Waiting for liveSocket hooks to be available...');
+      return;
+    }
+    
     const staticEls = Array.from(document.querySelectorAll('[data-static-scene]')) as HTMLElement[];
     staticEls.forEach((el) => {
       const sceneName = el.getAttribute('data-static-scene');
       if (!sceneName) return;
 
-      // Map scene names to hook constructors available in Hooks
-      const hookConstructor: any = (Hooks as any)[sceneName];
+      // Map scene names to hook constructors available in liveSocket hooks
+      const hookConstructor: any = hooks[sceneName];
       if (!hookConstructor) {
         console.warn('No hook registered for static scene:', sceneName);
         return;
@@ -1079,3 +1142,46 @@ window.addEventListener("phx:open_url", (e: any) => {
     window.open(e.detail.url, '_blank');
   }
 });
+
+// Gallery carousel functionality for rendered blog/page content
+function initGalleryCarousels() {
+  document.querySelectorAll('.gallery.gallery-carousel').forEach((gallery) => {
+    const items = gallery.querySelectorAll('.gallery-item');
+    const dots = gallery.querySelectorAll('.gallery-dot');
+    const prevBtn = gallery.querySelector('.gallery-prev');
+    const nextBtn = gallery.querySelector('.gallery-next');
+    
+    if (items.length <= 1) return;
+    
+    let currentIndex = 0;
+    
+    const showItem = (index: number) => {
+      items.forEach((item, i) => {
+        item.classList.toggle('active', i === index);
+      });
+      dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === index);
+      });
+      currentIndex = index;
+    };
+    
+    const nextItem = () => {
+      showItem((currentIndex + 1) % items.length);
+    };
+    
+    const prevItem = () => {
+      showItem((currentIndex - 1 + items.length) % items.length);
+    };
+    
+    prevBtn?.addEventListener('click', prevItem);
+    nextBtn?.addEventListener('click', nextItem);
+    
+    dots.forEach((dot, i) => {
+      dot.addEventListener('click', () => showItem(i));
+    });
+  });
+}
+
+// Initialize gallery carousels on page load and after LiveView navigation
+window.addEventListener('phx:page-loading-stop', () => setTimeout(initGalleryCarousels, 100));
+document.addEventListener('DOMContentLoaded', initGalleryCarousels);

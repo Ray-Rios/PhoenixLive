@@ -322,6 +322,39 @@ defmodule PhoenixApp.Uploads do
   def url_to_path(_), do: nil
 
   @doc """
+  Delete all uploaded files for a blog post or page.
+  Removes the entire upload directory for the given content type and ID.
+  
+  ## Parameters
+  - `content_type` - Either "blog" or "pages"
+  - `content_id` - The ID of the blog post or page
+  
+  ## Returns
+  - `:ok` - Directory deleted or didn't exist
+  - `{:error, reason}` - Failure with error reason
+  
+  ## Examples
+      delete_content_uploads("blog", 123)
+      delete_content_uploads("pages", 456)
+  """
+  def delete_content_uploads(content_type, content_id) when content_type in ["blog", "pages"] do
+    dir = Path.join([public_dir(), content_type, to_string(content_id)])
+    
+    if File.exists?(dir) do
+      case File.rm_rf(dir) do
+        {:ok, _files} -> 
+          Logger.info("Deleted uploads directory: #{dir}")
+          :ok
+        {:error, reason, file} -> 
+          Logger.error("Failed to delete uploads: #{inspect(reason)} - #{file}")
+          {:error, reason}
+      end
+    else
+      :ok
+    end
+  end
+
+  @doc """
   Lists all uploaded files for a user in a specific context.
   Returns a list of maps with file details.
   """

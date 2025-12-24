@@ -1,7 +1,7 @@
 defmodule PhoenixAppWeb.PageLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
-  alias PhoenixAppWeb.Components.RichEditor
+  alias PhoenixAppWeb.Components.BlockEditor
 
   # Note: on_mount :default is handled by router's live_session
 
@@ -65,22 +65,26 @@ defmodule PhoenixAppWeb.PageLive do
     end
   end
 
-  # Handle Quill editor content changes (real-time save)
-  def handle_event("editor-change", %{"html" => html}, socket) do
+  # Handle block editor content changes
+  def handle_event("editor-change", params, socket) do
     if can_edit?(socket.assigns) and socket.assigns.editing do
-      {:noreply, assign(socket, pending_content: html)}
+      # Prefer JSON block format, fallback to HTML
+      content = Map.get(params, "content") || Map.get(params, "html", "")
+      {:noreply, assign(socket, pending_content: content)}
     else
       {:noreply, socket}
     end
   end
 
   # Handle auto-save from editor
-  def handle_event("editor-autosave", %{"html" => html}, socket) do
+  def handle_event("editor-autosave", params, socket) do
     if can_edit?(socket.assigns) and socket.assigns.editing do
       socket = assign(socket, saving: true)
       page = socket.assigns.page
+      # Prefer JSON block format, fallback to HTML
+      content = Map.get(params, "content") || Map.get(params, "html", "")
       
-      case Content.update_page(page, %{content: html}) do
+      case Content.update_page(page, %{content: content}) do
         {:ok, updated_page} ->
           {:noreply, 
            socket
@@ -97,22 +101,11 @@ defmodule PhoenixAppWeb.PageLive do
   # Manual save
   def handle_event("save_content", _params, socket) do
     if can_edit?(socket.assigns) and socket.assigns.editing do
-      content = socket.assigns[:pending_content] || socket.assigns.page.content
-      socket = assign(socket, saving: true)
-      page = socket.assigns.page
-      
-      case Content.update_page(page, %{content: content}) do
-        {:ok, updated_page} ->
-          {:noreply, 
-           socket
-           |> assign(page: updated_page, saving: false, last_saved: DateTime.utc_now(), editing: false)
-           |> put_flash(:info, "Content saved!")}
-        {:error, _} ->
-          {:noreply, 
-           socket
-           |> assign(saving: false)
-           |> put_flash(:error, "Failed to save.")}
-      end
+      # The autosave has already saved the content, just exit editing mode
+      {:noreply, 
+       socket
+       |> assign(editing: false, pending_content: nil)
+       |> put_flash(:info, "Content saved!")}
     else
       {:noreply, socket}
     end
@@ -122,8 +115,121 @@ defmodule PhoenixAppWeb.PageLive do
   def handle_event("cancel_edit", _params, socket) do
     # Reload the page to discard any unsaved changes
     page = Content.get_page!(socket.assigns.page.id)
-    {:noreply, assign(socket, editing: false, page: page, pending_content: nil)}
+    {:noreply, 
+     socket
+     |> assign(editing: false, page: page, pending_content: nil)
+     |> push_event("update-editor-content", %{content: page.content})
+     |> put_flash(:info, "Changes discarded")}
   end
+
+  # Handle media uploads from block editor
+  def handle_event("block-media-upload", params, socket) do
+    if can_edit?(socket.assigns) do
+      handle_media_upload(params, socket)
+    else
+      {:noreply, put_flash(socket, :error, "You don't have permission to upload.")}
+    end
+  end
+
+  # Handle media removal from block editor
+  def handle_event("block-media-remove", %{"blockId" => _block_id} = params, socket) do
+    if can_edit?(socket.assigns) do
+      handle_media_remove(params, socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Legacy handler for older block-image-upload events
+  def handle_event("block-image-upload", params, socket) do
+    if can_edit?(socket.assigns) do
+      handle_media_upload(Map.put(params, "mediaType", "image"), socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp handle_media_upload(%{"blockId" => block_id, "mediaType" => media_type, "data" => base64_data} = params, socket) do
+    page = socket.assigns.page
+    filename = params["filename"] || "upload_#{System.unique_integer([:positive])}"
+    mime_type = params["mimeType"] || "application/octet-stream"
+    file_size = params["size"] || 0
+    original_filename = params["filename"] || filename
+    
+    # Use page ID for the upload path: /uploads/public/pages/{page_id}/
+    upload_context = "pages/#{page.id}"
+    
+    case Base.decode64(base64_data) do
+      {:ok, file_data} ->
+        temp_dir = System.tmp_dir!()
+        temp_path = Path.join(temp_dir, filename)
+        
+        case File.write(temp_path, file_data) do
+          :ok ->
+            # Upload to /uploads/public/pages/{page_id}/ using Uploads module
+            case PhoenixApp.Uploads.upload_file(
+              nil,
+              temp_path,
+              %{client_name: filename, client_type: mime_type, client_size: file_size},
+              context: upload_context,
+              public: true
+            ) do
+              {:ok, url} ->
+                File.rm(temp_path)
+                {:noreply, push_event(socket, "block-media-uploaded", %{
+                  blockId: block_id,
+                  url: url,
+                  mediaType: media_type,
+                  filename: original_filename,
+                  mediaId: nil
+                })}
+              
+              {:error, reason} ->
+                File.rm(temp_path)
+                {:noreply, push_event(socket, "block-media-error", %{
+                  blockId: block_id,
+                  error: "Upload failed: #{inspect(reason)}"
+                })}
+            end
+          
+          {:error, reason} ->
+            {:noreply, push_event(socket, "block-media-error", %{
+              blockId: block_id,
+              error: "Failed to write temp file: #{inspect(reason)}"
+            })}
+        end
+      
+      :error ->
+        {:noreply, push_event(socket, "block-media-error", %{
+          blockId: block_id,
+          error: "Invalid file data"
+        })}
+    end
+  end
+
+  defp handle_media_remove(%{"url" => url}, socket) when is_binary(url) do
+    # Delete the file directly from filesystem
+    # URL format: /uploads/public/pages/{page_id}/filename.ext
+    if String.starts_with?(url, "/uploads/public/") do
+      # Convert URL path to filesystem path
+      relative_path = String.replace_prefix(url, "/uploads/", "")
+      file_path = Path.join(PhoenixApp.Uploads.base_dir(), relative_path)
+      
+      # Delete the file if it exists
+      if File.exists?(file_path) do
+        File.rm(file_path)
+      end
+    end
+    
+    {:noreply, socket}
+  end
+
+  defp handle_media_remove(%{"itemId" => _item_id}, socket) do
+    # For gallery items, deletion is handled by the URL-based removal
+    {:noreply, socket}
+  end
+
+  defp handle_media_remove(_params, socket), do: {:noreply, socket}
 
   def render(assigns) do
     # Determine max width based on template type
@@ -240,16 +346,17 @@ defmodule PhoenixAppWeb.PageLive do
             <!-- Content: WYSIWYG Editor or Rendered View -->
             <%= if @editing do %>
               <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-                <RichEditor.quill_editor
+                <BlockEditor.block_editor
                   id={"page-editor-#{@page.id}"}
                   content={@page.content}
-                  placeholder="Write your page content..."
-                  min_height="400px"
+                  placeholder="Build your page content..."
+                  min_height="500px"
+                  autosave_delay={5000}
                 />
               </div>
             <% else %>
-              <div class="text-gray-200 leading-relaxed text-lg">
-                <%= PhoenixAppWeb.Markdown.render(@page.content) %>
+              <div class="text-gray-200 leading-relaxed text-lg prose prose-invert max-w-none">
+                <%= BlockEditor.render_blocks(@page.content) %>
               </div>
             <% end %>
           </article>

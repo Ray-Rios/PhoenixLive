@@ -1,6 +1,12 @@
 import Config
 
 # -------------------------------------------------
+# Swoosh API Client - MUST be disabled in production to prevent
+# global process conflicts in clustered/multi-pod deployments
+# -------------------------------------------------
+config :swoosh, :api_client, false
+
+# -------------------------------------------------
 # SECRET_KEY_BASE
 # -------------------------------------------------
 secret_key_base =

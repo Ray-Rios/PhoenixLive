@@ -1,12 +1,12 @@
 defmodule PhoenixAppWeb.BlogEditorLive do
   @moduledoc """
-  Real-time blog post editor with Quill.js WYSIWYG functionality.
+  Real-time blog post editor with block-based WYSIWYG functionality.
   Only accessible by admins, GMs, and editors.
   """
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
   alias PhoenixApp.Content.Post
-  import PhoenixAppWeb.Components.RichEditor
+  alias PhoenixAppWeb.Components.BlockEditor
 
   on_mount {PhoenixAppWeb.UserAuth, :ensure_authenticated}
 
@@ -25,7 +25,8 @@ defmodule PhoenixAppWeb.BlogEditorLive do
          form: nil,
          view: :list,
          saving: false,
-         last_saved: nil
+         last_saved: nil,
+         pending_content: nil
        )}
     else
       {:ok,
@@ -82,23 +83,32 @@ defmodule PhoenixAppWeb.BlogEditorLive do
     {:noreply, assign(socket, form: to_form(changeset))}
   end
 
-  # Handle Quill editor content changes
-  def handle_event("editor-change", %{"html" => html}, socket) do
-    # Update the form with new content
-    post = socket.assigns.editing_post || %Post{}
-    changeset = Post.changeset(post, %{content: html})
-    
-    {:noreply, assign(socket, form: to_form(changeset))}
+  # Handle block editor content changes
+  def handle_event("editor-change", params, socket) do
+    # Prefer JSON block format, fallback to HTML
+    content = Map.get(params, "content") || Map.get(params, "html", "")
+    # Store pending content without updating the form (to avoid re-rendering the editor)
+    {:noreply, assign(socket, pending_content: content)}
   end
 
   # Handle auto-save from editor
-  def handle_event("editor-autosave", %{"html" => html}, socket) do
-    save_post_content(socket, html)
+  def handle_event("editor-autosave", params, socket) do
+    # Prefer JSON block format, fallback to HTML
+    content = Map.get(params, "content") || Map.get(params, "html", "")
+    save_post_content(socket, content)
   end
 
   # Handle manual save
   def handle_event("save_post", %{"post" => post_params}, socket) do
     socket = assign(socket, saving: true)
+    
+    # Use pending_content if available (from editor-change events)
+    post_params = 
+      if socket.assigns[:pending_content] do
+        Map.put(post_params, "content", socket.assigns.pending_content)
+      else
+        post_params
+      end
     
     # Parse tags from string to list
     post_params = Map.update(post_params, "tags", [], &parse_tags/1)
@@ -178,6 +188,9 @@ defmodule PhoenixAppWeb.BlogEditorLive do
     
     case Content.delete_post(post) do
       {:ok, _} ->
+        # Delete uploaded files for this blog post
+        PhoenixApp.Uploads.delete_content_uploads("blog", id)
+        
         {:noreply,
          socket
          |> assign(posts: Content.list_posts())
@@ -193,6 +206,111 @@ defmodule PhoenixAppWeb.BlogEditorLive do
   def handle_event("back_to_list", _params, socket) do
     {:noreply, push_navigate(socket, to: ~p"/admin/blog-management")}
   end
+
+  # Handle media uploads from block editor
+  def handle_event("block-media-upload", params, socket) do
+    handle_media_upload(params, socket)
+  end
+
+  # Handle media removal from block editor
+  def handle_event("block-media-remove", %{"blockId" => _block_id} = params, socket) do
+    handle_media_remove(params, socket)
+  end
+
+  defp handle_media_upload(%{"blockId" => block_id, "mediaType" => media_type, "data" => base64_data} = params, socket) do
+    # For new posts without an ID, we need to save the post first
+    post = socket.assigns.editing_post
+    user = socket.assigns.current_user
+    
+    # If it's a new post without an ID, save it first
+    {socket, post} = 
+      if post.id == nil do
+        case Content.create_post(user, %{
+          "title" => "Untitled Post",
+          "content" => "",
+          "is_published" => false
+        }) do
+          {:ok, new_post} ->
+            changeset = Post.changeset(new_post, %{})
+            {assign(socket, editing_post: new_post, form: to_form(changeset), view: :edit), new_post}
+          {:error, _} ->
+            {socket, post}
+        end
+      else
+        {socket, post}
+      end
+    
+    if post.id == nil do
+      {:noreply, push_event(socket, "block-media-error", %{
+        blockId: block_id,
+        error: "Please save the post first before uploading media"
+      })}
+    else
+      filename = params["filename"] || "upload_#{System.unique_integer([:positive])}"
+      mime_type = params["mimeType"] || "application/octet-stream"
+      file_size = params["size"] || 0
+      original_filename = params["filename"] || filename
+      
+      # Use post ID for the upload path: /uploads/public/blog/{post_id}/
+      upload_context = "blog/#{post.id}"
+      
+      case Base.decode64(base64_data) do
+        {:ok, file_data} ->
+          temp_dir = System.tmp_dir!()
+          temp_path = Path.join(temp_dir, filename)
+          
+          case File.write(temp_path, file_data) do
+            :ok ->
+              case PhoenixApp.Uploads.upload_file(
+                nil,
+                temp_path,
+                %{client_name: filename, client_type: mime_type, client_size: file_size},
+                context: upload_context,
+                public: true
+              ) do
+                {:ok, url} ->
+                  File.rm(temp_path)
+                  {:noreply, push_event(socket, "block-media-uploaded", %{
+                    blockId: block_id,
+                    url: url,
+                    mediaType: media_type,
+                    filename: original_filename,
+                    mediaId: nil
+                  })}
+                
+                {:error, reason} ->
+                  File.rm(temp_path)
+                  {:noreply, push_event(socket, "block-media-error", %{
+                    blockId: block_id,
+                    error: "Upload failed: #{inspect(reason)}"
+                  })}
+              end
+            
+            {:error, reason} ->
+              {:noreply, push_event(socket, "block-media-error", %{
+                blockId: block_id,
+                error: "Failed to write temp file: #{inspect(reason)}"
+              })}
+          end
+        
+        :error ->
+          {:noreply, push_event(socket, "block-media-error", %{
+            blockId: block_id,
+            error: "Invalid file data"
+          })}
+      end
+    end
+  end
+
+  defp handle_media_remove(%{"url" => url}, socket) when is_binary(url) do
+    if String.starts_with?(url, "/uploads/public/") do
+      priv_path = Path.join(["priv/static", url])
+      File.rm(priv_path)
+    end
+    {:noreply, socket}
+  end
+
+  defp handle_media_remove(_params, socket), do: {:noreply, socket}
 
   defp save_post_content(socket, html) do
     case socket.assigns.view do
@@ -375,12 +493,10 @@ defmodule PhoenixAppWeb.BlogEditorLive do
                   <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6">
                     <label class="block text-sm font-medium text-gray-300 mb-2">Content</label>
                     <input type="hidden" name="post[content]" id="post-content-hidden" value={@form[:content].value || ""} />
-                    <.rich_editor 
+                    <BlockEditor.block_editor 
                       id="post-content"
                       value={@form[:content].value || ""}
-                      placeholder="Start writing your post..."
-                      on_change="editor-change"
-                      on_autosave="editor-autosave"
+                      placeholder="Start building your post content..."
                       autosave_delay={5000}
                     />
                   </div>

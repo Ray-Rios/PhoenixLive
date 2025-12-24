@@ -1,4 +1,5 @@
 @import "quill/dist/quill.snow.css";
+@import "./block-editor.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -818,4 +819,138 @@ html, body {
 .quill-editor .ql-tooltip a.ql-action::after,
 .quill-editor .ql-tooltip a.ql-remove::before {
   @apply text-blue-400;
+}
+
+/* ============================================
+   BLOCK CONTENT DISPLAY STYLES
+   For rendered block editor content on the frontend
+   ============================================ */
+
+/* Content rows with columns */
+.content-row {
+  @apply flex gap-6 mb-6;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.content-row.columns-2 .content-column,
+.content-row.columns-3 .content-column,
+.content-row.columns-4 .content-column,
+.content-row.columns-5 .content-column,
+.content-row.columns-6 .content-column,
+.content-row.columns-7 .content-column,
+.content-row.columns-8 .content-column {
+  /* Default to flex-1 if no inline style width is set */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .content-row {
+    @apply flex-col;
+  }
+  
+  .content-row .content-column {
+    flex: none !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Content column */
+.content-column {
+  @apply min-w-0;
+  overflow: visible;
+}
+
+/* Figures / Images in content */
+.prose figure {
+  @apply my-6;
+}
+
+.prose figure img {
+  @apply rounded-lg w-full;
+}
+
+.prose figure figcaption {
+  @apply mt-2 text-center text-sm text-gray-500;
+}
+
+/* Video embeds */
+.video-embed {
+  @apply relative w-full rounded-lg overflow-hidden bg-black;
+  aspect-ratio: 16 / 9;
+}
+
+.video-embed iframe {
+  @apply absolute inset-0 w-full h-full;
+}
+
+/* Callouts in content */
+.callout {
+  @apply p-4 my-4 rounded-lg border-l-4;
+}
+
+.callout-info {
+  @apply bg-blue-900/20 border-blue-500 text-blue-200;
+}
+
+.callout-warning {
+  @apply bg-yellow-900/20 border-yellow-500 text-yellow-200;
+}
+
+.callout-success {
+  @apply bg-green-900/20 border-green-500 text-green-200;
+}
+
+.callout-error {
+  @apply bg-red-900/20 border-red-500 text-red-200;
+}
+
+.callout-tip {
+  @apply bg-purple-900/20 border-purple-500 text-purple-200;
+}
+
+/* Content dividers */
+.content-divider {
+  @apply border-0 h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent my-8;
+}
+
+/* HTML embed blocks in content */
+.html-embed-display {
+  @apply my-4;
+}
+
+/* API data blocks in content */
+.api-data-display {
+  @apply my-4 p-4 bg-gray-800/30 rounded-lg;
+}
+
+.api-data-display.api-placeholder {
+  @apply text-gray-500 italic;
+}
+
+.api-data-display pre {
+  @apply bg-gray-900 rounded p-3 overflow-x-auto text-xs font-mono text-green-400;
+}
+
+.api-fetch-time {
+  @apply mt-2 text-xs text-gray-500;
+}
+
+/* Code blocks in content */
+.prose pre {
+  @apply bg-gray-900 rounded-lg p-4 overflow-x-auto;
+}
+
+.prose pre code {
+  @apply text-green-400 font-mono text-sm;
+}
+
+/* Blockquotes in content */
+.prose blockquote {
+  @apply pl-6 border-l-4 border-blue-500 italic text-gray-300;
+}
+
+.prose blockquote cite {
+  @apply block mt-2 text-sm text-gray-500 not-italic;
 }

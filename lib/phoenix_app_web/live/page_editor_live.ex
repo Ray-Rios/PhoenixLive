@@ -1,12 +1,12 @@
 defmodule PhoenixAppWeb.PageEditorLive do
   @moduledoc """
-  Real-time page editor with Quill.js WYSIWYG functionality.
+  Real-time page editor with block-based WYSIWYG functionality.
   Only accessible by admins, GMs, and editors.
   """
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
   alias PhoenixApp.Content.Page
-  import PhoenixAppWeb.Components.RichEditor
+  alias PhoenixAppWeb.Components.BlockEditor
 
   on_mount {PhoenixAppWeb.UserAuth, :ensure_authenticated}
 
@@ -33,7 +33,8 @@ defmodule PhoenixAppWeb.PageEditorLive do
          view: :list,
          saving: false,
          last_saved: nil,
-         template_types: @template_types
+         template_types: @template_types,
+         pending_content: nil
        )}
     else
       {:ok,
@@ -90,23 +91,32 @@ defmodule PhoenixAppWeb.PageEditorLive do
     {:noreply, assign(socket, form: to_form(changeset))}
   end
 
-  # Handle Quill editor content changes
-  def handle_event("editor-change", %{"html" => html}, socket) do
-    # Update the form with new content
-    page = socket.assigns.editing_page || %Page{}
-    changeset = Page.changeset(page, %{content: html})
-    
-    {:noreply, assign(socket, form: to_form(changeset))}
+  # Handle block editor content changes
+  def handle_event("editor-change", params, socket) do
+    # Prefer JSON block format, fallback to HTML
+    content = Map.get(params, "content") || Map.get(params, "html", "")
+    # Store pending content without updating the form (to avoid re-rendering the editor)
+    {:noreply, assign(socket, pending_content: content)}
   end
 
   # Handle auto-save from editor
-  def handle_event("editor-autosave", %{"html" => html}, socket) do
-    save_page_content(socket, html)
+  def handle_event("editor-autosave", params, socket) do
+    # Prefer JSON block format, fallback to HTML
+    content = Map.get(params, "content") || Map.get(params, "html", "")
+    save_page_content(socket, content)
   end
 
   # Handle manual save
   def handle_event("save_page", %{"page" => page_params}, socket) do
     socket = assign(socket, saving: true)
+    
+    # Use pending_content if available (from editor-change events)
+    page_params = 
+      if socket.assigns[:pending_content] do
+        Map.put(page_params, "content", socket.assigns.pending_content)
+      else
+        page_params
+      end
     
     case socket.assigns.view do
       :new ->
@@ -185,6 +195,9 @@ defmodule PhoenixAppWeb.PageEditorLive do
     
     case Content.delete_page(page) do
       {:ok, _} ->
+        # Delete uploaded files for this page
+        PhoenixApp.Uploads.delete_content_uploads("pages", id)
+        
         {:noreply,
          socket
          |> assign(pages: Content.list_pages())
@@ -200,6 +213,112 @@ defmodule PhoenixAppWeb.PageEditorLive do
   def handle_event("back_to_list", _params, socket) do
     {:noreply, push_navigate(socket, to: ~p"/admin/pages")}
   end
+
+  # Handle media uploads from block editor
+  def handle_event("block-media-upload", params, socket) do
+    handle_media_upload(params, socket)
+  end
+
+  # Handle media removal from block editor
+  def handle_event("block-media-remove", %{"blockId" => _block_id} = params, socket) do
+    handle_media_remove(params, socket)
+  end
+
+  defp handle_media_upload(%{"blockId" => block_id, "mediaType" => media_type, "data" => base64_data} = params, socket) do
+    # For new pages without an ID, we need to save the page first
+    page = socket.assigns.editing_page
+    
+    # If it's a new page without an ID, save it first
+    {socket, page} = 
+      if page.id == nil do
+        user = socket.assigns.current_user
+        case Content.create_page(%{
+          title: "Untitled Page",
+          content: "",
+          author_id: user.id,
+          is_published: false
+        }) do
+          {:ok, new_page} ->
+            changeset = Page.changeset(new_page, %{})
+            {assign(socket, editing_page: new_page, form: to_form(changeset), view: :edit), new_page}
+          {:error, _} ->
+            {socket, page}
+        end
+      else
+        {socket, page}
+      end
+    
+    if page.id == nil do
+      {:noreply, push_event(socket, "block-media-error", %{
+        blockId: block_id,
+        error: "Please save the page first before uploading media"
+      })}
+    else
+      filename = params["filename"] || "upload_#{System.unique_integer([:positive])}"
+      mime_type = params["mimeType"] || "application/octet-stream"
+      file_size = params["size"] || 0
+      original_filename = params["filename"] || filename
+      
+      # Use page ID for the upload path: /uploads/public/pages/{page_id}/
+      upload_context = "pages/#{page.id}"
+      
+      case Base.decode64(base64_data) do
+        {:ok, file_data} ->
+          temp_dir = System.tmp_dir!()
+          temp_path = Path.join(temp_dir, filename)
+          
+          case File.write(temp_path, file_data) do
+            :ok ->
+              case PhoenixApp.Uploads.upload_file(
+                nil,
+                temp_path,
+                %{client_name: filename, client_type: mime_type, client_size: file_size},
+                context: upload_context,
+                public: true
+              ) do
+                {:ok, url} ->
+                  File.rm(temp_path)
+                  {:noreply, push_event(socket, "block-media-uploaded", %{
+                    blockId: block_id,
+                    url: url,
+                    mediaType: media_type,
+                    filename: original_filename,
+                    mediaId: nil
+                  })}
+                
+                {:error, reason} ->
+                  File.rm(temp_path)
+                  {:noreply, push_event(socket, "block-media-error", %{
+                    blockId: block_id,
+                    error: "Upload failed: #{inspect(reason)}"
+                  })}
+              end
+            
+            {:error, reason} ->
+              {:noreply, push_event(socket, "block-media-error", %{
+                blockId: block_id,
+                error: "Failed to write temp file: #{inspect(reason)}"
+              })}
+          end
+        
+        :error ->
+          {:noreply, push_event(socket, "block-media-error", %{
+            blockId: block_id,
+            error: "Invalid file data"
+          })}
+      end
+    end
+  end
+
+  defp handle_media_remove(%{"url" => url}, socket) when is_binary(url) do
+    if String.starts_with?(url, "/uploads/public/") do
+      priv_path = Path.join(["priv/static", url])
+      File.rm(priv_path)
+    end
+    {:noreply, socket}
+  end
+
+  defp handle_media_remove(_params, socket), do: {:noreply, socket}
 
   defp save_page_content(socket, html) do
     case socket.assigns.view do
@@ -374,12 +493,10 @@ defmodule PhoenixAppWeb.PageEditorLive do
                   <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6">
                     <label class="block text-sm font-medium text-gray-300 mb-2">Content</label>
                     <input type="hidden" name="page[content]" id="page-content-hidden" value={@form[:content].value || ""} />
-                    <.rich_editor 
+                    <BlockEditor.block_editor
                       id="page-content"
                       value={@form[:content].value || ""}
-                      placeholder="Start writing your page content..."
-                      on_change="editor-change"
-                      on_autosave="editor-autosave"
+                      placeholder="Build your page content..."
                       autosave_delay={5000}
                     />
                   </div>
