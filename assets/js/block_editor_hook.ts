@@ -1664,8 +1664,38 @@ const BlockEditorHook = {
     
     const rect = button.getBoundingClientRect();
     menu.style.position = 'fixed';
-    menu.style.left = `${rect.left}px`;
-    menu.style.top = `${rect.bottom + 5}px`;
+    menu.style.zIndex = '9999';
+    
+    // Append to body first to get actual dimensions
+    document.body.appendChild(menu);
+    
+    const menuRect = menu.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    
+    // Calculate position with viewport boundary checking
+    let left = rect.left;
+    let top = rect.bottom + 5;
+    
+    // Check if menu would go off the right edge
+    if (left + menuRect.width > viewportWidth - 10) {
+      left = viewportWidth - menuRect.width - 10;
+    }
+    
+    // Check if menu would go off the bottom edge - show above button instead
+    if (top + menuRect.height > viewportHeight - 10) {
+      top = rect.top - menuRect.height - 5;
+      // If still off screen (not enough room above), just pin to bottom
+      if (top < 10) {
+        top = viewportHeight - menuRect.height - 10;
+      }
+    }
+    
+    // Ensure left is not negative
+    if (left < 10) left = 10;
+    
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
     
     menu.addEventListener('click', (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -1676,7 +1706,7 @@ const BlockEditorHook = {
       }
     });
     
-    document.body.appendChild(menu);
+    // Menu already appended above for dimension calculation
     
     // Close menu on click outside
     const closeMenu = (e: MouseEvent) => {

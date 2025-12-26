@@ -3,6 +3,7 @@ defmodule PhoenixAppWeb.BlogLive do
   alias PhoenixApp.Content
   import PhoenixAppWeb.Components.PageContainer
   alias PhoenixAppWeb.Components.BlockEditor
+  alias PhoenixAppWeb.Components.SocialShare
 
   # Note: on_mount :default is handled by router's live_session
 
@@ -558,6 +559,19 @@ defmodule PhoenixAppWeb.BlogLive do
             <% else %>
               <div class="text-gray-200 leading-relaxed text-lg prose prose-invert max-w-none">
                 <%= BlockEditor.render_blocks(@post.content) %>
+              </div>
+              
+              <!-- Social Share Buttons -->
+              <div class="mt-8 pt-6 border-t border-gray-700">
+                <SocialShare.social_share
+                  url={PhoenixAppWeb.Endpoint.url() <> "/blog/#{@post.slug}"}
+                  title={@post.title}
+                  description={@post.excerpt || @post.meta_description}
+                  image_url={get_featured_image_url(@post, :large)}
+                  platforms={@post.share_platforms || ["twitter", "facebook", "linkedin", "reddit", "email"]}
+                  show={Map.get(@post, :show_share_buttons, true)}
+                  colored={Map.get(@post, :share_buttons_colored, false)}
+                />
               </div>
             <% end %>
           </article>

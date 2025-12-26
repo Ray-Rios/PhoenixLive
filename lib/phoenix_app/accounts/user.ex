@@ -53,6 +53,13 @@ defmodule PhoenixApp.Accounts.User do
     field :registration_ip, :string
     field :last_login_ip, :string
     field :last_login_at, :utc_datetime
+    
+    # Subscription & quota fields
+    field :stripe_customer_id, :string
+    field :storage_quota_bytes, :integer, default: 1_073_741_824  # 1GB default
+    field :storage_used_bytes, :integer, default: 0
+    field :subscription_tier, :string, default: "free"  # free, basic, pro, enterprise
+    field :subscription_features, {:array, :string}, default: []
 
     belongs_to :approved_by, __MODULE__, foreign_key: :approved_by_id, on_replace: :nilify
 
@@ -61,6 +68,7 @@ defmodule PhoenixApp.Accounts.User do
     has_many :comments, PhoenixApp.Content.Comment, on_delete: :nilify_all
     has_many :files, PhoenixApp.Files.UserFile, on_delete: :delete_all
     has_many :chat_messages, PhoenixApp.Forum.Message, on_delete: :delete_all
+    has_many :subscriptions, PhoenixApp.Commerce.Subscription, on_delete: :delete_all
 
     timestamps(type: :utc_datetime)
   end

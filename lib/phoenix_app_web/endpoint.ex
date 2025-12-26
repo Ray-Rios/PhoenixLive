@@ -13,6 +13,10 @@ defmodule PhoenixAppWeb.Endpoint do
       connect_info: [session: @session_options],
       timeout: 45_000,  # 45 second timeout (default is 60s)
       compress: true    # Enable compression for faster data transfer
+    ],
+    longpoll: [
+      connect_info: [session: @session_options],
+      timeout: 45_000
     ]
   socket "/socket", PhoenixAppWeb.UserSocket,
     websocket: [

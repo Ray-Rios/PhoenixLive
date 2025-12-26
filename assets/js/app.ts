@@ -120,7 +120,8 @@ async function loadHeavyModulesAndConnect() {
     liveSocket = new LiveSocket("/live", Socket, {
       params: { _csrf_token: csrfToken },
       hooks: Hooks,
-      timeout: 10000,
+      timeout: 30000, // 30 second timeout for slower connections
+      longPollFallbackMs: 2500, // Fallback to longpoll after 2.5s of websocket failure
     });
     
     // Expose liveSocket globally
@@ -193,7 +194,8 @@ async function loadHeavyModulesAndConnect() {
     liveSocket = new LiveSocket("/live", Socket, {
       params: { _csrf_token: csrfToken },
       hooks: fallbackHooks,
-      timeout: 10000,
+      timeout: 30000, // 30 second timeout for slower connections
+      longPollFallbackMs: 2500, // Fallback to longpoll after 2.5s of websocket failure
     });
     
     (window as any).liveSocket = liveSocket;

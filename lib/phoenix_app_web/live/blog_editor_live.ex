@@ -12,6 +12,8 @@ defmodule PhoenixAppWeb.BlogEditorLive do
 
   @allowed_roles ["admin", "gm", "editor"]
 
+  @default_platforms ["twitter", "facebook", "linkedin", "reddit", "email"]
+
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     
@@ -26,7 +28,10 @@ defmodule PhoenixAppWeb.BlogEditorLive do
          view: :list,
          saving: false,
          last_saved: nil,
-         pending_content: nil
+         pending_content: nil,
+         show_share_buttons: true,
+         share_platforms: @default_platforms,
+         share_buttons_colored: false
        )}
     else
       {:ok,
@@ -45,7 +50,10 @@ defmodule PhoenixAppWeb.BlogEditorLive do
        page_title: "Edit: #{post.title}",
        editing_post: post,
        form: to_form(changeset),
-       view: :edit
+       view: :edit,
+       show_share_buttons: Map.get(post, :show_share_buttons, true),
+       share_platforms: Map.get(post, :share_platforms) || @default_platforms,
+       share_buttons_colored: Map.get(post, :share_buttons_colored, false)
      )}
   end
 
@@ -58,7 +66,10 @@ defmodule PhoenixAppWeb.BlogEditorLive do
        page_title: "New Post",
        editing_post: %Post{user_id: user.id},
        form: to_form(changeset),
-       view: :new
+       view: :new,
+       show_share_buttons: true,
+       share_platforms: @default_platforms,
+       share_buttons_colored: false
      )}
   end
 
@@ -205,6 +216,28 @@ defmodule PhoenixAppWeb.BlogEditorLive do
   # Navigate back to list
   def handle_event("back_to_list", _params, socket) do
     {:noreply, push_navigate(socket, to: ~p"/admin/blog-management")}
+  end
+
+  # Toggle share buttons on/off
+  def handle_event("toggle_share_buttons", _params, socket) do
+    {:noreply, assign(socket, show_share_buttons: !socket.assigns.show_share_buttons)}
+  end
+
+  # Toggle colored share buttons
+  def handle_event("toggle_share_colored", _params, socket) do
+    {:noreply, assign(socket, share_buttons_colored: !socket.assigns.share_buttons_colored)}
+  end
+
+  # Toggle individual share platform
+  def handle_event("toggle_share_platform", %{"platform" => platform}, socket) do
+    platforms = socket.assigns.share_platforms
+    updated_platforms = 
+      if platform in platforms do
+        List.delete(platforms, platform)
+      else
+        platforms ++ [platform]
+      end
+    {:noreply, assign(socket, share_platforms: updated_platforms)}
   end
 
   # Handle media uploads from block editor
@@ -503,7 +536,7 @@ defmodule PhoenixAppWeb.BlogEditorLive do
                 </div>
 
                 <!-- Sidebar -->
-                <div class="space-y-6">
+                <div class="space-y-6 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
                   <!-- Slug -->
                   <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6">
                     <label class="block text-sm font-medium text-gray-300 mb-2">URL Slug</label>
@@ -569,6 +602,25 @@ defmodule PhoenixAppWeb.BlogEditorLive do
                     <p class="mt-1 text-xs text-gray-500">
                       <%= String.length(@form[:meta_description].value || "") %>/160 characters
                     </p>
+                  </div>
+
+                  <!-- Social Sharing Settings -->
+                  <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                    <h3 class="text-sm font-medium text-gray-300 mb-3">Social Sharing</h3>
+                    <PhoenixAppWeb.Components.SocialShare.share_settings
+                      show_share_buttons={@show_share_buttons}
+                      share_platforms={@share_platforms}
+                      share_buttons_colored={@share_buttons_colored}
+                      on_toggle="toggle_share_buttons"
+                      on_platform_toggle="toggle_share_platform"
+                      on_colored_toggle="toggle_share_colored"
+                    />
+                    <!-- Hidden fields for form submission -->
+                    <input type="hidden" name="post[show_share_buttons]" value={to_string(@show_share_buttons)} />
+                    <input type="hidden" name="post[share_buttons_colored]" value={to_string(@share_buttons_colored)} />
+                    <%= for platform <- @share_platforms do %>
+                      <input type="hidden" name="post[share_platforms][]" value={platform} />
+                    <% end %>
                   </div>
 
                   <!-- Post Info (for existing posts) -->

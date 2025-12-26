@@ -4,8 +4,11 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
   alias PhoenixApp.Content.Page
   alias PhoenixAppWeb.Components.AdminSidebar
   alias PhoenixAppWeb.Components.BlockEditor
+  alias PhoenixAppWeb.Components.SocialShare
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
+
+  @default_platforms ["twitter", "facebook", "linkedin", "reddit", "email"]
 
   def mount(_params, _session, socket) do
     {:ok,
@@ -15,17 +18,34 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
        page_title: "Pages",
        show_form: false,
        editing_page: nil,
-       form: to_form(Page.changeset(%Page{}, %{}))
+       form: to_form(Page.changeset(%Page{}, %{})),
+       show_share_buttons: true,
+       share_platforms: @default_platforms,
+       share_buttons_colored: false
      )}
   end
 
   def handle_event("new_page", _params, socket) do
-    {:noreply, assign(socket, show_form: true, editing_page: nil, form: to_form(Page.changeset(%Page{}, %{})))}
+    {:noreply, assign(socket, 
+      show_form: true, 
+      editing_page: nil, 
+      form: to_form(Page.changeset(%Page{}, %{})),
+      show_share_buttons: true,
+      share_platforms: @default_platforms,
+      share_buttons_colored: false
+    )}
   end
 
   def handle_event("edit_page", %{"id" => id}, socket) do
     page = Content.get_page!(id)
-    {:noreply, assign(socket, show_form: true, editing_page: page, form: to_form(Page.changeset(page, %{})))}
+    {:noreply, assign(socket, 
+      show_form: true, 
+      editing_page: page, 
+      form: to_form(Page.changeset(page, %{})),
+      show_share_buttons: Map.get(page, :show_share_buttons, true),
+      share_platforms: Map.get(page, :share_platforms) || @default_platforms,
+      share_buttons_colored: Map.get(page, :share_buttons_colored, false)
+    )}
   end
 
   def handle_event("cancel_form", _params, socket) do
@@ -42,6 +62,9 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
     params = params 
              |> Map.put("is_published", should_publish)
              |> Map.put("published_at", if(should_publish, do: DateTime.utc_now(), else: nil))
+             |> Map.put("show_share_buttons", socket.assigns.show_share_buttons)
+             |> Map.put("share_platforms", socket.assigns.share_platforms)
+             |> Map.put("share_buttons_colored", socket.assigns.share_buttons_colored)
 
     case socket.assigns.editing_page do
       nil ->
@@ -85,6 +108,29 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
       {:ok, _} -> {:noreply, assign(socket, pages: Content.list_pages())}
       {:error, _} -> {:noreply, put_flash(socket, :error, "Failed to update publish status")}
     end
+  end
+
+  # Handle toggle for share buttons visibility
+  def handle_event("toggle_share_buttons", _params, socket) do
+    {:noreply, assign(socket, show_share_buttons: !socket.assigns.show_share_buttons)}
+  end
+
+  # Handle toggle for colored share buttons
+  def handle_event("toggle_share_colored", _params, socket) do
+    {:noreply, assign(socket, share_buttons_colored: !socket.assigns.share_buttons_colored)}
+  end
+
+  # Handle toggle for individual share platforms
+  def handle_event("toggle_share_platform", %{"platform" => platform}, socket) do
+    current_platforms = socket.assigns.share_platforms
+    
+    new_platforms = if platform in current_platforms do
+      List.delete(current_platforms, platform)
+    else
+      current_platforms ++ [platform]
+    end
+    
+    {:noreply, assign(socket, share_platforms: new_platforms)}
   end
 
   def render(assigns) do
@@ -165,6 +211,19 @@ defmodule PhoenixAppWeb.AdminLive.Pages do
                   <div>
                     <.input field={@form[:meta_keywords]} label="Meta Keywords (Optional)" placeholder="keyword1, keyword2, keyword3" autocomplete="off" />
                   </div>
+                </div>
+
+                <!-- Social Share Settings Section -->
+                <div class="glass-dark p-6 rounded-lg space-y-4">
+                  <h3 class="text-lg font-semibold text-white mb-4">Social Share Settings</h3>
+                  <SocialShare.share_settings
+                    show_share_buttons={@show_share_buttons}
+                    share_platforms={@share_platforms}
+                    share_buttons_colored={@share_buttons_colored}
+                    on_toggle="toggle_share_buttons"
+                    on_platform_toggle="toggle_share_platform"
+                    on_colored_toggle="toggle_share_colored"
+                  />
                 </div>
 
                 <input type="hidden" name="action_type" value="draft" id="page-action-type" />

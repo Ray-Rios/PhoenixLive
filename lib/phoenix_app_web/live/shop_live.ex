@@ -7,33 +7,26 @@ defmodule PhoenixAppWeb.ShopLive do
   def mount(_params, _session, socket) do
     products = Commerce.list_products()
     categories = Commerce.list_categories()
+    subscription_products = Commerce.list_subscription_products()
+    featured = Commerce.list_featured_products()
     
-    # If no products exist, create some dummy data
-    {products, categories} = if Enum.empty?(products) do
-      dummy_products = [
-        %{id: "1", name: "Wireless Gaming Headset", description: "High-quality wireless gaming headset with 7.1 surround sound and noise cancellation.", price: Decimal.new("149.99"), sku: "WGH-001", stock_quantity: 25, is_active: true, image: nil},
-        %{id: "2", name: "Mechanical Gaming Keyboard", description: "RGB backlit mechanical keyboard with Cherry MX switches.", price: Decimal.new("199.99"), sku: "MGK-002", stock_quantity: 15, is_active: true, image: nil},
-        %{id: "3", name: "4K Webcam", description: "Ultra HD 4K webcam with auto-focus and built-in microphone.", price: Decimal.new("89.99"), sku: "4KW-003", stock_quantity: 30, is_active: true, image: nil},
-        %{id: "4", name: "Wireless Mouse", description: "Ergonomic wireless mouse with precision tracking.", price: Decimal.new("49.99"), sku: "WM-004", stock_quantity: 50, is_active: true, image: nil},
-        %{id: "5", name: "Gaming Monitor 27\"", description: "27-inch 144Hz gaming monitor with 1ms response time.", price: Decimal.new("299.99"), sku: "GM27-006", stock_quantity: 12, is_active: true, image: nil},
-        %{id: "6", name: "USB-C Hub", description: "Multi-port USB-C hub with HDMI, USB 3.0, and SD card reader.", price: Decimal.new("59.99"), sku: "UCH-007", stock_quantity: 40, is_active: true, image: nil}
-      ]
-      
-      dummy_categories = [
-        %{id: "1", name: "Technology", slug: "technology", description: "Latest tech gadgets"},
-        %{id: "2", name: "Gaming", slug: "gaming", description: "Gaming gear and accessories"}
-      ]
-      
-      {dummy_products, dummy_categories}
+    # Get current user's active subscriptions for display
+    user_subscriptions = if socket.assigns[:current_user] do
+      Commerce.get_user_active_subscriptions(socket.assigns.current_user)
+      |> Enum.map(& &1.product_id)
     else
-      {products, categories}
+      []
     end
     
     {:ok, assign(socket,
       products: products,
       categories: categories,
+      subscription_products: subscription_products,
+      featured_products: featured,
+      user_subscriptions: user_subscriptions,
       selected_category: nil,
-      page_title: "Shop"
+      page_title: "Shop",
+      view: :product_list
     )}
   end
 
@@ -78,23 +71,13 @@ defmodule PhoenixAppWeb.ShopLive do
     user = socket.assigns.current_user
     
     if user do
-      # Support dummy in-memory products used for demo mode (ids like "1","2")
-      product = case Enum.find(socket.assigns.products || [], fn p -> to_string(p.id) == to_string(product_id) end) do
-        nil ->
-          # Try to only query the database when the product_id looks like a UUID
-          case Ecto.UUID.cast(product_id) do
-            {:ok, _uuid} ->
-              try do
-                Commerce.get_product!(product_id)
-              rescue
-                Ecto.Query.CastError -> nil
-                Ecto.NoResultsError -> nil
-              end
-            :error ->
-              nil
-          end
-        found -> found
+      product = try do
+        Commerce.get_product!(product_id)
+      rescue
+        Ecto.Query.CastError -> nil
+        Ecto.NoResultsError -> nil
       end
+      
       cart = Commerce.get_or_create_cart(user)
       
       if product == nil do
@@ -124,14 +107,136 @@ defmodule PhoenixAppWeb.ShopLive do
     {:noreply, assign(socket, products: products, selected_category: category)}
   end
 
+  def handle_event("subscribe", %{"product_id" => product_id}, socket) do
+    user = socket.assigns.current_user
+    
+    if user do
+      product = Commerce.get_product!(product_id)
+      
+      # Check if user already has this subscription
+      if product_id in socket.assigns.user_subscriptions do
+        {:noreply, put_flash(socket, :info, "You already have an active subscription to this plan")}
+      else
+        # For now, directly activate (in production, redirect to Stripe checkout)
+        case Commerce.activate_subscription(user, product) do
+          {:ok, _subscription} ->
+            # Refresh user subscriptions
+            user_subscriptions = Commerce.get_user_active_subscriptions(user) |> Enum.map(& &1.product_id)
+            
+            {:noreply, 
+             socket
+             |> assign(user_subscriptions: user_subscriptions)
+             |> put_flash(:success, "Successfully subscribed to #{product.name}!")}
+          
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to activate subscription. Please try again.")}
+        end
+      end
+    else
+      {:noreply, redirect(socket, to: "/login")}
+    end
+  end
+
+  # Helper functions
+  defp format_storage(bytes) when is_integer(bytes) do
+    cond do
+      bytes >= 1_099_511_627_776 -> "#{div(bytes, 1_099_511_627_776)} TB"
+      bytes >= 1_073_741_824 -> "#{div(bytes, 1_073_741_824)} GB"
+      bytes >= 1_048_576 -> "#{div(bytes, 1_048_576)} MB"
+      true -> "#{div(bytes, 1024)} KB"
+    end
+  end
+  defp format_storage(_), do: "0 GB"
+
+  defp humanize_feature(feature) when is_binary(feature) do
+    feature
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.map(&String.capitalize/1)
+    |> Enum.join(" ")
+  end
+  defp humanize_feature(_), do: ""
+
+  defp product_icon("digital"), do: "📥"
+  defp product_icon("subscription"), do: "🔄"
+  defp product_icon("service"), do: "🛠️"
+  defp product_icon(_), do: "📦"
+
   def render(assigns) do
     ~H"""
     <PhoenixAppWeb.Components.PageContainer.page_container>
         <%= if @view != :product_detail do %>
+          <!-- Hero Section for Subscriptions -->
+          <%= if @subscription_products != [] do %>
+            <div class="mb-12">
+              <h2 class="text-2xl font-bold text-white mb-6">📦 Upgrade Your Experience</h2>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <%= for product <- @subscription_products do %>
+                  <div class={"relative rounded-xl p-6 border-2 #{if product.featured, do: "border-blue-500 bg-gradient-to-br from-blue-900/50 to-purple-900/50", else: "border-gray-600 bg-gray-800/50"}"}>
+                    <%= if product.featured do %>
+                      <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <span class="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                          <%= product.badge_text || "RECOMMENDED" %>
+                        </span>
+                      </div>
+                    <% end %>
+                    
+                    <div class="text-center mb-4">
+                      <h3 class="text-xl font-bold text-white"><%= product.name %></h3>
+                      <p class="text-gray-400 text-sm mt-1"><%= product.description %></p>
+                    </div>
+                    
+                    <div class="text-center mb-6">
+                      <span class="text-4xl font-bold text-white">$<%= product.price %></span>
+                      <span class="text-gray-400">
+                        <%= case product.billing_interval do %>
+                          <% "monthly" -> %>/month
+                          <% "yearly" -> %>/year
+                          <% "lifetime" -> %> one-time
+                          <% _ -> %>
+                        <% end %>
+                      </span>
+                      <%= if product.trial_days > 0 do %>
+                        <div class="text-green-400 text-sm mt-1"><%= product.trial_days %>-day free trial</div>
+                      <% end %>
+                    </div>
+                    
+                    <!-- Features List -->
+                    <ul class="space-y-2 mb-6 text-sm">
+                      <%= if product.grants_storage_bytes && product.grants_storage_bytes > 0 do %>
+                        <li class="flex items-center text-gray-300">
+                          <span class="text-green-400 mr-2">✓</span>
+                          <%= format_storage(product.grants_storage_bytes) %> storage
+                        </li>
+                      <% end %>
+                      <%= for feature <- (product.grants_features || []) do %>
+                        <li class="flex items-center text-gray-300">
+                          <span class="text-green-400 mr-2">✓</span>
+                          <%= humanize_feature(feature) %>
+                        </li>
+                      <% end %>
+                    </ul>
+                    
+                    <%= if product.id in @user_subscriptions do %>
+                      <button disabled class="w-full bg-green-600/50 text-green-300 py-3 rounded-lg font-semibold cursor-not-allowed">
+                        ✓ Active Subscription
+                      </button>
+                    <% else %>
+                      <button phx-click="subscribe" phx-value-product_id={product.id}
+                              class={"w-full py-3 rounded-lg font-semibold transition-colors #{if product.featured, do: "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white", else: "bg-gray-700 hover:bg-gray-600 text-white"}"}>
+                        <%= if Decimal.compare(product.price, Decimal.new("0")) == :eq, do: "Get Started Free", else: "Subscribe Now" %>
+                      </button>
+                    <% end %>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+          
           <!-- Product List View -->
           <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold text-white">
-              <%= if @selected_category, do: @selected_category.name, else: "Shop" %>
+              <%= if @selected_category, do: @selected_category.name, else: "Digital Products" %>
             </h1>
             
             <!-- Category Filter -->
@@ -147,41 +252,47 @@ defmodule PhoenixAppWeb.ShopLive do
             </form>
           </div>
 
-          <!-- Products Grid -->
+          <!-- Products Grid (one-time purchases) -->
+          <% one_time_products = Enum.filter(@products, fn p -> (p.billing_interval || "one_time") == "one_time" end) %>
           <div class="product-grid">
-            <%= for product <- @products do %>
+            <%= for product <- one_time_products do %>
               <div class="product-card">
                 <.link navigate={"/shop/product/#{product.id}"}>
                   <div class="product-image bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center">
-                    <span class="text-4xl">📦</span>
+                    <span class="text-4xl"><%= product_icon(product.product_type) %></span>
                   </div>
                 </.link>
                 
                 <div class="product-info">
-                  <h3 class="product-title"><%= product.name %></h3>
+                  <div class="flex items-center gap-2 mb-1">
+                    <h3 class="product-title"><%= product.name %></h3>
+                    <%= if product.product_type == "digital" do %>
+                      <span class="text-xs bg-blue-600/30 text-blue-300 px-2 py-0.5 rounded">Digital</span>
+                    <% end %>
+                  </div>
                   <p class="text-gray-300 text-sm mb-2 line-clamp-2"><%= product.description %></p>
                   <div class="flex justify-between items-center">
-                    <span class="product-price">$<%= product.price %></span>
+                    <span class="product-price">
+                      <%= if Decimal.compare(product.price, Decimal.new("0")) == :eq do %>
+                        <span class="text-green-400">Free</span>
+                      <% else %>
+                        $<%= product.price %>
+                      <% end %>
+                    </span>
                     <button phx-click="add_to_cart" phx-value-product_id={product.id}
                             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-                      Add to Cart
+                      <%= if product.product_type == "digital", do: "Get Now", else: "Add to Cart" %>
                     </button>
                   </div>
-                  
-                  <%= if product.stock_quantity <= 5 do %>
-                    <div class="mt-2">
-                      <span class="text-orange-400 text-sm">Only <%= product.stock_quantity %> left!</span>
-                    </div>
-                  <% end %>
                 </div>
               </div>
             <% end %>
           </div>
 
-          <%= if @products == [] do %>
+          <%= if @products == [] and @subscription_products == [] do %>
             <div class="text-center py-16">
-              <div class="text-gray-400 text-xl">No products found</div>
-              <p class="text-gray-500 mt-2">Try selecting a different category</p>
+              <div class="text-gray-400 text-xl">No products available yet</div>
+              <p class="text-gray-500 mt-2">Check back soon for new offerings!</p>
             </div>
           <% end %>
         <% end %>

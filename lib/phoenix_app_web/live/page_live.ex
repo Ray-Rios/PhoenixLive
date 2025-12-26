@@ -2,6 +2,7 @@ defmodule PhoenixAppWeb.PageLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Content
   alias PhoenixAppWeb.Components.BlockEditor
+  alias PhoenixAppWeb.Components.SocialShare
 
   # Note: on_mount :default is handled by router's live_session
 
@@ -357,6 +358,19 @@ defmodule PhoenixAppWeb.PageLive do
             <% else %>
               <div class="text-gray-200 leading-relaxed text-lg prose prose-invert max-w-none">
                 <%= BlockEditor.render_blocks(@page.content) %>
+              </div>
+              
+              <!-- Social Share Buttons -->
+              <div class="mt-8 pt-6 border-t border-gray-700">
+                <SocialShare.social_share
+                  url={PhoenixAppWeb.Endpoint.url() <> "/pages/#{@page.slug}"}
+                  title={@page.title}
+                  description={@page.excerpt || @page.meta_description}
+                  image_url={@page.featured_image}
+                  platforms={@page.share_platforms || ["twitter", "facebook", "linkedin", "reddit", "email"]}
+                  show={Map.get(@page, :show_share_buttons, true)}
+                  colored={Map.get(@page, :share_buttons_colored, false)}
+                />
               </div>
             <% end %>
           </article>

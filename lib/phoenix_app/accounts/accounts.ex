@@ -401,30 +401,7 @@ defmodule PhoenixApp.Accounts do
       {comments_deleted, _} = Repo.delete_all(from(c in PhoenixApp.Content.Comment, where: c.user_id == ^user_id))
       Logger.info("Deleted #{comments_deleted} comments for banned user #{user_id}")
 
-      # 6. Delete Game Chat Messages (Legacy)
-      if table_exists?("game_chat_messages") and column_exists?("game_chat_messages", "user_id") do
-        res = Repo.query!("DELETE FROM game_chat_messages WHERE user_id = $1", [user_id])
-        Logger.info("Deleted #{res.num_rows} rows from game_chat_messages for banned user #{user_id}")
-      end
-
-      # 7. Delete Game Events (Legacy)
-      if table_exists?("game_events") do
-        cond do
-          column_exists?("game_events", "user_id") ->
-            res = Repo.query!("DELETE FROM game_events WHERE user_id = $1", [user_id])
-            Logger.info("Deleted #{res.num_rows} rows from game_events for banned user #{user_id}")
-          column_exists?("game_events", "player_id") ->
-            res = Repo.query!("DELETE FROM game_events WHERE player_id = $1", [user_id])
-            Logger.info("Deleted #{res.num_rows} rows from game_events for banned user #{user_id}")
-          true -> :ok
-        end
-      end
-
-      # 8. Delete Game Sessions
-      if table_exists?("game_sessions") do
-        {sessions_deleted, _} = Repo.delete_all(from(gs in PhoenixApp.Game.GameSession, where: gs.user_id == ^user_id))
-        Logger.info("Deleted #{sessions_deleted} game sessions for banned user #{user_id}")
-      end
+      # 6-8. Game tables removed from codebase
 
       # 9. Delete Device Fingerprints & Login Attempts
       {fp_deleted, _} = Repo.delete_all(from(df in PhoenixApp.Security.DeviceFingerprint, where: df.user_id == ^user_id))
@@ -527,6 +504,30 @@ defmodule PhoenixApp.Accounts do
     |> Repo.update()
   end
 
+  @doc """
+  Updates subscription-related fields on the user (storage quota, role, tier, features).
+  """
+  def update_user_subscription_fields(%User{} = user, attrs) do
+    user
+    |> Ecto.Changeset.change(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Adds storage bytes to the user's quota.
+  """
+  def add_storage_quota(%User{} = user, bytes_to_add) do
+    current_quota = user.storage_quota_bytes || 1_073_741_824
+    update_user_subscription_fields(user, %{storage_quota_bytes: current_quota + bytes_to_add})
+  end
+
+  @doc """
+  Updates the user's used storage bytes.
+  """
+  def update_storage_used(%User{} = user, bytes_used) do
+    update_user_subscription_fields(user, %{storage_used_bytes: bytes_used})
+  end
+
   def enable_user(%User{} = user) do
     # When admin enables a user, also verify their email (acts like admin bypass)
     attrs = %{status: "active"}
@@ -607,54 +608,7 @@ defmodule PhoenixApp.Accounts do
       {chat_msgs_deleted, _} = Repo.delete_all(from(m in PhoenixApp.Forum.Message, where: m.user_id == ^user_id))
       Logger.debug("delete_user: deleted #{chat_msgs_deleted} chat messages")
 
-      # Legacy/optional chat messages table (avoid errors aborting the transaction)
-      if table_exists?("game_chat_messages") and column_exists?("game_chat_messages", "user_id") do
-        Logger.debug("delete_user: deleting from legacy table game_chat_messages by user_id")
-        res = Repo.query!("DELETE FROM game_chat_messages WHERE user_id = $1", [user_id])
-        Logger.debug("delete_user: deleted #{res.num_rows} rows from game_chat_messages")
-      else
-        Logger.debug("delete_user: skipping legacy game_chat_messages (table or user_id column missing)")
-      end
-
-      # Characters (GameCMS)
-      if table_exists?("game_characters") do
-        {chars_deleted, _} = Repo.delete_all(from(ch in PhoenixApp.GameCMS.Character, where: ch.user_id == ^user_id))
-        Logger.debug("delete_user: deleted #{chars_deleted} game characters")
-      else
-        Logger.debug("delete_user: skipping game_characters (table missing)")
-      end
-
-      # Game sessions
-      if table_exists?("game_sessions") do
-        {sessions_deleted, _} = Repo.delete_all(from(gs in PhoenixApp.Game.GameSession, where: gs.user_id == ^user_id))
-        Logger.debug("delete_user: deleted #{sessions_deleted} game sessions")
-      else
-        Logger.debug("delete_user: skipping game_sessions (table missing)")
-      end
-
-      # Game events can exist in two schema variants; delete by whichever column exists
-      if table_exists?("game_events") do
-        cond do
-          column_exists?("game_events", "user_id") ->
-            Logger.debug("delete_user: deleting game_events by user_id")
-            res = Repo.query!("DELETE FROM game_events WHERE user_id = $1", [user_id])
-            Logger.debug("delete_user: deleted #{res.num_rows} rows from game_events (by user_id)")
-          column_exists?("game_events", "player_id") ->
-            Logger.debug("delete_user: deleting game_events by player_id")
-            res = Repo.query!("DELETE FROM game_events WHERE player_id = $1", [user_id])
-            Logger.debug("delete_user: deleted #{res.num_rows} rows from game_events (by player_id)")
-          true -> :ok
-        end
-      else
-        Logger.debug("delete_user: skipping game_events (table missing)")
-      end
-
-      if table_exists?("player_stats") do
-        {stats_deleted, _} = Repo.delete_all(from(ps in PhoenixApp.Game.PlayerStats, where: ps.user_id == ^user_id))
-        Logger.debug("delete_user: deleted #{stats_deleted} player_stats")
-      else
-        Logger.debug("delete_user: skipping player_stats (table missing)")
-      end
+      # Game tables have been removed from the codebase
 
       {orders_deleted, _} = Repo.delete_all(from(o in PhoenixApp.Commerce.Order, where: o.user_id == ^user_id))
       Logger.debug("delete_user: deleted #{orders_deleted} orders")

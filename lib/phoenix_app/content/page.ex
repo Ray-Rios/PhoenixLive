@@ -17,6 +17,9 @@ defmodule PhoenixApp.Content.Page do
     field :featured_image, :string
     field :category, :string
     field :order, :integer, default: 0
+    field :show_share_buttons, :boolean, default: true
+    field :share_platforms, {:array, :string}, default: ["twitter", "facebook", "linkedin", "reddit", "email"]
+    field :share_buttons_colored, :boolean, default: false
 
     belongs_to :author, PhoenixApp.Accounts.User, foreign_key: :author_id, type: :binary_id
 
@@ -26,7 +29,8 @@ defmodule PhoenixApp.Content.Page do
   def changeset(page, attrs) do
     page
     |> cast(attrs, [:title, :slug, :content, :excerpt, :template_type, :is_published, :published_at, 
-                    :meta_description, :meta_keywords, :featured_image, :category, :order, :author_id])
+                    :meta_description, :meta_keywords, :featured_image, :category, :order, :author_id,
+                    :show_share_buttons, :share_platforms, :share_buttons_colored])
     |> validate_required_if_published()
     |> validate_length(:title, min: 1, max: 200)
     |> validate_length(:excerpt, max: 500)

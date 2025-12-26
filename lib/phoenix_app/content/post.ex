@@ -15,6 +15,9 @@ defmodule PhoenixApp.Content.Post do
     field :featured_image, :string
     field :meta_description, :string
     field :tags, {:array, :string}, default: []
+    field :show_share_buttons, :boolean, default: true
+    field :share_platforms, {:array, :string}, default: ["twitter", "facebook", "linkedin", "reddit", "email"]
+    field :share_buttons_colored, :boolean, default: false
 
     belongs_to :user, PhoenixApp.Accounts.User
     # Removed parent/child relationships - not in posts table
@@ -27,7 +30,7 @@ defmodule PhoenixApp.Content.Post do
     post
     |> cast(attrs, [
       :title, :slug, :content, :excerpt, :is_published, :published_at, 
-      :meta_description, :tags, :featured_image
+      :meta_description, :tags, :featured_image, :show_share_buttons, :share_platforms, :share_buttons_colored
     ])
     |> validate_required_if_published()
     |> validate_length(:title, min: 1, max: 200)

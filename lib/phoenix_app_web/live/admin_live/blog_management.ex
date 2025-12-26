@@ -5,8 +5,11 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   alias PhoenixApp.Content.Media
   alias PhoenixAppWeb.Components.AdminSidebar
   alias PhoenixAppWeb.Components.BlockEditor
+  alias PhoenixAppWeb.Components.SocialShare
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
+
+  @default_platforms ["twitter", "facebook", "linkedin", "reddit", "email"]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -21,7 +24,9 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
        editing_post: nil,
        uploaded_media: [],
        show_media_picker: false,
-       form: to_form(Post.changeset(%Post{}, %{}))
+       form: to_form(Post.changeset(%Post{}, %{})),
+       show_share_buttons: true,
+       share_platforms: @default_platforms
      )
      |> allow_upload(:featured_image,
        accept: ~w(.jpg .jpeg .png .gif .webp),
@@ -36,7 +41,9 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     {:noreply, assign(socket,
       show_form: true,
       editing_post: nil,
-      form: to_form(changeset)
+      form: to_form(changeset),
+      show_share_buttons: true,
+      share_platforms: @default_platforms
     )}
   end
 
@@ -47,7 +54,9 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
     {:noreply, assign(socket,
       show_form: true,
       editing_post: post,
-      form: to_form(changeset)
+      form: to_form(changeset),
+      show_share_buttons: Map.get(post, :show_share_buttons, true),
+      share_platforms: Map.get(post, :share_platforms) || @default_platforms
     )}
   end
 
@@ -140,6 +149,8 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
         |> process_post_params()
         |> maybe_add_featured_image(uploaded_urls)
         |> Map.put("is_published", should_publish)
+        |> Map.put("show_share_buttons", socket.assigns.show_share_buttons)
+        |> Map.put("share_platforms", socket.assigns.share_platforms)
       
       # Set published_at if publishing
       processed_params = if should_publish do
@@ -242,6 +253,26 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
   @impl true
   def handle_event("open_media_picker", _params, socket) do
     {:noreply, assign(socket, show_media_picker: true)}
+  end
+
+  # Handle toggle for share buttons visibility
+  @impl true
+  def handle_event("toggle_share_buttons", _params, socket) do
+    {:noreply, assign(socket, show_share_buttons: !socket.assigns.show_share_buttons)}
+  end
+
+  # Handle toggle for individual share platforms
+  @impl true
+  def handle_event("toggle_share_platform", %{"platform" => platform}, socket) do
+    current_platforms = socket.assigns.share_platforms
+    
+    new_platforms = if platform in current_platforms do
+      List.delete(current_platforms, platform)
+    else
+      current_platforms ++ [platform]
+    end
+    
+    {:noreply, assign(socket, share_platforms: new_platforms)}
   end
 
   # Catch-all handler for any client events we don't explicitly handle.
@@ -436,6 +467,17 @@ defmodule PhoenixAppWeb.AdminLive.BlogManagement do
                       </div>
                     <% end %>
                   </div>
+                </div>
+
+                <!-- Social Share Settings -->
+                <div class="border border-gray-600 rounded-lg p-4">
+                  <h3 class="text-sm font-medium text-gray-300 mb-4">Social Share Settings</h3>
+                  <SocialShare.share_settings
+                    show_share_buttons={@show_share_buttons}
+                    share_platforms={@share_platforms}
+                    on_toggle="toggle_share_buttons"
+                    on_platform_toggle="toggle_share_platform"
+                  />
                 </div>
 
                 <div class="mt-6">
