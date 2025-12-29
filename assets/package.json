@@ -6,7 +6,7 @@
     "morphdom": "^2.7.0",
     "quill": "^2.0.3",
     "quill-cursors": "^4.0.3",
-    "three": "^0.170.0",
+    "three": "^0.182.0",
     "y-websocket": "^2.0.4",
     "yjs": "^13.6.20"
   },
