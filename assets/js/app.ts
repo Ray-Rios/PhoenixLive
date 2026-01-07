@@ -517,18 +517,8 @@ const MessageList = {
   }
 };
 
-// Desktop Window Hook (placeholder to prevent missing hook errors)
-export const DesktopWindow = {
-  mounted() {
-    console.log('DesktopWindow mounted');
-  },
-  updated() {
-    // Intentionally empty - no update logic needed
-  },
-  destroyed() {
-    // Intentionally empty - no cleanup needed
-  }
-};
+// Desktop Window Hook - now imported from ./desktop
+// (removed placeholder that was overriding the real hook)
 
 // ChatInput Hook - Handle Enter key to submit, Shift+Enter for newline
 const ChatInput = {

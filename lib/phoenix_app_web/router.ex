@@ -95,11 +95,14 @@ defmodule PhoenixAppWeb.Router do
     live "/admin/pages/:id", AdminLive.Pages, :edit
     live "/admin/products", AdminLive.Products, :index
     live "/admin/orders", AdminLive.Orders, :index
+    live "/admin/projects", AdminLive.Projects, :index
+    live "/admin/scheduler", AdminLive.Scheduler, :index
+    live "/admin/subscriptions", AdminLive.Subscriptions, :index
     live "/admin/uploads", AdminLive.Uploads, :index
     live "/admin/user-management", AdminLive.UserManagementLive, :index
-    live "/admin/files", AdminLive.Files, :index
     live "/admin/sql", AdminLive.SQL, :index
-    live "/admin/security", Admin.SecurityLive, :index
+    live "/admin/security", AdminLive.Security, :index
+    live "/admin/emails", AdminLive.Emails, :index
     live "/admin/api-toolbox", AdminLive.ApiToolbox, :index
     live "/admin/custom-emojis", AdminLive.CustomEmojis, :index
 
@@ -141,6 +144,36 @@ defmodule PhoenixAppWeb.Router do
     
     # Admin-only endpoints
     get "/users", Api.ApiAuthController, :list_users
+
+    # Project calendar for Taskbar calendar app
+    get "/projects/calendar", Api.ProjectController, :calendar
+  end
+
+  # --------------------
+  # Scheduler Webhook (Public with secret)
+  # --------------------
+  scope "/api/webhooks", PhoenixAppWeb do
+    pipe_through :api
+    
+    post "/scheduler/:secret", Api.SchedulerController, :trigger_webhook
+  end
+
+  # --------------------
+  # Scheduler API (Authenticated)
+  # --------------------
+  scope "/api/scheduler", PhoenixAppWeb do
+    pipe_through :api_authenticated
+    
+    get "/events", Api.SchedulerController, :list_events
+    post "/events", Api.SchedulerController, :create_event
+    get "/events/:id", Api.SchedulerController, :get_event
+    put "/events/:id", Api.SchedulerController, :update_event
+    delete "/events/:id", Api.SchedulerController, :delete_event
+    post "/events/:id/run", Api.SchedulerController, :run_event
+    post "/events/:id/pause", Api.SchedulerController, :pause_event
+    post "/events/:id/resume", Api.SchedulerController, :resume_event
+    
+    get "/project-events", Api.SchedulerController, :list_project_events
   end
 
   

@@ -96,7 +96,7 @@ defmodule PhoenixApp.Commerce do
         |> Repo.insert!()
       cart -> cart
     end
-    |> Repo.preload([:cart_items, :user])
+    |> Repo.preload([cart_items: :product, user: []])
   end
 
   def add_to_cart(cart, product, quantity \\ 1) do
@@ -324,6 +324,8 @@ defmodule PhoenixApp.Commerce do
     end
   end
 
+
+
   @doc """
   Applies the benefits from a subscription to the user's account.
   """
@@ -364,15 +366,24 @@ defmodule PhoenixApp.Commerce do
     end
   end
 
+  def refresh_user_tier(user) do
+    tier = determine_tier(user)
+    PhoenixApp.Accounts.update_user_subscription_fields(user, %{subscription_tier: tier})
+  end
+
   defp determine_tier(user) do
-    active_subs = get_user_active_subscriptions(user)
-    
-    cond do
-      Enum.any?(active_subs, fn s -> s.product && s.product.grants_role == "enterprise" end) -> "enterprise"
-      Enum.any?(active_subs, fn s -> s.product && s.product.grants_role in ["pro", "editor"] end) -> "pro"
-      Enum.any?(active_subs, fn s -> s.product && s.product.grants_role == "basic" end) -> "basic"
-      active_subs != [] -> "basic"
-      true -> "free"
+    if user.is_admin do
+      "enterprise"
+    else
+      active_subs = get_user_active_subscriptions(user)
+      
+      cond do
+        Enum.any?(active_subs, fn s -> s.product && s.product.grants_role == "enterprise" end) -> "enterprise"
+        Enum.any?(active_subs, fn s -> s.product && s.product.grants_role in ["pro", "editor"] end) -> "pro"
+        Enum.any?(active_subs, fn s -> s.product && s.product.grants_role == "basic" end) -> "basic"
+        active_subs != [] -> "basic"
+        true -> "free"
+      end
     end
   end
 

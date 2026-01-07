@@ -9,6 +9,312 @@ defmodule PhoenixApp.Repo.Migrations.Commerce do
   use Ecto.Migration
 
   def change do
+    execute """
+    DO $$
+    BEGIN
+      -- CATEGORIES
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'categories') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'categories' AND column_name = 'parent_id') THEN
+          ALTER TABLE categories ADD COLUMN parent_id uuid REFERENCES categories(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'categories' AND column_name = 'position') THEN
+          ALTER TABLE categories ADD COLUMN position integer DEFAULT 0;
+        END IF;
+      END IF;
+
+      -- PRODUCTS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'products') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'name') THEN
+          ALTER TABLE products ADD COLUMN name text NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'slug') THEN
+          ALTER TABLE products ADD COLUMN slug text NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'description') THEN
+          ALTER TABLE products ADD COLUMN description text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'price') THEN
+          ALTER TABLE products ADD COLUMN price numeric(10,2) NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'original_price') THEN
+          ALTER TABLE products ADD COLUMN original_price numeric(10,2);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'currency') THEN
+          ALTER TABLE products ADD COLUMN currency text DEFAULT 'USD';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'sku') THEN
+          ALTER TABLE products ADD COLUMN sku text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'stock') THEN
+          ALTER TABLE products ADD COLUMN stock integer DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'product_type') THEN
+          ALTER TABLE products ADD COLUMN product_type text DEFAULT 'physical';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'download_url') THEN
+          ALTER TABLE products ADD COLUMN download_url text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'download_limit') THEN
+          ALTER TABLE products ADD COLUMN download_limit integer;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'download_expires_after_days') THEN
+          ALTER TABLE products ADD COLUMN download_expires_after_days integer;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'file_size_bytes') THEN
+          ALTER TABLE products ADD COLUMN file_size_bytes bigint;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'file_name') THEN
+          ALTER TABLE products ADD COLUMN file_name text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'billing_interval') THEN
+          ALTER TABLE products ADD COLUMN billing_interval text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'trial_days') THEN
+          ALTER TABLE products ADD COLUMN trial_days integer DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'stripe_product_id') THEN
+          ALTER TABLE products ADD COLUMN stripe_product_id text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'stripe_price_id') THEN
+          ALTER TABLE products ADD COLUMN stripe_price_id text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'grants_storage_bytes') THEN
+          ALTER TABLE products ADD COLUMN grants_storage_bytes bigint;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'grants_premium_features') THEN
+          ALTER TABLE products ADD COLUMN grants_premium_features boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'feature_flags') THEN
+          ALTER TABLE products ADD COLUMN feature_flags jsonb DEFAULT '{}';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'category_id') THEN
+          ALTER TABLE products ADD COLUMN category_id uuid REFERENCES categories(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'position') THEN
+          ALTER TABLE products ADD COLUMN position integer DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'is_active') THEN
+          ALTER TABLE products ADD COLUMN is_active boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'is_featured') THEN
+          ALTER TABLE products ADD COLUMN is_featured boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'is_digital') THEN
+          ALTER TABLE products ADD COLUMN is_digital boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'main_image') THEN
+          ALTER TABLE products ADD COLUMN main_image text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'images') THEN
+          ALTER TABLE products ADD COLUMN images text[] DEFAULT '{}';
+        END IF;
+        
+        -- Fix empty slugs to prevent unique index violation
+        UPDATE products SET slug = id::text WHERE slug = '';
+      END IF;
+
+      -- CARTS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'carts') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'carts' AND column_name = 'user_id') THEN
+          ALTER TABLE carts ADD COLUMN user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'carts' AND column_name = 'status') THEN
+          ALTER TABLE carts ADD COLUMN status text DEFAULT 'active';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'carts' AND column_name = 'session_id') THEN
+          ALTER TABLE carts ADD COLUMN session_id text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'carts' AND column_name = 'guest_email') THEN
+          ALTER TABLE carts ADD COLUMN guest_email text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'carts' AND column_name = 'guest_name') THEN
+          ALTER TABLE carts ADD COLUMN guest_name text;
+        END IF;
+      END IF;
+
+      -- CART ITEMS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cart_items') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cart_items' AND column_name = 'cart_id') THEN
+          ALTER TABLE cart_items ADD COLUMN cart_id uuid REFERENCES carts(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cart_items' AND column_name = 'product_id') THEN
+          ALTER TABLE cart_items ADD COLUMN product_id uuid REFERENCES products(id) ON DELETE CASCADE;
+        END IF;
+      END IF;
+
+      -- ORDERS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'orders') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'order_number') THEN
+          ALTER TABLE orders ADD COLUMN order_number text NOT NULL DEFAULT '';
+        END IF;
+        
+        -- Fix empty order_numbers
+        UPDATE orders SET order_number = id::text WHERE order_number = '';
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'user_id') THEN
+          ALTER TABLE orders ADD COLUMN user_id uuid REFERENCES users(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'status') THEN
+          ALTER TABLE orders ADD COLUMN status text DEFAULT 'pending';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'payment_status') THEN
+          ALTER TABLE orders ADD COLUMN payment_status text DEFAULT 'pending';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'fulfillment_status') THEN
+          ALTER TABLE orders ADD COLUMN fulfillment_status text DEFAULT 'unfulfilled';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'total') THEN
+          ALTER TABLE orders ADD COLUMN total numeric(10,2) NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'subtotal') THEN
+          ALTER TABLE orders ADD COLUMN subtotal numeric(10,2);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'tax') THEN
+          ALTER TABLE orders ADD COLUMN tax numeric(10,2) DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'discount') THEN
+          ALTER TABLE orders ADD COLUMN discount numeric(10,2) DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'currency') THEN
+          ALTER TABLE orders ADD COLUMN currency text DEFAULT 'USD';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'payment_method') THEN
+          ALTER TABLE orders ADD COLUMN payment_method text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'payment_intent_id') THEN
+          ALTER TABLE orders ADD COLUMN payment_intent_id text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'stripe_session_id') THEN
+          ALTER TABLE orders ADD COLUMN stripe_session_id text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'notes') THEN
+          ALTER TABLE orders ADD COLUMN notes text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'shipping_address') THEN
+          ALTER TABLE orders ADD COLUMN shipping_address jsonb;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'billing_address') THEN
+          ALTER TABLE orders ADD COLUMN billing_address jsonb;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'guest_email') THEN
+          ALTER TABLE orders ADD COLUMN guest_email text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'guest_name') THEN
+          ALTER TABLE orders ADD COLUMN guest_name text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'metadata') THEN
+          ALTER TABLE orders ADD COLUMN metadata jsonb DEFAULT '{}';
+        END IF;
+      END IF;
+
+      -- ORDER ITEMS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'order_items') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'order_id') THEN
+          ALTER TABLE order_items ADD COLUMN order_id uuid REFERENCES orders(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'product_id') THEN
+          ALTER TABLE order_items ADD COLUMN product_id uuid REFERENCES products(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'quantity') THEN
+          ALTER TABLE order_items ADD COLUMN quantity integer DEFAULT 1 NOT NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'price') THEN
+          ALTER TABLE order_items ADD COLUMN price numeric(10,2) NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'total') THEN
+          ALTER TABLE order_items ADD COLUMN total numeric(10,2) NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'product_name') THEN
+          ALTER TABLE order_items ADD COLUMN product_name text NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'product_sku') THEN
+          ALTER TABLE order_items ADD COLUMN product_sku text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'is_digital') THEN
+          ALTER TABLE order_items ADD COLUMN is_digital boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'download_granted') THEN
+          ALTER TABLE order_items ADD COLUMN download_granted boolean DEFAULT false;
+        END IF;
+      END IF;
+
+      -- SUBSCRIPTIONS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'subscriptions') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'user_id') THEN
+          ALTER TABLE subscriptions ADD COLUMN user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'product_id') THEN
+          ALTER TABLE subscriptions ADD COLUMN product_id uuid REFERENCES products(id) ON DELETE RESTRICT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'status') THEN
+          ALTER TABLE subscriptions ADD COLUMN status text DEFAULT 'active';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'stripe_subscription_id') THEN
+          ALTER TABLE subscriptions ADD COLUMN stripe_subscription_id text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'current_period_start') THEN
+          ALTER TABLE subscriptions ADD COLUMN current_period_start timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'current_period_end') THEN
+          ALTER TABLE subscriptions ADD COLUMN current_period_end timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'cancel_at_period_end') THEN
+          ALTER TABLE subscriptions ADD COLUMN cancel_at_period_end boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'canceled_at') THEN
+          ALTER TABLE subscriptions ADD COLUMN canceled_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'ended_at') THEN
+          ALTER TABLE subscriptions ADD COLUMN ended_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'trial_start') THEN
+          ALTER TABLE subscriptions ADD COLUMN trial_start timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'trial_end') THEN
+          ALTER TABLE subscriptions ADD COLUMN trial_end timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subscriptions' AND column_name = 'metadata') THEN
+          ALTER TABLE subscriptions ADD COLUMN metadata jsonb DEFAULT '{}';
+        END IF;
+      END IF;
+
+      -- DOWNLOAD TOKENS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'download_tokens') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'user_id') THEN
+          ALTER TABLE download_tokens ADD COLUMN user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'product_id') THEN
+          ALTER TABLE download_tokens ADD COLUMN product_id uuid REFERENCES products(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'order_id') THEN
+          ALTER TABLE download_tokens ADD COLUMN order_id uuid REFERENCES orders(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'token') THEN
+          ALTER TABLE download_tokens ADD COLUMN token text NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'download_count') THEN
+          ALTER TABLE download_tokens ADD COLUMN download_count integer DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'max_downloads') THEN
+          ALTER TABLE download_tokens ADD COLUMN max_downloads integer;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'expires_at') THEN
+          ALTER TABLE download_tokens ADD COLUMN expires_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'first_downloaded_at') THEN
+          ALTER TABLE download_tokens ADD COLUMN first_downloaded_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'last_downloaded_at') THEN
+          ALTER TABLE download_tokens ADD COLUMN last_downloaded_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'download_tokens' AND column_name = 'ip_address') THEN
+          ALTER TABLE download_tokens ADD COLUMN ip_address text;
+        END IF;
+      END IF;
+
+    END $$;
+    """, ""
+
     # ============================================================================
     # CATEGORIES
     # ============================================================================

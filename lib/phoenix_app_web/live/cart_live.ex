@@ -98,12 +98,15 @@ defmodule PhoenixAppWeb.CartLive do
                       
                       <div class="flex-1">
                         <h3 class="text-white font-medium"><%= item.product.name %></h3>
-                        <p class="text-gray-400 text-sm"><%= item.product.sku %></p>
+                        <p :if={item.product.sku} class="text-gray-400 text-sm"><%= item.product.sku %></p>
+                        <p :if={item.product.product_type != "physical"} class="text-blue-400 text-xs">
+                          <%= String.capitalize(item.product.product_type || "digital") %>
+                        </p>
                         <p class="text-green-400 font-bold">$<%= item.product.price %></p>
                       </div>
                       
                       <div class="flex items-center space-x-2">
-                        <input type="number" value={item.quantity} min="1" max={item.product.stock_quantity}
+                        <input type="number" value={item.quantity} min="1" max={item.product.stock_quantity || 999}
                                phx-change="update_quantity" phx-value-item_id={item.id}
                                class="w-16 bg-gray-600 text-white px-2 py-1 rounded text-center" />
                         

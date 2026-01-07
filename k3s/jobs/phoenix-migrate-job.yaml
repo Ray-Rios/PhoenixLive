@@ -1,0 +1,13 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: phoenix-migrate-{{ .SHA }}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - name: migrate
+          image: {{ .IMAGE }}
+          command: ["/app/bin/phoenix_app", "eval", "Application.ensure_all_started(:phoenix_app); PhoenixApp.Release.migrate(); :init.stop()"]
+      restartPolicy: Never

@@ -15,10 +15,11 @@ defmodule PhoenixAppWeb.Components.Taskbar do
   attr :show_audio_panel, :boolean, default: false
   attr :show_calendar, :boolean, default: false
   attr :pending_invite_count, :integer, default: 0
-  attr :calendar_notes, :map, default: %{}
+  attr :unread_notification_count, :integer, default: 0
+  attr :taskbar_projects, :list, default: []
+  attr :calendar_events, :list, default: []
   attr :selected_date, :string, default: nil
   attr :target, :any, default: nil
-  attr :uploads, :map, default: %{}
 
   def taskbar(assigns) do
     ~H"""
@@ -208,9 +209,10 @@ defmodule PhoenixAppWeb.Components.Taskbar do
               class="p-2 rounded hover:glass-dark hover:bg-white/20 text-gray-300 hover:text-white transition-colors relative"
             >
               <span class="text-lg">🔔</span>
-              <%= if @pending_invite_count > 0 do %>
+              <% total_count = @pending_invite_count + @unread_notification_count %>
+              <%= if total_count > 0 do %>
                 <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                  <%= min(@pending_invite_count, 9) %><%= if @pending_invite_count > 9, do: "+" %>
+                  <%= min(total_count, 9) %><%= if total_count > 9, do: "+" %>
                 </span>
               <% end %>
             </button>
@@ -329,6 +331,8 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                     <div class="text-gray-400 font-bold">Sa</div>
                     <!-- Mock days for visual representation -->
                     <%= for day <- calendar_days() do %>
+                      <% date_key = get_date_key(day) %>
+                      <% has_event = day && has_events_on_date?(@calendar_events, @taskbar_projects, date_key) %>
                       <div 
                         phx-click={if day, do: "select_date", else: nil}
                         phx-value-day={day}
@@ -336,55 +340,87 @@ defmodule PhoenixAppWeb.Components.Taskbar do
                         class={"p-2 rounded transition-colors relative " <> if(day, do: "hover:bg-blue-600 cursor-pointer text-gray-300 hover:text-white", else: "")}
                       >
                         <%= day %>
-                        <%= if day && Map.has_key?(@calendar_notes, get_date_key(day)) do %>
-                          <span class="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-yellow-400 rounded-full"></span>
+                        <%= if has_event do %>
+                          <span class="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
                         <% end %>
                       </div>
                     <% end %>
                   </div>
                   
-                  <!-- Notes Section -->
+                  <!-- Events Section -->
                   <div class="border-t border-gray-600 pt-4">
                     <%= if @selected_date do %>
-                      <h4 class="text-white text-sm font-medium mb-2">Notes for <%= @selected_date %></h4>
-                      <form phx-submit="save_note" phx-change="validate_upload" phx-target={@target} phx-drop-target={@uploads.calendar_attachment.ref}>
-                        <div class="relative">
-                          <textarea 
-                            name="note" 
-                            placeholder="Add a note... (Drag & drop files)" 
-                            class="w-full mb-2 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-blue-500 placeholder-gray-400 resize-none h-24"
-                          ><%= Map.get(@calendar_notes, @selected_date, "") %></textarea>
-                          
-                          <!-- File Upload Preview -->
-                          <%= if length(@uploads.calendar_attachment.entries) > 0 do %>
-                            <div class="mb-2 p-2 bg-gray-800 rounded border border-gray-600">
-                              <div class="text-xs text-gray-400 mb-1">Attachments:</div>
-                              <%= for entry <- @uploads.calendar_attachment.entries do %>
-                                <div class="flex items-center justify-between text-xs text-gray-300">
-                                  <span class="truncate"><%= entry.client_name %></span>
-                                  <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} phx-target={@target} class="text-red-400 hover:text-red-300">✕</button>
+                      <h4 class="text-white text-sm font-medium mb-2">Events on <%= @selected_date %></h4>
+                      <div class="space-y-2 text-sm max-h-48 overflow-y-auto">
+                        <% events_for_date = get_events_for_date(@calendar_events, @taskbar_projects, @selected_date) %>
+                        <%= if Enum.empty?(events_for_date) do %>
+                          <div class="text-gray-400 text-xs">No events on this date</div>
+                        <% else %>
+                          <%= for event <- events_for_date do %>
+                            <div class="p-2 bg-gray-800/50 rounded border border-gray-700">
+                              <div class="flex items-center gap-2">
+                                <span class={"w-2 h-2 rounded-full " <> event_color(event.type)}></span>
+                                <span class="text-gray-200 font-medium text-xs"><%= event.title %></span>
+                              </div>
+                              <%= if event.description do %>
+                                <div class="text-gray-400 text-xs mt-1 pl-4"><%= String.slice(event.description || "", 0, 50) %></div>
+                              <% end %>
+                              <%= if event.path do %>
+                                <div class="mt-1 pl-4">
+                                  <a href={event.path} class="text-blue-400 hover:text-blue-300 text-xs">View →</a>
                                 </div>
                               <% end %>
                             </div>
                           <% end %>
-                        </div>
-
-                        <div class="flex justify-between items-center gap-2">
-                          <label class="cursor-pointer text-gray-400 hover:text-white" title="Attach file">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-                            <.live_file_input upload={@uploads.calendar_attachment} class="hidden" />
-                          </label>
-                          <div class="flex gap-2">
-                            <button type="button" phx-click="close_note_input" phx-target={@target} class="px-3 py-1 text-gray-400 hover:text-white text-sm">Cancel</button>
-                            <button type="submit" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors">
-                              Save Note
-                            </button>
-                          </div>
-                        </div>
-                      </form>
+                        <% end %>
+                      </div>
+                      <div class="mt-2">
+                        <button type="button" phx-click="close_note_input" phx-target={@target} class="text-gray-400 hover:text-white text-xs">← Back</button>
+                      </div>
                     <% else %>
-                      <div class="text-center text-gray-500 text-sm py-4">
-                        Select a date to add notes
+                      <h4 class="text-white text-sm font-medium mb-2">Upcoming</h4>
+                      <div class="space-y-2 text-sm text-gray-300 max-h-48 overflow-y-auto">
+                        <!-- Scheduled Events -->
+                        <%= for event <- Enum.take(@calendar_events || [], 3) do %>
+                          <div class="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+                            <div>
+                              <div class="font-medium flex items-center gap-2">
+                                <span class={"w-2 h-2 rounded-full " <> event_color(event.type)}></span>
+                                <span class="text-gray-200"><%= event.title %></span>
+                              </div>
+                              <div class="text-xs text-gray-400 pl-4">
+                                <%= if event.scheduled_at, do: Calendar.strftime(event.scheduled_at, "%b %d, %H:%M"), else: "Not scheduled" %>
+                              </div>
+                            </div>
+                          </div>
+                        <% end %>
+                        
+                        <!-- Projects -->
+                        <%= for p <- Enum.take(@taskbar_projects || [], 3) do %>
+                          <div class="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+                            <div class="flex-1 min-w-0">
+                              <div class="font-medium flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <a href={p.path} class="hover:underline text-gray-200 truncate"><%= p.name %></a>
+                              </div>
+                              <div class="text-xs text-gray-400 pl-4">
+                                <%= p.start_date && Calendar.strftime(p.start_date, "%b %d") || "No start" %> — <%= p.status %>
+                              </div>
+                            </div>
+                            <a href={p.path} class="text-blue-400 hover:text-blue-300 text-xs ml-2">Open</a>
+                          </div>
+                        <% end %>
+
+                        <%= if Enum.empty?(@taskbar_projects || []) && Enum.empty?(@calendar_events || []) do %>
+                          <div class="text-gray-400 text-xs">No upcoming events or projects</div>
+                        <% end %>
+                      </div>
+                      
+                      <!-- Quick Links -->
+                      <div class="mt-3 pt-3 border-t border-gray-700 flex gap-2">
+                        <a href="/admin/projects" class="text-xs text-blue-400 hover:text-blue-300">Projects</a>
+                        <span class="text-gray-600">•</span>
+                        <a href="/admin/scheduler" class="text-xs text-blue-400 hover:text-blue-300">Scheduler</a>
                       </div>
                     <% end %>
                   </div>
@@ -416,10 +452,12 @@ defmodule PhoenixAppWeb.Components.Taskbar do
     end
   end
 
-  defp get_date_key(day) do
+  defp get_date_key(day) when is_integer(day) do
     today = Date.utc_today()
     "#{today.year}-#{String.pad_leading(to_string(today.month), 2, "0")}-#{String.pad_leading(to_string(day), 2, "0")}"
   end
+  
+  defp get_date_key(nil), do: nil
 
   defp calendar_days do
     today = Date.utc_today()
@@ -438,5 +476,69 @@ defmodule PhoenixAppWeb.Components.Taskbar do
     days = Enum.to_list(1..last_day.day)
     
     padding ++ days
+  end
+  
+  defp has_events_on_date?(events, projects, date_str) when is_binary(date_str) do
+    case Date.from_iso8601(date_str) do
+      {:ok, date} ->
+        has_event = Enum.any?(events || [], fn e ->
+          e.scheduled_at && DateTime.to_date(e.scheduled_at) == date
+        end)
+        
+        has_project = Enum.any?(projects || [], fn p ->
+          (p.start_date && DateTime.to_date(p.start_date) == date) ||
+          (p.end_date && DateTime.to_date(p.end_date) == date)
+        end)
+        
+        has_event || has_project
+      _ -> false
+    end
+  end
+  defp has_events_on_date?(_, _, _), do: false
+
+  defp get_events_for_date(events, projects, date_str) when is_binary(date_str) do
+    case Date.from_iso8601(date_str) do
+      {:ok, date} ->
+        event_items = (events || [])
+        |> Enum.filter(fn e -> e.scheduled_at && DateTime.to_date(e.scheduled_at) == date end)
+        |> Enum.map(fn e ->
+          %{
+            type: e.event_type || "scheduled",
+            title: e.title,
+            description: e.description,
+            path: nil
+          }
+        end)
+        
+        project_items = (projects || [])
+        |> Enum.filter(fn p ->
+          (p.start_date && DateTime.to_date(p.start_date) == date) ||
+          (p.end_date && DateTime.to_date(p.end_date) == date)
+        end)
+        |> Enum.map(fn p ->
+          is_start = p.start_date && DateTime.to_date(p.start_date) == date
+          %{
+            type: "project",
+            title: "#{p.name} #{if is_start, do: "(Start)", else: "(End)"}",
+            description: nil,
+            path: p.path
+          }
+        end)
+        
+        event_items ++ project_items
+      _ -> []
+    end
+  end
+  defp get_events_for_date(_, _, _), do: []
+
+  defp event_color(type) do
+    case type do
+      "project" -> "bg-green-500"
+      "scheduled" -> "bg-blue-500"
+      "cron" -> "bg-purple-500"
+      "webhook" -> "bg-orange-500"
+      "trigger" -> "bg-yellow-500"
+      _ -> "bg-gray-500"
+    end
   end
 end

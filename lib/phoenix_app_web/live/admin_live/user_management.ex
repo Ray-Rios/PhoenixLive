@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
+  alias PhoenixApp.Commerce
   alias PhoenixAppWeb.Components.AdminSidebar
   require Logger
 
@@ -61,6 +62,7 @@ defmodule PhoenixAppWeb.AdminLive.UserManagementLive do
     case Accounts.update_user_role(user, role) do
       {:ok, updated_user} ->
         Logger.info("Successfully updated user role: #{inspect(updated_user)}")
+        Commerce.refresh_user_tier(updated_user)
         users = Accounts.list_users()
         {:noreply, assign(socket, users: users) |> put_flash(:info, "User role updated successfully")}
 

@@ -16,12 +16,21 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       # Subscribe to user-specific invite notifications
       if assigns[:current_user] do
         PubSub.subscribe(PhoenixApp.PubSub, "user:#{assigns.current_user.id}:invites")
+        # Subscribe to user notifications (mentions, etc.)
+        PubSub.subscribe(PhoenixApp.PubSub, "user:#{assigns.current_user.id}:notifications")
       end
     end
     
     # Load pending invites count for notification badge
     pending_invite_count = if assigns[:current_user] do
       PhoenixApp.Forum.count_pending_invites(assigns.current_user.id)
+    else
+      0
+    end
+    
+    # Load unread mention notifications count
+    unread_notification_count = if assigns[:current_user] do
+      PhoenixApp.Notifications.count_unread_notifications(assigns.current_user.id)
     else
       0
     end
@@ -42,21 +51,29 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     |> assign_new(:show_notifications, fn -> false end)
     |> assign_new(:show_audio_panel, fn -> false end)
     |> assign_new(:show_calendar, fn -> false end)
-    |> assign_new(:calendar_notes, fn -> 
+    |> assign_new(:taskbar_projects, fn -> [] end)
+    |> assign_new(:calendar_events, fn -> 
        if assigns[:current_user] do
          try do
-           PhoenixApp.Calendar.list_notes(assigns.current_user.id)
-           |> Map.new(fn note -> {Date.to_string(note.date), note.content} end)
+           PhoenixApp.Scheduler.list_upcoming_events(10)
          rescue
-           _ -> %{}
+           _ -> []
          end
        else
-         %{}
+         []
        end
     end)
     |> assign_new(:selected_date, fn -> nil end)
     |> assign_new(:pending_invites, fn -> [] end)
     |> assign(:pending_invite_count, pending_invite_count)
+    |> assign_new(:mention_notifications, fn -> 
+      if assigns[:current_user] do
+        PhoenixApp.Notifications.list_user_notifications(assigns.current_user.id, limit: 10)
+      else
+        []
+      end
+    end)
+    |> assign(:unread_notification_count, unread_notification_count)
     |> assign_new(:taskbar_visible, fn -> true end)
     |> allow_upload(:files, 
          accept: :any, 
@@ -64,12 +81,6 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
          max_file_size: get_max_file_size(assigns[:current_user]),
          auto_upload: true,
          progress: &handle_progress/3
-       )
-    |> allow_upload(:calendar_attachment,
-         accept: :any,
-         max_entries: 5,
-         max_file_size: 50_000_000,
-         auto_upload: false
        )
 
     {:ok, socket}
@@ -126,15 +137,22 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   end
 
   def handle_event("toggle_notifications", _params, socket) do
-    # Load fresh invites when opening panel
-    {show_notifications, pending_invites} = if !socket.assigns.show_notifications && socket.assigns.current_user do
+    # Load fresh invites and notifications when opening panel
+    {show_notifications, pending_invites, mention_notifications} = if !socket.assigns.show_notifications && socket.assigns.current_user do
       invites = PhoenixApp.Forum.list_pending_invites_for_user(socket.assigns.current_user.id)
-      {true, invites}
+      mentions = PhoenixApp.Notifications.list_user_notifications(socket.assigns.current_user.id, limit: 20)
+      {true, invites, mentions}
     else
-      {false, []}
+      {false, [], []}
     end
     
-    {:noreply, assign(socket, show_notifications: show_notifications, pending_invites: pending_invites, show_audio_panel: false, show_calendar: false)}
+    {:noreply, assign(socket, 
+      show_notifications: show_notifications, 
+      pending_invites: pending_invites,
+      mention_notifications: mention_notifications,
+      show_audio_panel: false, 
+      show_calendar: false
+    )}
   end
 
   def handle_event("toggle_audio_panel", _params, socket) do
@@ -142,7 +160,20 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   end
 
   def handle_event("toggle_calendar", _params, socket) do
-    {:noreply, assign(socket, show_calendar: !socket.assigns.show_calendar, show_notifications: false, show_start_menu: false, show_audio_panel: false, selected_date: nil)}
+    show = !socket.assigns.show_calendar
+    socket = if show do
+      projects = PhoenixApp.Scheduler.list_projects_for_calendar()
+      events = try do
+        PhoenixApp.Scheduler.list_upcoming_events(10)
+      rescue
+        _ -> []
+      end
+      assign(socket, show_calendar: show, show_notifications: false, show_start_menu: false, show_audio_panel: false, selected_date: nil, taskbar_projects: projects, calendar_events: events)
+    else
+      assign(socket, show_calendar: show, show_notifications: false, show_start_menu: false, show_audio_panel: false, selected_date: nil)
+    end
+
+    {:noreply, socket}
   end
 
   def handle_event("select_date", %{"day" => day}, socket) do
@@ -153,42 +184,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     {:noreply, assign(socket, selected_date: date_str)}
   end
 
-  def handle_event("save_note", %{"note" => note}, socket) do
-    if socket.assigns.selected_date && socket.assigns.current_user do
-      case Date.from_iso8601(socket.assigns.selected_date) do
-        {:ok, date} ->
-          # Handle uploads
-          uploaded_files = consume_uploaded_entries(socket, :calendar_attachment, fn %{path: path}, entry ->
-            # Save to user's drive (user://uploads/)
-            user_upload_path = get_real_path("user://uploads/", socket.assigns.current_user)
-            if !File.exists?(user_upload_path), do: File.mkdir_p!(user_upload_path)
-            
-            dest = Path.join(user_upload_path, entry.client_name)
-            File.cp!(path, dest)
-            {:ok, entry.client_name}
-          end)
-          
-          # Append uploaded filenames to note
-          updated_note = if Enum.empty?(uploaded_files) do
-            note
-          else
-            files_list = Enum.map(uploaded_files, fn name -> "- [File] #{name}" end) |> Enum.join("\n")
-            if note == "", do: "Attachments:\n" <> files_list, else: note <> "\n\nAttachments:\n" <> files_list
-          end
-
-          # Save to DB
-          PhoenixApp.Calendar.save_note(socket.assigns.current_user.id, date, updated_note)
-          
-          notes = Map.put(socket.assigns.calendar_notes, socket.assigns.selected_date, updated_note)
-          {:noreply, assign(socket, calendar_notes: notes, selected_date: nil)}
-        
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Invalid date selected")}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
+  # Calendar notes feature removed - now using project events
 
   def handle_event("close_note_input", _params, socket) do
     {:noreply, assign(socket, selected_date: nil)}
@@ -312,6 +308,41 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     end
   end
 
+  def handle_event("open_mention", %{"notification_id" => notification_id, "channel_id" => channel_id, "message_id" => message_id}, socket) do
+    # Mark notification as read
+    if socket.assigns.current_user do
+      case PhoenixApp.Notifications.get_notification(socket.assigns.current_user.id, notification_id) do
+        nil -> :ok
+        notification -> PhoenixApp.Notifications.mark_as_read(notification)
+      end
+    end
+    
+    # Close notification panel and navigate to the forum with channel/message context
+    # Build URL to navigate to the message
+    forum_url = "/forum?channel=#{channel_id}&message=#{message_id}"
+    
+    {:noreply, 
+     socket
+     |> assign(show_notifications: false)
+     |> push_navigate(to: forum_url)}
+  end
+
+  def handle_event("mark_all_notifications_read", _params, socket) do
+    if socket.assigns.current_user do
+      PhoenixApp.Notifications.mark_all_as_read(socket.assigns.current_user.id)
+      
+      # Reload notifications
+      mention_notifications = PhoenixApp.Notifications.list_user_notifications(socket.assigns.current_user.id, limit: 20)
+      
+      {:noreply, assign(socket, 
+        mention_notifications: mention_notifications,
+        unread_notification_count: 0
+      )}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("validate_upload", _, socket) do
     {:noreply, socket}
   end
@@ -331,31 +362,51 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     
     new_window = case app do
       "file_manager" ->
-        # Load file manager with drive view
+        # New Windows-like File Explorer
         is_admin = user && user.is_admin
         
-        # Start at root showing available drives
-        drives = get_available_drives(user)
+        # Calculate storage usage for user
+        {storage_used, storage_quota} = if user do
+          used = calculate_user_storage(user)
+          quota = user.storage_quota_bytes || (1024 * 1024 * 1024) # Default 1GB
+          {used, quota}
+        else
+          {0, 0}
+        end
+        
+        # Start at My Files for logged in users, Public for guests
+        initial_path = if user, do: "/my-files", else: "/public"
+        initial_items = get_file_explorer_items(initial_path, user)
 
         %{
           id: window_id,
-          title: "File Manager",
+          title: "File Explorer",
           app: "file_manager",
-          x: 150,
-          y: 150,
-          width: 800,
+          x: 100,
+          y: 80,
+          width: 900,
           height: 600,
           minimized: false,
           maximized: false,
           z_index: socket.assigns.next_z_index,
-          current_path: "/",
-          current_items: drives,
-          breadcrumbs: [],
+          # Navigation
+          current_path: initial_path,
+          current_items: initial_items,
+          breadcrumbs: build_file_explorer_breadcrumbs(initial_path),
+          history: [initial_path],
+          forward_history: [],
+          # View options
+          view_mode: "details",
+          sort_by: "name",
+          sort_order: "asc",
+          filter_type: "all",
           search_query: "",
-          filter: "all",
-          view_mode: "grid",
-          current_page: 1,
-          page_size: 20,
+          # Selection
+          selected_items: [],
+          # Storage info
+          storage_used: storage_used,
+          storage_quota: storage_quota,
+          # Permissions
           is_admin: is_admin || false,
           user_id: user && user.id
         }
@@ -665,114 +716,411 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     end
   end
 
-  # ==================== FILE MANAGER HANDLERS ====================
+  # ==================== FILE EXPLORER HANDLERS ====================
 
-  def handle_event("change_view_mode", %{"mode" => mode, "window_id" => window_id}, socket) do
+  # Navigate to a path
+  def handle_event("fm_navigate_to", %{"path" => path, "window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
     windows = 
       Enum.map(socket.assigns.windows, fn window ->
         if window.id == window_id && window.app == "file_manager" do
-          updated_window = %{window | view_mode: mode}
+          items = get_file_explorer_items(path, user)
+          breadcrumbs = build_file_explorer_breadcrumbs(path)
           
-          # Save view mode preference
-          if socket.assigns.current_user do
-            # TEMP DISABLED: save_window_state(socket.assigns.current_user.id, updated_window)
-          end
+          # Update history for back/forward navigation
+          new_history = [path | window.history] |> Enum.take(50)
           
-          updated_window
+          %{window | 
+            current_path: path, 
+            current_items: sort_items(items, window.sort_by, window.sort_order),
+            breadcrumbs: breadcrumbs,
+            history: new_history,
+            forward_history: [],
+            selected_items: []
+          }
         else
           window
         end
       end)
     
     {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Navigate back in history
+  def handle_event("fm_navigate_back", %{"window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" && length(window.history) > 1 do
+          [current | [previous | rest]] = window.history
+          
+          items = get_file_explorer_items(previous, user)
+          breadcrumbs = build_file_explorer_breadcrumbs(previous)
+          
+          %{window | 
+            current_path: previous, 
+            current_items: sort_items(items, window.sort_by, window.sort_order),
+            breadcrumbs: breadcrumbs,
+            history: [previous | rest],
+            forward_history: [current | window.forward_history],
+            selected_items: []
+          }
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Navigate forward in history
+  def handle_event("fm_navigate_forward", %{"window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" && window.forward_history != [] do
+          [next | rest] = window.forward_history
+          
+          items = get_file_explorer_items(next, user)
+          breadcrumbs = build_file_explorer_breadcrumbs(next)
+          
+          %{window | 
+            current_path: next, 
+            current_items: sort_items(items, window.sort_by, window.sort_order),
+            breadcrumbs: breadcrumbs,
+            history: [next | window.history],
+            forward_history: rest,
+            selected_items: []
+          }
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Navigate up one level
+  def handle_event("fm_navigate_up", %{"window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" && window.current_path != "/" do
+          parent_path = get_file_explorer_parent_path(window.current_path)
+          items = get_file_explorer_items(parent_path, user)
+          breadcrumbs = build_file_explorer_breadcrumbs(parent_path)
+          
+          new_history = [parent_path | window.history] |> Enum.take(50)
+          
+          %{window | 
+            current_path: parent_path, 
+            current_items: sort_items(items, window.sort_by, window.sort_order),
+            breadcrumbs: breadcrumbs,
+            history: new_history,
+            forward_history: [],
+            selected_items: []
+          }
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Refresh current view
+  def handle_event("fm_refresh", %{"window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          items = get_file_explorer_items(window.current_path, user)
+          %{window | current_items: sort_items(items, window.sort_by, window.sort_order)}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Change view mode (icons, list, details)
+  def handle_event("fm_set_view", %{"view" => view, "window_id" => window_id}, socket) do
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          %{window | view_mode: view}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Sort files
+  def handle_event("fm_sort", %{"sort_by" => sort_by, "window_id" => window_id}, socket) do
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          # Toggle order if same column clicked
+          new_order = if window.sort_by == sort_by do
+            if window.sort_order == "asc", do: "desc", else: "asc"
+          else
+            "asc"
+          end
+          
+          sorted_items = sort_items(window.current_items, sort_by, new_order)
+          %{window | sort_by: sort_by, sort_order: new_order, current_items: sorted_items}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Toggle sort order
+  def handle_event("fm_toggle_sort_order", %{"window_id" => window_id}, socket) do
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          new_order = if window.sort_order == "asc", do: "desc", else: "asc"
+          sorted_items = sort_items(window.current_items, window.sort_by, new_order)
+          %{window | sort_order: new_order, current_items: sorted_items}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Filter by file type
+  def handle_event("fm_filter_type", %{"type" => type, "window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          items = get_file_explorer_items(window.current_path, user)
+          filtered = filter_items_by_type(items, type)
+          sorted = sort_items(filtered, window.sort_by, window.sort_order)
+          %{window | filter_type: type, current_items: sorted}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Search files
+  def handle_event("fm_search", %{"value" => query, "window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          items = get_file_explorer_items(window.current_path, user)
+          
+          filtered = if query == "" do
+            items
+          else
+            Enum.filter(items, fn item ->
+              String.contains?(String.downcase(item.name), String.downcase(query))
+            end)
+          end
+          
+          sorted = sort_items(filtered, window.sort_by, window.sort_order)
+          %{window | search_query: query, current_items: sorted}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Select item
+  def handle_event("fm_select_item", %{"item_id" => item_id, "window_id" => window_id}, socket) do
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          selected = if item_id in window.selected_items do
+            List.delete(window.selected_items, item_id)
+          else
+            [item_id | window.selected_items]
+          end
+          %{window | selected_items: selected}
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Delete item
+  # Preview/play a file (opens in a media player window)
+  def handle_event("fm_preview_file", %{"url" => url, "window_id" => window_id} = params, socket) when url != "" do
+    item_id = params["item_id"] || "preview"
+    
+    # Get the file item info from the current window
+    window = Enum.find(socket.assigns.windows, &(&1.id == window_id))
+    item = if window, do: Enum.find(window.current_items || [], &(to_string(&1.id) == item_id)), else: nil
+    
+    file_name = if item, do: item.name, else: Path.basename(url)
+    extension = String.downcase(Path.extname(file_name))
+    
+    media_type = cond do
+      extension in ~w(.mp3 .wav .ogg .flac .aac .m4a .wma) -> :audio
+      extension in ~w(.mp4 .webm .mov .avi .mkv .m4v .ogv .wmv) -> :video
+      extension in ~w(.jpg .jpeg .png .gif .webp .svg .bmp .ico) -> :image
+      extension in ~w(.pdf) -> :pdf
+      extension in ~w(.txt .md .json .xml .html .css .js .ex .exs) -> :text
+      true -> :other
+    end
+    
+    window_size = get_preview_window_size(media_type)
+    
+    # Create a media preview window
+    preview_window = %{
+      id: Ecto.UUID.generate(),
+      app: "media_preview",
+      title: "Preview: #{file_name}",
+      x: 200,
+      y: 100,
+      width: window_size.width,
+      height: window_size.height,
+      minimized: false,
+      maximized: false,
+      z_index: (socket.assigns.next_z_index || 1000),
+      # Media preview specific
+      media_url: url,
+      media_type: media_type,
+      file_name: file_name
+    }
+    
+    windows = socket.assigns.windows ++ [preview_window]
+    
+    {:noreply, socket
+      |> assign(:windows, windows)
+      |> assign(:active_window, preview_window.id)
+      |> assign(:next_z_index, (socket.assigns.next_z_index || 1000) + 1)}
+  end
+  
+  def handle_event("fm_preview_file", _params, socket) do
+    # No URL provided, do nothing
+    {:noreply, socket}
+  end
+
+  defp get_preview_window_size(:image), do: %{width: 800, height: 600}
+  defp get_preview_window_size(:video), do: %{width: 854, height: 530}
+  defp get_preview_window_size(:audio), do: %{width: 400, height: 200}
+  defp get_preview_window_size(:pdf), do: %{width: 800, height: 700}
+  defp get_preview_window_size(_), do: %{width: 600, height: 400}
+
+  def handle_event("fm_delete_item", %{"path" => path, "window_id" => window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    real_path = get_file_explorer_real_path(path, user)
+    
+    if real_path && can_delete_path?(path, user) do
+      case File.rm(real_path) do
+        :ok -> 
+          # Refresh the window
+          send(self(), {:fm_refresh_window, window_id})
+        {:error, :enoent} -> 
+          :ok  # File already gone
+        {:error, reason} ->
+          Logger.warning("Failed to delete file: #{inspect(reason)}")
+      end
+    end
+    
+    {:noreply, socket}
+  end
+
+  # Upload handlers
+  def handle_event("fm_validate_upload", params, socket) do
+    window_id = params["window_id"]
+    {:noreply, assign(socket, :upload_window_id, window_id)}
+  end
+
+  def handle_event("fm_upload", %{"window_id" => window_id}, socket) do
+    window = Enum.find(socket.assigns.windows, &(&1.id == window_id))
+    
+    if window do
+      dest_path = get_file_explorer_real_path(window.current_path, socket.assigns.current_user)
+      
+      if dest_path && File.exists?(dest_path) do
+        consume_uploaded_entries(socket, :files, fn %{path: path}, entry ->
+          dest = Path.join(dest_path, entry.client_name)
+          File.cp!(path, dest)
+          {:ok, dest}
+        end)
+        
+        # Refresh window
+        send(self(), {:fm_refresh_window, window_id})
+      end
+    end
+    
+    {:noreply, socket}
+  end
+
+  # New folder handler - prompts for name via JS
+  def handle_event("fm_new_folder", %{"window_id" => window_id}, socket) do
+    # Push a JS event to prompt the user for a folder name
+    {:noreply, push_event(socket, "prompt_folder_name", %{window_id: window_id})}
+  end
+
+  # Handle folder creation after user provides name
+  def handle_event("fm_create_folder", %{"window_id" => window_id, "name" => name}, socket) when name != "" do
+    user = socket.assigns.current_user
+    window = Enum.find(socket.assigns.windows, &(&1.id == window_id))
+    
+    if user && window do
+      # Get the current folder path (strip /my-files prefix)
+      parent_path = case window.current_path do
+        "/my-files" -> "/"
+        "/my-files/" <> subpath -> "/" <> subpath
+        _ -> "/"
+      end
+      
+      case PhoenixApp.Files.create_folder(user, name, parent_path) do
+        {:ok, _folder} ->
+          # Refresh the window to show the new folder
+          send(self(), {:fm_refresh_window, window_id})
+          {:noreply, socket}
+        {:error, changeset} ->
+          Logger.warning("Failed to create folder: #{inspect(changeset)}")
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("fm_create_folder", _params, socket) do
+    {:noreply, socket}
+  end
+
+  # Keep old handlers for compatibility
+  def handle_event("change_view_mode", %{"mode" => mode, "window_id" => window_id}, socket) do
+    handle_event("fm_set_view", %{"view" => mode, "window_id" => window_id}, socket)
   end
 
   def handle_event("navigate_to", %{"path" => path, "window_id" => window_id}, socket) do
-    user = socket.assigns.current_user
-    
-    windows = 
-      Enum.map(socket.assigns.windows, fn window ->
-        if window.id == window_id && window.app == "file_manager" do
-          # Handle drive navigation
-          items = cond do
-            path == "/" ->
-              get_available_drives(user)
-            
-            String.starts_with?(path, "public://") ->
-              get_public_drive_contents(path, user)
-            
-            String.starts_with?(path, "user://") ->
-              get_user_drive_contents(path, user)
-            
-            String.starts_with?(path, "root://") ->
-              get_root_drive_contents(path, user)
-            
-            true ->
-              []
-          end
-          
-          breadcrumbs = build_breadcrumbs(path)
-          
-          updated_window = %{window | 
-            current_path: path, 
-            current_items: items,
-            breadcrumbs: breadcrumbs,
-            current_page: 1
-          }
-          
-          # Save navigation state
-          if socket.assigns.current_user do
-            # TEMP DISABLED: save_window_state(socket.assigns.current_user.id, updated_window)
-          end
-          
-          updated_window
-        else
-          window
-        end
-      end)
-    
-    {:noreply, assign(socket, :windows, windows)}
+    handle_event("fm_navigate_to", %{"path" => path, "window_id" => window_id}, socket)
   end
 
   def handle_event("navigate_back", %{"window_id" => window_id}, socket) do
-    user = socket.assigns.current_user
-    
-    windows = 
-      Enum.map(socket.assigns.windows, fn window ->
-        if window.id == window_id && window.app == "file_manager" do
-          parent_path = get_parent_path(window.current_path)
-          
-          items = cond do
-            parent_path == "/" ->
-              get_available_drives(user)
-            
-            String.starts_with?(parent_path, "public://") ->
-              get_public_drive_contents(parent_path, user)
-            
-            String.starts_with?(parent_path, "user://") ->
-              get_user_drive_contents(parent_path, user)
-            
-            String.starts_with?(parent_path, "root://") ->
-              get_root_drive_contents(parent_path, user)
-            
-            true ->
-              []
-          end
-          
-          breadcrumbs = build_breadcrumbs(parent_path)
-          
-          %{window | 
-            current_path: parent_path,
-            current_items: items,
-            breadcrumbs: breadcrumbs,
-            current_page: 1
-          }
-        else
-          window
-        end
-      end)
-    
-    {:noreply, assign(socket, :windows, windows)}
+    handle_event("fm_navigate_back", %{"window_id" => window_id}, socket)
   end
 
   # ==================== UPLOAD HANDLERS ====================
@@ -900,6 +1248,33 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     {:noreply, assign(socket, pending_invite_count: pending_invite_count)}
   end
 
+  def handle_info({:new_notification, _notification}, socket) do
+    # Update notification count when new mention arrives
+    unread_notification_count = if socket.assigns.current_user do
+      PhoenixApp.Notifications.count_unread_notifications(socket.assigns.current_user.id)
+    else
+      0
+    end
+
+    # Reload notifications list
+    mention_notifications = if socket.assigns.current_user do
+      PhoenixApp.Notifications.list_user_notifications(socket.assigns.current_user.id, limit: 10)
+    else
+      []
+    end
+    
+    # Play notification sound if enabled
+    socket = if socket.assigns.current_user && socket.assigns.current_user.notification_sound_enabled do
+      volume = socket.assigns.current_user.master_volume || 0.5
+      sound_path = "/uploads/public/audio/Blaster Master SFX (3).wav"
+      push_event(socket, "play_sound", %{path: sound_path, volume: volume})
+    else
+      socket
+    end
+    
+    {:noreply, assign(socket, unread_notification_count: unread_notification_count, mention_notifications: mention_notifications)}
+  end
+
   # ==================== RENDER ====================
 
   defp render_window_content(assigns, window) do
@@ -907,12 +1282,54 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       "file_manager" ->
         assigns = assign(assigns, :window, window)
         ~H"""
-        <PhoenixAppWeb.Components.Window.file_manager_content 
+        <PhoenixAppWeb.Components.FileExplorer.file_explorer
           window={@window}
           current_user={@current_user}
           uploads={@uploads}
           target={@myself}
         />
+        """
+      "media_preview" ->
+        assigns = assign(assigns, :window, window)
+        ~H"""
+        <div class="h-full flex flex-col bg-gray-900">
+          <%= case @window.media_type do %>
+            <% :image -> %>
+              <div class="flex-1 flex items-center justify-center p-4 overflow-auto">
+                <img src={@window.media_url} alt={@window.file_name} class="max-w-full max-h-full object-contain shadow-lg" />
+              </div>
+            <% :video -> %>
+              <div class="flex-1 flex items-center justify-center p-2 bg-black">
+                <video controls autoplay class="max-w-full max-h-full" src={@window.media_url}>
+                  Your browser does not support video playback.
+                </video>
+              </div>
+            <% :audio -> %>
+              <div class="flex-1 flex flex-col items-center justify-center p-4">
+                <div class="text-6xl mb-4">🎵</div>
+                <div class="text-white text-lg mb-4 text-center"><%= @window.file_name %></div>
+                <audio controls autoplay class="w-full max-w-md" src={@window.media_url}>
+                  Your browser does not support audio playback.
+                </audio>
+              </div>
+            <% :pdf -> %>
+              <div class="flex-1 bg-white">
+                <iframe src={@window.media_url} class="w-full h-full border-0" title={@window.file_name}></iframe>
+              </div>
+            <% :text -> %>
+              <div class="flex-1 p-4 overflow-auto">
+                <iframe src={@window.media_url} class="w-full h-full bg-white text-black border-0 rounded" title={@window.file_name}></iframe>
+              </div>
+            <% _ -> %>
+              <div class="flex-1 flex flex-col items-center justify-center p-4">
+                <div class="text-6xl mb-4">📄</div>
+                <div class="text-white text-lg mb-2"><%= @window.file_name %></div>
+                <a href={@window.media_url} download={@window.file_name} class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white transition-colors">
+                  Download File
+                </a>
+              </div>
+          <% end %>
+        </div>
         """
       "terminal" ->
         ~H"""
@@ -987,7 +1404,9 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           show_audio_panel={@show_audio_panel}
           show_calendar={@show_calendar}
           pending_invite_count={@pending_invite_count}
-          calendar_notes={@calendar_notes}
+          unread_notification_count={@unread_notification_count}
+          taskbar_projects={@taskbar_projects}
+          calendar_events={@calendar_events}
           selected_date={@selected_date}
           target={@myself}
           uploads={@uploads}
@@ -999,6 +1418,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         <PhoenixAppWeb.Components.NotificationPanel.notification_panel
           show={@show_notifications}
           pending_invites={@pending_invites}
+          mention_notifications={@mention_notifications}
           current_user={@current_user}
           target={@myself}
         />
@@ -1234,7 +1654,7 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   end
   
   defp get_dir_size(path) do
-    if File.exists?(path) do
+    if path && File.exists?(path) do
       path
       |> File.ls!()
       |> Enum.map(fn file -> 
@@ -1244,6 +1664,456 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       |> Enum.sum()
     else
       0
+    end
+  end
+
+  # ==================== NEW FILE EXPLORER HELPERS ====================
+
+  # Handle refresh messages for new file explorer
+  def handle_info({:fm_refresh_window, window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          items = get_file_explorer_items(window.current_path, user)
+          storage_used = if user, do: calculate_user_storage(user), else: 0
+          
+          %{window | 
+            current_items: sort_items(items, window.sort_by, window.sort_order),
+            storage_used: storage_used
+          }
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
+  end
+
+  # Get the base uploads path
+  defp get_uploads_base_path do
+    cond do
+      File.exists?("/app/uploads") -> "/app/uploads"
+      File.exists?("uploads") -> Path.expand("uploads")
+      true -> Application.app_dir(:phoenix_app, "priv/static/uploads")
+    end
+  end
+
+  # Get items for the new file explorer
+  defp get_file_explorer_items(path, user) do
+    case path do
+      "/" ->
+        # Root shows nothing - use sidebar navigation
+        []
+        
+      "/my-files" ->
+        # Load user files and folders from database at root level
+        if user do
+          get_user_folder_contents(user, "/")
+        else
+          []
+        end
+      
+      "/my-files/" <> subpath ->
+        # Load user files and folders from database at subpath
+        if user do
+          folder_path = "/" <> subpath
+          get_user_folder_contents(user, folder_path)
+        else
+          []
+        end
+        
+      "/public" ->
+        # Load public folder from filesystem
+        base_path = get_uploads_base_path()
+        real_path = Path.join(base_path, "public")
+        unless File.exists?(real_path), do: File.mkdir_p!(real_path)
+        list_file_explorer_contents(real_path, path)
+        
+      "/public/" <> subpath ->
+        base_path = get_uploads_base_path()
+        real_path = Path.join([base_path, "public", subpath])
+        if File.exists?(real_path) && File.dir?(real_path) do
+          list_file_explorer_contents(real_path, path)
+        else
+          []
+        end
+        
+      _ ->
+        []
+    end
+  end
+
+  # Load user files and folders from database at a specific path
+  defp get_user_folder_contents(user, folder_path) do
+    # Get contents at this folder path using the new Files context function
+    contents = PhoenixApp.Files.list_contents_at_path(user, folder_path)
+    
+    contents
+    |> Enum.map(fn item ->
+      case item.type do
+        :folder ->
+          # It's a folder
+          %{
+            id: item.id,
+            name: item.name,
+            type: "folder",
+            type_label: "Folder",
+            icon: item.icon || "📁",
+            path: "/my-files" <> item.path,
+            url: nil,
+            size: 0,
+            size_formatted: "-",
+            modified: item.inserted_at,
+            modified_formatted: format_db_datetime(item.inserted_at),
+            extension: "",
+            content_type: "folder",
+            media_category: :other
+          }
+        :file ->
+          # It's a file
+          filename = item.name || "Unknown"
+          ext = Path.extname(filename) |> String.downcase()
+          content_type = item.content_type || "application/octet-stream"
+          media_category = get_media_category(ext, content_type)
+          
+          %{
+            id: item.id,
+            name: filename,
+            type: "file",
+            type_label: get_type_label(filename, false),
+            icon: get_file_explorer_icon(filename, false),
+            path: "/my-files" <> (item.folder_path || "/") <> "/" <> filename,
+            url: item.url,
+            size: item.file_size || 0,
+            size_formatted: format_size(item.file_size || 0),
+            modified: item.inserted_at,
+            modified_formatted: format_db_datetime(item.inserted_at),
+            extension: ext,
+            content_type: content_type,
+            media_category: media_category,
+            source_type: item.source_type,
+            source_id: item.id
+          }
+      end
+    end)
+  end
+
+  # Legacy function - kept for compatibility but redirects to folder-aware version
+  defp get_user_database_files(user) do
+    get_user_folder_contents(user, "/")
+  end
+
+  # Determine media category for playback support
+  defp get_media_category(ext, content_type) do
+    cond do
+      ext in ~w(.jpg .jpeg .png .gif .webp .svg .bmp .ico) -> :image
+      ext in ~w(.mp3 .wav .ogg .flac .aac .m4a .wma) -> :audio
+      ext in ~w(.mp4 .webm .mov .avi .mkv .m4v .ogv) -> :video
+      ext in ~w(.pdf) -> :pdf
+      ext in ~w(.txt .md .json .xml .html .css .js .ts .ex .exs) -> :text
+      String.starts_with?(content_type, "image/") -> :image
+      String.starts_with?(content_type, "audio/") -> :audio
+      String.starts_with?(content_type, "video/") -> :video
+      content_type == "application/pdf" -> :pdf
+      String.starts_with?(content_type, "text/") -> :text
+      true -> :other
+    end
+  end
+
+  # Format database datetime
+  defp format_db_datetime(nil), do: "Unknown"
+  defp format_db_datetime(%DateTime{} = dt) do
+    now = DateTime.utc_now()
+    diff_days = DateTime.diff(now, dt, :day)
+    
+    cond do
+      diff_days == 0 ->
+        "Today, #{Calendar.strftime(dt, "%I:%M %p")}"
+      diff_days == 1 ->
+        "Yesterday, #{Calendar.strftime(dt, "%I:%M %p")}"
+      diff_days < 7 ->
+        Calendar.strftime(dt, "%A, %I:%M %p")
+      true ->
+        Calendar.strftime(dt, "%b %d, %Y")
+    end
+  end
+  defp format_db_datetime(%NaiveDateTime{} = dt) do
+    dt |> DateTime.from_naive!("Etc/UTC") |> format_db_datetime()
+  end
+  defp format_db_datetime(_), do: "Unknown"
+
+  # List directory contents with full metadata
+  defp list_file_explorer_contents(real_path, virtual_base) do
+    case File.ls(real_path) do
+      {:ok, files} ->
+        files
+        |> Enum.map(fn filename ->
+          full_path = Path.join(real_path, filename)
+          
+          case File.stat(full_path) do
+            {:ok, stat} ->
+              is_folder = stat.type == :directory
+              ext = if is_folder, do: "", else: Path.extname(filename) |> String.downcase()
+              
+              virtual_path = Path.join(virtual_base, filename)
+              
+              # Build URL for files
+              url = unless is_folder do
+                cond do
+                  String.starts_with?(virtual_base, "/public") ->
+                    String.replace(virtual_path, "/public", "/uploads/public")
+                  String.starts_with?(virtual_base, "/my-files") ->
+                    # Extract user ID from path
+                    virtual_path
+                    |> String.replace("/my-files", "/uploads/users")
+                  true ->
+                    nil
+                end
+              end
+              
+              %{
+                id: Base.encode64(virtual_path),
+                name: filename,
+                type: if(is_folder, do: "folder", else: "file"),
+                type_label: get_type_label(filename, is_folder),
+                icon: get_file_explorer_icon(filename, is_folder),
+                path: virtual_path,
+                url: url,
+                size: stat.size,
+                size_formatted: if(is_folder, do: "—", else: format_size(stat.size)),
+                modified: stat.mtime |> NaiveDateTime.from_erl!(),
+                modified_formatted: format_modified(stat.mtime),
+                extension: ext
+              }
+            {:error, _} ->
+              nil
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+        
+      {:error, _} ->
+        []
+    end
+  end
+
+  # Get parent path for file explorer
+  defp get_file_explorer_parent_path(path) do
+    case path do
+      "/" -> "/"
+      "/my-files" -> "/"
+      "/public" -> "/"
+      _ ->
+        parent = Path.dirname(path)
+        if parent in ["", "/"], do: "/", else: parent
+    end
+  end
+
+  # Get real filesystem path from virtual path
+  defp get_file_explorer_real_path(path, user) do
+    base_path = get_uploads_base_path()
+    
+    case path do
+      "/my-files" ->
+        if user, do: Path.join([base_path, "users", "#{user.id}"]), else: nil
+        
+      "/public" ->
+        Path.join(base_path, "public")
+        
+      "/public/" <> subpath ->
+        Path.join([base_path, "public", subpath])
+        
+      "/my-files/" <> subpath ->
+        if user, do: Path.join([base_path, "users", "#{user.id}", subpath]), else: nil
+        
+      _ ->
+        nil
+    end
+  end
+
+  # Build breadcrumbs for file explorer
+  defp build_file_explorer_breadcrumbs(path) do
+    case path do
+      "/" -> []
+      "/my-files" -> [%{name: "My Files", path: "/my-files"}]
+      "/public" -> [%{name: "Public", path: "/public"}]
+      _ ->
+        parts = String.split(path, "/", trim: true)
+        
+        parts
+        |> Enum.with_index()
+        |> Enum.map(fn {part, idx} ->
+          accumulated = "/" <> Enum.join(Enum.take(parts, idx + 1), "/")
+          
+          # Rename first segment for display
+          display_name = case {idx, part} do
+            {0, "my-files"} -> "My Files"
+            {0, "public"} -> "Public"
+            _ -> part
+          end
+          
+          %{name: display_name, path: accumulated}
+        end)
+    end
+  end
+
+  # Sort items by column
+  defp sort_items(items, sort_by, order) do
+    # Always put folders first
+    {folders, files} = Enum.split_with(items, &(&1.type == "folder"))
+    
+    sorter = case sort_by do
+      "name" -> &String.downcase(&1.name)
+      "size" -> &(&1.size || 0)
+      "type" -> &(&1.extension || "")
+      "modified" -> &(&1.modified)
+      _ -> &String.downcase(&1.name)
+    end
+    
+    sorted_folders = Enum.sort_by(folders, sorter)
+    sorted_files = Enum.sort_by(files, sorter)
+    
+    if order == "desc" do
+      Enum.reverse(sorted_folders) ++ Enum.reverse(sorted_files)
+    else
+      sorted_folders ++ sorted_files
+    end
+  end
+
+  # Filter items by type category
+  defp filter_items_by_type(items, type) do
+    case type do
+      "all" -> 
+        items
+      "images" -> 
+        Enum.filter(items, &(&1.type == "folder" || &1.extension in ~w(.jpg .jpeg .png .gif .webp .svg .bmp)))
+      "documents" -> 
+        Enum.filter(items, &(&1.type == "folder" || &1.extension in ~w(.pdf .doc .docx .txt .md .rtf .odt)))
+      "audio" -> 
+        Enum.filter(items, &(&1.type == "folder" || &1.extension in ~w(.mp3 .wav .ogg .flac .aac .m4a)))
+      "video" -> 
+        Enum.filter(items, &(&1.type == "folder" || &1.extension in ~w(.mp4 .avi .mov .mkv .webm .wmv)))
+      _ -> 
+        items
+    end
+  end
+
+  # Check if user can delete a path
+  defp can_delete_path?(path, user) do
+    cond do
+      # Can't delete root paths
+      path in ["/", "/my-files", "/public"] -> false
+      # User can delete their own files
+      String.starts_with?(path, "/my-files") && user -> true
+      # Admins can delete public files
+      String.starts_with?(path, "/public") && user && user.role in ["admin", "gm"] -> true
+      # Otherwise no
+      true -> false
+    end
+  end
+
+  # Calculate user's storage usage
+  defp calculate_user_storage(user) do
+    if user do
+      user_path = Path.join([get_uploads_base_path(), "users", "#{user.id}"])
+      get_dir_size(user_path)
+    else
+      0
+    end
+  end
+
+  # Get file type label
+  defp get_type_label(_filename, true), do: "Folder"
+  defp get_type_label(filename, false) do
+    ext = Path.extname(filename) |> String.downcase() |> String.trim_leading(".")
+    case ext do
+      "" -> "File"
+      "jpg" -> "JPEG Image"
+      "jpeg" -> "JPEG Image"
+      "png" -> "PNG Image"
+      "gif" -> "GIF Image"
+      "webp" -> "WebP Image"
+      "svg" -> "SVG Image"
+      "pdf" -> "PDF Document"
+      "doc" -> "Word Document"
+      "docx" -> "Word Document"
+      "txt" -> "Text File"
+      "md" -> "Markdown File"
+      "mp3" -> "MP3 Audio"
+      "wav" -> "WAV Audio"
+      "ogg" -> "OGG Audio"
+      "mp4" -> "MP4 Video"
+      "avi" -> "AVI Video"
+      "mov" -> "MOV Video"
+      "mkv" -> "MKV Video"
+      "zip" -> "ZIP Archive"
+      "rar" -> "RAR Archive"
+      "7z" -> "7-Zip Archive"
+      _ -> String.upcase(ext) <> " File"
+    end
+  end
+
+  # Get icon for file explorer
+  defp get_file_explorer_icon(_name, true), do: "📁"
+  defp get_file_explorer_icon(name, false) do
+    ext = Path.extname(name) |> String.downcase()
+    case ext do
+      ".jpg" -> "🖼️"
+      ".jpeg" -> "🖼️"
+      ".png" -> "🖼️"
+      ".gif" -> "🖼️"
+      ".webp" -> "🖼️"
+      ".svg" -> "🖼️"
+      ".bmp" -> "🖼️"
+      ".pdf" -> "📕"
+      ".doc" -> "📝"
+      ".docx" -> "📝"
+      ".txt" -> "📄"
+      ".md" -> "📄"
+      ".mp3" -> "🎵"
+      ".wav" -> "🎵"
+      ".ogg" -> "🎵"
+      ".flac" -> "🎵"
+      ".mp4" -> "🎬"
+      ".avi" -> "🎬"
+      ".mov" -> "🎬"
+      ".mkv" -> "🎬"
+      ".webm" -> "🎬"
+      ".zip" -> "📦"
+      ".rar" -> "📦"
+      ".7z" -> "📦"
+      ".tar" -> "📦"
+      ".gz" -> "📦"
+      ".js" -> "📜"
+      ".ts" -> "📜"
+      ".html" -> "🌐"
+      ".css" -> "🎨"
+      ".json" -> "📋"
+      ".xml" -> "📋"
+      _ -> "📄"
+    end
+  end
+
+  # Format modified date
+  defp format_modified(erl_datetime) do
+    case NaiveDateTime.from_erl(erl_datetime) do
+      {:ok, dt} ->
+        now = NaiveDateTime.utc_now()
+        diff_days = NaiveDateTime.diff(now, dt, :day)
+        
+        cond do
+          diff_days == 0 ->
+            "Today, #{Calendar.strftime(dt, "%I:%M %p")}"
+          diff_days == 1 ->
+            "Yesterday, #{Calendar.strftime(dt, "%I:%M %p")}"
+          diff_days < 7 ->
+            Calendar.strftime(dt, "%A, %I:%M %p")
+          true ->
+            Calendar.strftime(dt, "%b %d, %Y")
+        end
+      _ ->
+        "Unknown"
     end
   end
 end

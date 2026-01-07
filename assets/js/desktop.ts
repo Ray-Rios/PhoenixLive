@@ -3,14 +3,18 @@
 // and small global initializers for the taskbar start button image
 // and the system clock updater.
 
+console.log('🖥️ Desktop hooks loading...');
+
 type HookContext = { el: HTMLElement } & Record<string, any>;
 
 const DesktopWindow: any = {
   mounted(this: HookContext) {
+    console.log('🪟 DesktopWindow mounted, setting up dragging...');
     this.isDragging = false;
     this.dragOffset = { x: 0, y: 0 };
     this.dragStartPos = { x: 0, y: 0 };
     this.minDragDistance = 5; // Minimum pixels to move before starting drag
+    this.hasDragged = false;
     this.windowId = this.el.getAttribute('phx-value-window_id') || (this.el.id?.replace('window-',''));
 
     const header = this.el.querySelector('.window-header') as HTMLElement | null;
@@ -21,6 +25,7 @@ const DesktopWindow: any = {
       if ((e.target as HTMLElement).closest('button')) return; // Don't drag when clicking buttons
 
       this.isDragging = false; // Don't start dragging yet
+      this.hasDragged = false; // Track if we actually dragged
       const rect = this.el.getBoundingClientRect();
       this.dragOffset = {
         x: e.clientX - rect.left,
@@ -28,6 +33,7 @@ const DesktopWindow: any = {
       };
       this.dragStartPos = { x: e.clientX, y: e.clientY };
 
+      // Prevent text selection during drag
       e.preventDefault();
     };
 
@@ -46,6 +52,7 @@ const DesktopWindow: any = {
 
         this.el.style.left = newX + 'px';
         this.el.style.top = newY + 'px';
+        this.hasDragged = true;
       } else if (this.dragStartPos.x !== 0) {
         // Check if we've moved enough to start dragging
         const deltaX = Math.abs(e.clientX - this.dragStartPos.x);
@@ -59,7 +66,7 @@ const DesktopWindow: any = {
 
     const onMouseUp = () => { 
       // If we were dragging, persist the final position to LiveView
-      if (this.isDragging) {
+      if (this.isDragging && this.hasDragged) {
         const left = parseInt(this.el.style.left || '0', 10) || 0;
         const top = parseInt(this.el.style.top || '0', 10) || 0;
         try {
@@ -76,20 +83,49 @@ const DesktopWindow: any = {
       }
       this.isDragging = false;
       this.dragStartPos = { x: 0, y: 0 };
+      
+      // Keep hasDragged true briefly so click handler can check it
+      // Reset it after a short delay
+      if (this.hasDragged) {
+        setTimeout(() => {
+          this.hasDragged = false;
+        }, 50);
+      }
+    };
+    
+    // Prevent click events on the entire window when dragging
+    const onWindowClick = (e: MouseEvent) => {
+      if (this.hasDragged) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
     };
 
     header.addEventListener('mousedown', onMouseDown);
+    this.el.addEventListener('click', onWindowClick, true); // Capture phase on window
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 
     // Save references for cleanup
-    (this as any)._desktop_listeners = { onMouseDown, onMouseMove, onMouseUp, header };
+    (this as any)._desktop_listeners = { onMouseDown, onMouseMove, onMouseUp, onWindowClick, header };
+    
+    // Handle folder name prompt event
+    (this as any).handleEvent("prompt_folder_name", ({window_id}: {window_id: string}) => {
+      const name = prompt("Enter folder name:");
+      if (name && name.trim()) {
+        (this as any).pushEvent("fm_create_folder", {
+          window_id: window_id,
+          name: name.trim()
+        });
+      }
+    });
   },
 
   destroyed(this: HookContext) {
     const refs = (this as any)._desktop_listeners;
     if (!refs) return;
     refs.header.removeEventListener('mousedown', refs.onMouseDown);
+    this.el.removeEventListener('click', refs.onWindowClick, true);
     document.removeEventListener('mousemove', refs.onMouseMove);
     document.removeEventListener('mouseup', refs.onMouseUp);
   }
@@ -197,6 +233,7 @@ const ResizeHandle: any = {
 // Attach hooks to window so app.ts can register them into Phoenix hooks
 (window as any).DesktopWindow = DesktopWindow;
 (window as any).ResizeHandle = ResizeHandle;
+console.log('🖥️ Desktop hooks registered to window:', !!DesktopWindow.mounted);
 
 // --- Global small initializers for taskbar UI ---
 const initTaskbarStartImage = () => {

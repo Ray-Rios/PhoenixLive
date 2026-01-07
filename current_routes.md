@@ -55,5 +55,20 @@
   POST  /api/eqemu/verify_account          PhoenixAppWeb.Api.EqemuController :verify_account
   GET   /api/eqemu/characters/:user_id     PhoenixAppWeb.Api.EqemuController :list_characters
   POST  /api/eqemu/characters              PhoenixAppWeb.Api.EqemuController :create_character
+
+  # Scheduler API (Authenticated)
+  GET   /api/scheduler/events              PhoenixAppWeb.Api.SchedulerController :list_events
+  POST  /api/scheduler/events              PhoenixAppWeb.Api.SchedulerController :create_event
+  GET   /api/scheduler/events/:id          PhoenixAppWeb.Api.SchedulerController :get_event
+  PUT   /api/scheduler/events/:id          PhoenixAppWeb.Api.SchedulerController :update_event
+  DELETE /api/scheduler/events/:id         PhoenixAppWeb.Api.SchedulerController :delete_event
+  POST  /api/scheduler/events/:id/run      PhoenixAppWeb.Api.SchedulerController :run_event
+  POST  /api/scheduler/events/:id/pause    PhoenixAppWeb.Api.SchedulerController :pause_event
+  POST  /api/scheduler/events/:id/resume   PhoenixAppWeb.Api.SchedulerController :resume_event
+  GET   /api/scheduler/project-events      PhoenixAppWeb.Api.SchedulerController :list_project_events
+  
+  # Scheduler Webhook (Public with secret)
+  POST  /api/webhooks/scheduler/:secret    PhoenixAppWeb.Api.SchedulerController :trigger_webhook
+
   *     /api/graphql                       Absinthe.Plug [schema: PhoenixAppWeb.Schema]
   *     /api/graphiql       

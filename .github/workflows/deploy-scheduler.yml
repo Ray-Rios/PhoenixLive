@@ -1,0 +1,84 @@
+name: Deploy Scheduler Feature
+
+on:
+  push:
+    branches:
+      - feature/scheduler
+  workflow_dispatch: {}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Build and tag image
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}:scheduler-${{ github.sha }}
+          docker build -t $IMAGE -f Dockerfile .
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+      - name: Push image to GHCR
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        run: |
+          docker push $IMAGE
+
+  migrate-and-deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: ${{ secrets.KUBECONFIG != '' && secrets.GHCR_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set Kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          echo "$KUBECONFIG_DATA" | base64 --decode > kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl config view
+      - name: Run DB migration Job
+        env:
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          cat <<EOF | kubectl -n phoenixapp apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: phoenix-migrate-${{ github.sha }}
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                containers:
+                  - name: migrate
+                    image: $IMAGE
+                    command: ["/app/bin/phoenix_app", "eval", "Application.ensure_all_started(:phoenix_app); PhoenixApp.Release.migrate(); :init.stop()"]
+                restartPolicy: Never
+          EOF
+
+          kubectl wait --for=condition=complete job/phoenix-migrate-${{ github.sha }} --timeout=300s -n phoenixapp || true
+          kubectl get pods -n phoenixapp -l job-name=phoenix-migrate-${{ github.sha }} -o wide || true
+      - name: Update deployment image and rollout
+        env:
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          kubectl -n phoenixapp set image deployment/phoenix-web phoenix=$IMAGE --record
+          kubectl -n phoenixapp rollout status deployment/phoenix-web --timeout=300s
+
+  smoke-test:
+    needs: migrate-and-deploy
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Run smoke script (optional)
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        run: |
+          echo "If you want, add a smoke script to verify scheduling engine."

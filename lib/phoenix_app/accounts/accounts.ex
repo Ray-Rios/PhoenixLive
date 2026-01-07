@@ -157,6 +157,18 @@ defmodule PhoenixApp.Accounts do
   # ---------------------
   def get_user_by_username(username) when is_binary(username), do: Repo.get_by(User, name: username)
 
+  @doc """
+  Get multiple users by their usernames.
+  Returns a list of users matching the given usernames (case-insensitive).
+  """
+  def get_users_by_usernames(usernames) when is_list(usernames) do
+    # Normalize usernames for case-insensitive matching
+    lower_usernames = Enum.map(usernames, &String.downcase/1)
+    
+    from(u in User, where: fragment("lower(?)", u.name) in ^lower_usernames)
+    |> Repo.all()
+  end
+
   # ---------------------
   # Check if username is available
   # ---------------------
@@ -193,6 +205,7 @@ defmodule PhoenixApp.Accounts do
   # ---------------------
   def authenticate_user_secure(identifier, password, opts \\ []) when is_binary(identifier) and is_binary(password) do
     ip_address = Keyword.get(opts, :ip_address)
+    user_agent = Keyword.get(opts, :user_agent, "Unknown")
     
     # Check rate limiting first
     with :ok <- check_login_rate_limit(ip_address) do
@@ -202,6 +215,8 @@ defmodule PhoenixApp.Accounts do
         nil ->
           # Still run password check to prevent timing attacks
           Pbkdf2.no_user_verify()
+          # Record failed attempt for unknown user
+          record_failed_login(ip_address, nil, identifier, user_agent: user_agent)
           {:error, :invalid_credentials}
 
         user ->
@@ -222,12 +237,12 @@ defmodule PhoenixApp.Accounts do
               
               true ->
                 # Reset failed login attempts on successful login
-                reset_failed_login_attempts(user, ip_address)
+                reset_failed_login_attempts(user, ip_address, user_agent: user_agent)
                 {:ok, user}
             end
           else
             # Record failed login attempt
-            record_failed_login(ip_address, user)
+            record_failed_login(ip_address, user, identifier, user_agent: user_agent)
             {:error, :invalid_credentials}
           end
       end
@@ -252,10 +267,36 @@ defmodule PhoenixApp.Accounts do
 
 
 
-  defp record_failed_login(nil, _user), do: :ok
-  defp record_failed_login(ip_address, _user), do: PhoenixApp.Accounts.RateLimit.record_login_attempt(ip_address)
+  defp record_failed_login(ip_address, user, identifier_attempted, opts \\ []) do
+    user_agent = Keyword.get(opts, :user_agent, "Unknown")
+    
+    # Record in RateLimiter
+    if ip_address, do: PhoenixApp.Accounts.RateLimit.record_login_attempt(ip_address)
+    
+    # Record in Security Context
+    PhoenixApp.Security.record_login_attempt(%{
+      identifier: identifier_attempted || (user && user.email) || "unknown",
+      identifier_type: "ip",
+      ip_address: ip_address,
+      user_agent: user_agent,
+      successful: false,
+      user_id: user && user.id
+    })
+  end
 
-  defp reset_failed_login_attempts(user, ip_address) do
+  defp reset_failed_login_attempts(user, ip_address, opts \\ []) do
+    user_agent = Keyword.get(opts, :user_agent, "Unknown")
+    
+    # Record successful login in Security Context
+    PhoenixApp.Security.record_login_attempt(%{
+      identifier: user.email,
+      identifier_type: "ip",
+      ip_address: ip_address,
+      user_agent: user_agent,
+      successful: true,
+      user_id: user.id
+    })
+
     # Reset failed login attempts and update last login information
     user
     |> User.reset_failed_login_changeset(ip_address)
@@ -666,23 +707,7 @@ defmodule PhoenixApp.Accounts do
     end
   end
 
-  # ---------------------
-  # Internal helpers to guard optional legacy tables/columns
-  # ---------------------
-  defp table_exists?(table_name) when is_binary(table_name) do
-    case Repo.query("SELECT to_regclass($1)", ["public." <> table_name]) do
-      {:ok, %{rows: [[regclass]]}} when not is_nil(regclass) -> true
-      _ -> false
-    end
-  end
 
-  defp column_exists?(table_name, column_name) when is_binary(table_name) and is_binary(column_name) do
-    sql = "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2 LIMIT 1"
-    case Repo.query(sql, [table_name, column_name]) do
-      {:ok, %{num_rows: n}} when n > 0 -> true
-      _ -> false
-    end
-  end
 
   # ---------------------
   # Safe delete user
@@ -907,12 +932,16 @@ defmodule PhoenixApp.Accounts do
   end
 
   @doc "Update user audio preferences"
-  def update_audio_preferences(user_id, attrs) do
-    user = get_user!(user_id)
-    
+  def update_audio_preferences(%User{} = user, attrs) do
     user
     |> Ecto.Changeset.cast(attrs, [:notification_sound_enabled, :master_volume])
     |> Ecto.Changeset.validate_number(:master_volume, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 1.0)
     |> Repo.update()
+  end
+  def update_audio_preferences(user_id, attrs) when is_binary(user_id) do
+    case get_user(user_id) do
+      nil -> {:error, :user_not_found}
+      user -> update_audio_preferences(user, attrs)
+    end
   end
 end

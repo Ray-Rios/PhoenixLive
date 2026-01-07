@@ -1,4 +1,6 @@
-defmodule PhoenixAppWeb.DesktopLive do
+I can implement the scheduling engine (topological DAG scheduling + tests). (recommended next)
+Or integrate a Gantt library in the frontend (frappe-gantt or custom SVG + LiveView hooks).
+Or add Task CRUD and assign/permission flows.defmodule PhoenixAppWeb.DesktopLive do
   @moduledoc """
   Desktop page view - displays desktop icons, wallpaper, and context menus.
   

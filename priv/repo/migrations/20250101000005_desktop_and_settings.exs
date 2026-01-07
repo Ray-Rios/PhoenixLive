@@ -8,6 +8,163 @@ defmodule PhoenixApp.Repo.Migrations.DesktopAndSettings do
   use Ecto.Migration
 
   def change do
+    execute """
+    DO $$
+    BEGIN
+      -- WINDOW LAYOUTS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'window_layouts') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'window_layouts' AND column_name = 'is_default') THEN
+          ALTER TABLE window_layouts ADD COLUMN is_default boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'window_layouts' AND column_name = 'layout_name') THEN
+          ALTER TABLE window_layouts ADD COLUMN layout_name text NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'window_layouts' AND column_name = 'windows_config') THEN
+          ALTER TABLE window_layouts ADD COLUMN windows_config jsonb DEFAULT '{}';
+        END IF;
+
+        -- Fix empty layout_names
+        UPDATE window_layouts SET layout_name = id::text WHERE layout_name = '';
+      END IF;
+
+      -- CALENDAR NOTES
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'calendar_notes') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'calendar_notes' AND column_name = 'is_all_day') THEN
+          ALTER TABLE calendar_notes ADD COLUMN is_all_day boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'calendar_notes' AND column_name = 'starts_at') THEN
+          ALTER TABLE calendar_notes ADD COLUMN starts_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'calendar_notes' AND column_name = 'ends_at') THEN
+          ALTER TABLE calendar_notes ADD COLUMN ends_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'calendar_notes' AND column_name = 'color') THEN
+          ALTER TABLE calendar_notes ADD COLUMN color text DEFAULT '#3b82f6';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'calendar_notes' AND column_name = 'reminder') THEN
+          ALTER TABLE calendar_notes ADD COLUMN reminder boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'calendar_notes' AND column_name = 'reminder_at') THEN
+          ALTER TABLE calendar_notes ADD COLUMN reminder_at timestamp(0) without time zone;
+        END IF;
+      END IF;
+
+      -- CMS OPTIONS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cms_options') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cms_options' AND column_name = 'key') THEN
+          ALTER TABLE cms_options ADD COLUMN key text NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cms_options' AND column_name = 'value') THEN
+          ALTER TABLE cms_options ADD COLUMN value text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cms_options' AND column_name = 'autoload') THEN
+          ALTER TABLE cms_options ADD COLUMN autoload boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cms_options' AND column_name = 'category') THEN
+          ALTER TABLE cms_options ADD COLUMN category text DEFAULT 'general';
+        END IF;
+
+        -- Fix empty keys
+        UPDATE cms_options SET key = id::text WHERE key = '';
+      END IF;
+
+      -- USER SESSIONS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_sessions') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_sessions' AND column_name = 'session_data') THEN
+          ALTER TABLE user_sessions ADD COLUMN session_data jsonb DEFAULT '{}';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_sessions' AND column_name = 'desktop_state') THEN
+          ALTER TABLE user_sessions ADD COLUMN desktop_state jsonb DEFAULT '{}';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_sessions' AND column_name = 'last_activity_at') THEN
+          ALTER TABLE user_sessions ADD COLUMN last_activity_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_sessions' AND column_name = 'user_agent') THEN
+          ALTER TABLE user_sessions ADD COLUMN user_agent text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_sessions' AND column_name = 'ip_address') THEN
+          ALTER TABLE user_sessions ADD COLUMN ip_address text;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_sessions' AND column_name = 'device_type') THEN
+          ALTER TABLE user_sessions ADD COLUMN device_type text;
+        END IF;
+      END IF;
+
+      -- NOTIFICATION PREFERENCES
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'notification_preferences') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'email_notifications') THEN
+          ALTER TABLE notification_preferences ADD COLUMN email_notifications boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'push_notifications') THEN
+          ALTER TABLE notification_preferences ADD COLUMN push_notifications boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'desktop_notifications') THEN
+          ALTER TABLE notification_preferences ADD COLUMN desktop_notifications boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'chat_mentions') THEN
+          ALTER TABLE notification_preferences ADD COLUMN chat_mentions boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'chat_direct_messages') THEN
+          ALTER TABLE notification_preferences ADD COLUMN chat_direct_messages boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'order_updates') THEN
+          ALTER TABLE notification_preferences ADD COLUMN order_updates boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'marketing_emails') THEN
+          ALTER TABLE notification_preferences ADD COLUMN marketing_emails boolean DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'digest_frequency') THEN
+          ALTER TABLE notification_preferences ADD COLUMN digest_frequency text DEFAULT 'daily';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'quiet_hours_start') THEN
+          ALTER TABLE notification_preferences ADD COLUMN quiet_hours_start time without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'quiet_hours_end') THEN
+          ALTER TABLE notification_preferences ADD COLUMN quiet_hours_end time without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notification_preferences' AND column_name = 'timezone') THEN
+          ALTER TABLE notification_preferences ADD COLUMN timezone text DEFAULT 'UTC';
+        END IF;
+      END IF;
+
+      -- ANNOUNCEMENTS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'announcements') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'announcement_type') THEN
+          ALTER TABLE announcements ADD COLUMN announcement_type text DEFAULT 'info';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'is_active') THEN
+          ALTER TABLE announcements ADD COLUMN is_active boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'is_dismissible') THEN
+          ALTER TABLE announcements ADD COLUMN is_dismissible boolean DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'starts_at') THEN
+          ALTER TABLE announcements ADD COLUMN starts_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'ends_at') THEN
+          ALTER TABLE announcements ADD COLUMN ends_at timestamp(0) without time zone;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'target_audience') THEN
+          ALTER TABLE announcements ADD COLUMN target_audience text DEFAULT 'all';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'display_location') THEN
+          ALTER TABLE announcements ADD COLUMN display_location text[] DEFAULT '{"all"}';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'announcements' AND column_name = 'created_by_id') THEN
+          ALTER TABLE announcements ADD COLUMN created_by_id uuid REFERENCES users(id) ON DELETE SET NULL;
+        END IF;
+      END IF;
+
+      -- DISMISSED ANNOUNCEMENTS
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'dismissed_announcements') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'dismissed_announcements' AND column_name = 'dismissed_at') THEN
+          ALTER TABLE dismissed_announcements ADD COLUMN dismissed_at timestamp(0) without time zone NOT NULL DEFAULT NOW();
+        END IF;
+      END IF;
+
+    END $$;
+    """, ""
+
     # ============================================================================
     # WINDOW LAYOUTS (Desktop Environment)
     # ============================================================================

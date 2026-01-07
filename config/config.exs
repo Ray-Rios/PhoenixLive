@@ -63,9 +63,15 @@ config :esbuild,
 # ----------------------------
 # Logger
 # ----------------------------
+config :logger,
+  backends: [:console, PhoenixApp.LogBufferBackend]
+
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
+
+config :logger, PhoenixApp.LogBufferBackend,
+  level: :info
 
 # ----------------------------
 # JSON library

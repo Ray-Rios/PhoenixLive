@@ -87,8 +87,9 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
   # POST /api/auth/login - Accept email or username
   def login(conn, %{"email" => identifier, "password" => password}) do
     ip_address = PhoenixApp.Accounts.RateLimit.get_client_ip(conn)
+    user_agent = get_user_agent(conn)
 
-    case Accounts.authenticate_user_secure(identifier, password, ip_address: ip_address) do
+    case Accounts.authenticate_user_secure(identifier, password, ip_address: ip_address, user_agent: user_agent) do
       {:ok, user} ->
         # Generate JWT token using Guardian
         case Guardian.encode_and_sign(user) do
@@ -486,5 +487,12 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
         String.replace(acc, "%{#{key}}", to_string(value))
       end)
     end)
+  end
+
+  defp get_user_agent(conn) do
+    case Plug.Conn.get_req_header(conn, "user-agent") do
+      [user_agent | _] -> user_agent
+      [] -> "Unknown"
+    end
   end
 end

@@ -12,6 +12,7 @@ defmodule PhoenixApp.Content.UserMedia do
     field :mime_type, :string
     field :file_size, :integer
     field :file_path, :string
+    field :folder_path, :string, default: "/"  # Virtual folder path for organization
     field :url, :string
     field :metadata, :map
     field :alt_text, :string
@@ -35,6 +36,7 @@ defmodule PhoenixApp.Content.UserMedia do
       :mime_type,
       :file_size,
       :file_path,
+      :folder_path,
       :url,
       :metadata,
       :alt_text,
@@ -44,6 +46,29 @@ defmodule PhoenixApp.Content.UserMedia do
       :user_id
     ])
     |> validate_required(@required)
-    |> validate_inclusion(:file_type, ["image", "video", "audio", "3d", "document"]) 
+    |> validate_inclusion(:file_type, ["image", "video", "audio", "3d", "document"])
+    |> normalize_folder_path()
+  end
+  
+  # Ensure folder path starts with / and has no trailing slash (except for root)
+  defp normalize_folder_path(changeset) do
+    case get_change(changeset, :folder_path) do
+      nil -> changeset
+      path ->
+        normalized = path
+          |> String.trim()
+          |> ensure_leading_slash()
+          |> remove_trailing_slash()
+        put_change(changeset, :folder_path, normalized)
+    end
+  end
+  
+  defp ensure_leading_slash(""), do: "/"
+  defp ensure_leading_slash("/" <> _ = path), do: path
+  defp ensure_leading_slash(path), do: "/" <> path
+  
+  defp remove_trailing_slash("/"), do: "/"
+  defp remove_trailing_slash(path) do
+    String.trim_trailing(path, "/")
   end
 end

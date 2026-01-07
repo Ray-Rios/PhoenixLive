@@ -12,10 +12,8 @@ defmodule PhoenixAppWeb.AuthLive do
     current_user = maybe_fetch_user(session["user_id"])
     
     # Store IP address and user agent during mount since connect_info is only available here
-    ip_address = case get_connect_info(socket, :peer_data) do
-      %{address: {a, b, c, d}} -> "#{a}.#{b}.#{c}.#{d}"
-      _ -> "unknown"
-    end
+    # Use x-forwarded-for header when behind proxy/load balancer, fallback to peer_data
+    ip_address = get_client_ip_from_socket(socket)
     
     user_agent = case get_connect_info(socket, :user_agent) do
       nil -> "Unknown"
@@ -291,25 +289,26 @@ defmodule PhoenixAppWeb.AuthLive do
   
   defp perform_login(socket, identifier, password, ip_address, fingerprint) do
     require Logger
+    user_agent = socket.assigns.user_agent
     
     try do
       # Add timeout to prevent hanging
-      task = Task.async(fn -> Accounts.authenticate_user_secure(identifier, password, ip_address: ip_address) end)
+      # Pass user_agent so authenticate_user_secure can record it in security logs
+      task = Task.async(fn -> 
+        Accounts.authenticate_user_secure(identifier, password, 
+          ip_address: ip_address, 
+          user_agent: user_agent
+        ) 
+      end)
       
       case Task.yield(task, 10_000) || Task.shutdown(task) do
       {:ok, {:ok, user}} ->
-        # Record successful login in security system
-        PhoenixApp.Security.record_login_result(ip_address, true, %{
-          identifier_type: "ip",
-          ip_address: ip_address,
-          user_id: user.id,
-          user_agent: socket.assigns.user_agent
-        })
+        # Login tracking is handled by authenticate_user_secure
         
         # Get or create device fingerprint if provided
         if fingerprint do
           case PhoenixApp.Security.get_or_create_fingerprint(fingerprint, %{
-            user_agent: socket.assigns.user_agent,
+            user_agent: user_agent,
             platform: "web"
           }) do
             {:ok, _device_fingerprint} ->
@@ -330,12 +329,7 @@ defmodule PhoenixAppWeb.AuthLive do
          |> redirect(external: "/auth/login_success?user_id=#{user.id}&token=#{jwt_token}")}
 
       {:ok, {:error, :invalid_credentials}} ->
-        # Record failed login in security system
-        PhoenixApp.Security.record_login_result(ip_address, false, %{
-          identifier_type: "ip",
-          ip_address: ip_address,
-          user_agent: socket.assigns.user_agent
-        })
+        # Failed login tracking is handled by authenticate_user_secure
         
         # Preserve entered identifier, clear password but keep form_data
         form_data = Map.put(socket.assigns.form_data, "password", "")
@@ -750,5 +744,37 @@ defmodule PhoenixAppWeb.AuthLive do
 
   defp get_env do
     System.get_env("MIX_ENV") || "dev"
+  end
+
+  # Extract client IP from socket, preferring x-forwarded-for header when behind proxy
+  defp get_client_ip_from_socket(socket) do
+    # First try x-forwarded-for header (set by load balancer/proxy)
+    case get_connect_info(socket, :x_headers) do
+      headers when is_list(headers) ->
+        case List.keyfind(headers, "x-forwarded-for", 0) do
+          {_, forwarded_for} ->
+            # x-forwarded-for can contain multiple IPs: "client, proxy1, proxy2"
+            # The first one is the original client IP
+            forwarded_for
+            |> String.split(",")
+            |> List.first()
+            |> String.trim()
+          nil ->
+            # Fall back to peer_data
+            get_peer_ip(socket)
+        end
+      _ ->
+        get_peer_ip(socket)
+    end
+  end
+
+  defp get_peer_ip(socket) do
+    case get_connect_info(socket, :peer_data) do
+      %{address: {a, b, c, d}} -> "#{a}.#{b}.#{c}.#{d}"
+      %{address: {a, b, c, d, e, f, g, h}} -> 
+        # IPv6 address
+        "#{Integer.to_string(a, 16)}:#{Integer.to_string(b, 16)}:#{Integer.to_string(c, 16)}:#{Integer.to_string(d, 16)}:#{Integer.to_string(e, 16)}:#{Integer.to_string(f, 16)}:#{Integer.to_string(g, 16)}:#{Integer.to_string(h, 16)}"
+      _ -> "unknown"
+    end
   end
 end

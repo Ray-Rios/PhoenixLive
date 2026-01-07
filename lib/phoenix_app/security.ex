@@ -92,6 +92,20 @@ defmodule PhoenixApp.Security do
     |> Repo.all()
   end
 
+  @doc """
+  Lists blocked identifiers history (including expired/unblocked) for the last 90 days.
+  """
+  def list_blocked_history(days \\ 90) do
+    cutoff = DateTime.utc_now() |> DateTime.add(-days, :day)
+    
+    from(bi in BlockedIdentifier,
+      where: bi.blocked_at >= ^cutoff,
+      order_by: [desc: bi.blocked_at],
+      preload: [:blocked_by_user]
+    )
+    |> Repo.all()
+  end
+
   ## Allowed Identifiers
 
   @doc """

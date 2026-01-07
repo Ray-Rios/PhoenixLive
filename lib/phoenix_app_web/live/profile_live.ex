@@ -1,6 +1,7 @@
 defmodule PhoenixAppWeb.ProfileLive do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Accounts
+  alias PhoenixApp.Commerce
 
 
   @impl true
@@ -18,6 +19,9 @@ defmodule PhoenixAppWeb.ProfileLive do
 
       # Load blocked users
       blocked_users = Accounts.list_blocked_users(current_user.id)
+
+      # Load subscriptions
+      subscriptions = Commerce.get_user_active_subscriptions(current_user)
 
       # Load previous avatars
       previous_avatars = PhoenixApp.Uploads.list_user_uploads(current_user.id, "avatar")
@@ -37,6 +41,7 @@ defmodule PhoenixAppWeb.ProfileLive do
           custom_data: custom_data,
           avatar_opacity: avatar_opacity,
           blocked_users: blocked_users,
+          subscriptions: subscriptions,
           previous_avatars: previous_avatars,
           data_usage: data_usage
         )
@@ -49,6 +54,24 @@ defmodule PhoenixAppWeb.ProfileLive do
         )
 
       {:ok, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("cancel_subscription", %{"id" => id}, socket) do
+    subscription = Commerce.get_subscription!(id)
+    
+    # Ensure user owns subscription
+    if subscription.user_id == socket.assigns.current_user.id do
+      case Commerce.cancel_subscription(subscription) do
+        {:ok, _sub} ->
+          subscriptions = Commerce.get_user_active_subscriptions(socket.assigns.current_user)
+          {:noreply, assign(socket, subscriptions: subscriptions) |> put_flash(:info, "Subscription canceled.")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to cancel subscription.")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Unauthorized.")}
     end
   end
 
@@ -610,6 +633,10 @@ defmodule PhoenixAppWeb.ProfileLive do
                           class={"px-6 py-4 text-sm font-medium border-b-2 transition-colors #{if @active_tab == "profile", do: "text-blue-400 border-blue-400 bg-gray-750", else: "text-gray-400 border-transparent hover:text-white"}"}>
                     Profile Settings
                   </button>
+                  <button phx-click="switch_tab" phx-value-tab="subscriptions" 
+                          class={"px-6 py-4 text-sm font-medium border-b-2 transition-colors #{if @active_tab == "subscriptions", do: "text-blue-400 border-blue-400 bg-gray-750", else: "text-gray-400 border-transparent hover:text-white"}"}>
+                    Subscriptions
+                  </button>
                   <button phx-click="switch_tab" phx-value-tab="appearance" 
                           class={"px-6 py-4 text-sm font-medium border-b-2 transition-colors #{if @active_tab == "appearance", do: "text-blue-400 border-blue-400 bg-gray-750", else: "text-gray-400 border-transparent hover:text-white"}"}>
                     Background
@@ -796,6 +823,62 @@ defmodule PhoenixAppWeb.ProfileLive do
                       </form>
                     </div>
                   </div>
+                </div>
+              <% end %>
+
+              <%= if @active_tab == "subscriptions" do %>
+                <div class="glass-dark rounded-b-lg rounded-tr-lg p-6">
+                  <h2 class="text-lg font-semibold text-white mb-6">My Subscriptions</h2>
+                  
+                  <%= if @subscriptions == [] do %>
+                    <div class="bg-gray-800/50 rounded-lg p-8 text-center border border-gray-700">
+                      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-700 mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                      </div>
+                      <h3 class="text-xl font-medium text-white mb-2">No Active Subscriptions</h3>
+                      <p class="text-gray-400 mb-6 max-w-md mx-auto">You don't have any active subscriptions at the moment. Upgrade your account to unlock premium features.</p>
+                      <.link navigate={~p"/shop"} class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Browse Plans
+                      </.link>
+                    </div>
+                  <% else %>
+                    <div class="space-y-4">
+                      <%= for sub <- @subscriptions do %>
+                        <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div>
+                            <div class="flex items-center gap-3 mb-1">
+                              <h3 class="text-xl font-semibold text-white"><%= sub.product.name %></h3>
+                              <span class={"px-2.5 py-0.5 rounded-full text-xs font-medium " <> if(sub.status == "active", do: "bg-green-900 text-green-200", else: "bg-yellow-900 text-yellow-200")}>
+                                <%= String.capitalize(sub.status) %>
+                              </span>
+                            </div>
+                            <p class="text-gray-400 text-sm">
+                              <%= if sub.cancel_at_period_end do %>
+                                Cancels on <%= Calendar.strftime(sub.current_period_end, "%B %d, %Y") %>
+                              <% else %>
+                                Renews on <%= Calendar.strftime(sub.current_period_end, "%B %d, %Y") %>
+                              <% end %>
+                            </p>
+                          </div>
+                          
+                          <%= unless sub.cancel_at_period_end do %>
+                            <button phx-click="cancel_subscription" phx-value-id={sub.id} data-confirm="Are you sure you want to cancel? You will retain access until the end of the current billing period." class="text-red-400 hover:text-red-300 text-sm font-medium hover:underline">
+                              Cancel Subscription
+                            </button>
+                          <% else %>
+                            <span class="text-yellow-500 text-sm font-medium">Cancellation Scheduled</span>
+                          <% end %>
+                        </div>
+                      <% end %>
+                    </div>
+                    
+                    <div class="mt-8 pt-6 border-t border-gray-700">
+                      <h3 class="text-md font-medium text-white mb-4">Billing History</h3>
+                      <p class="text-sm text-gray-400">To view your billing history and download invoices, please check your email for receipts.</p>
+                    </div>
+                  <% end %>
                 </div>
               <% end %>
 

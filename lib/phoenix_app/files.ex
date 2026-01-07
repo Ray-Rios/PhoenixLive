@@ -6,12 +6,404 @@ defmodule PhoenixApp.Files do
   import Ecto.Query, warn: false
   alias PhoenixApp.Repo
   alias PhoenixApp.Files.UserFile
+  alias PhoenixApp.Files.UserFolder
   alias PhoenixApp.Forum.MessageAttachment
+
+  # ==================== FOLDER OPERATIONS ====================
+
+  @doc "List all folders for a user"
+  def list_user_folders(user) do
+    try do
+      from(f in UserFolder, where: f.user_id == ^user.id, order_by: [asc: f.path])
+      |> Repo.all()
+    rescue
+      # Table doesn't exist yet (migration not run) or any other error
+      _ -> []
+    end
+  end
+
+  @doc "List folders at a specific path (direct children)"
+  def list_folders_at_path(user, parent_path \\ "/") do
+    try do
+      from(f in UserFolder, 
+        where: f.user_id == ^user.id and f.parent_path == ^parent_path,
+        order_by: [asc: f.name]
+      )
+      |> Repo.all()
+    rescue
+      # Table doesn't exist yet (migration not run) or any other error
+      _ -> []
+    end
+  end
+
+  @doc "Get a folder by path"
+  def get_folder_by_path(user, path) do
+    try do
+      from(f in UserFolder, where: f.user_id == ^user.id and f.path == ^path)
+      |> Repo.one()
+    rescue
+      _ -> nil
+    end
+  end
+
+  @doc "Create a new folder"
+  def create_folder(user, name, parent_path \\ "/") do
+    try do
+      # Normalize parent path
+      parent_path = normalize_path(parent_path)
+      
+      # Build full path
+      full_path = if parent_path == "/" do
+        "/" <> name
+      else
+        parent_path <> "/" <> name
+      end
+
+      %UserFolder{}
+      |> UserFolder.changeset(%{
+        name: name,
+        path: full_path,
+        parent_path: parent_path,
+        user_id: user.id
+      })
+      |> Repo.insert()
+    rescue
+      # Table doesn't exist yet
+      Postgrex.Error -> {:error, :migration_pending}
+    end
+  end
+
+  @doc "Delete a folder and optionally its contents"
+  def delete_folder(user, path, delete_contents \\ false) do
+    case get_folder_by_path(user, path) do
+      nil -> 
+        {:error, :not_found}
+      folder ->
+        if delete_contents do
+          # Delete all files in this folder and subfolders
+          delete_folder_contents(user, path)
+        else
+          # Check if folder is empty
+          if folder_has_contents?(user, path) do
+            {:error, :folder_not_empty}
+          else
+            Repo.delete(folder)
+          end
+        end
+    end
+  end
+
+  defp delete_folder_contents(user, path) do
+    # Delete all files in this folder path (and subfolders)
+    from(f in UserFile, 
+      where: f.user_id == ^user.id and (f.folder_path == ^path or like(f.folder_path, ^"#{path}/%"))
+    )
+    |> Repo.delete_all()
+
+    # Delete all media in this folder path
+    from(m in PhoenixApp.Content.UserMedia, 
+      where: m.user_id == ^user.id and (m.folder_path == ^path or like(m.folder_path, ^"#{path}/%"))
+    )
+    |> Repo.delete_all()
+
+    # Delete subfolders
+    from(f in UserFolder, 
+      where: f.user_id == ^user.id and like(f.path, ^"#{path}/%")
+    )
+    |> Repo.delete_all()
+
+    # Delete the folder itself
+    from(f in UserFolder, where: f.user_id == ^user.id and f.path == ^path)
+    |> Repo.delete_all()
+
+    :ok
+  end
+
+  defp folder_has_contents?(user, path) do
+    file_count = from(f in UserFile, 
+      where: f.user_id == ^user.id and f.folder_path == ^path, 
+      select: count()
+    ) |> Repo.one() || 0
+
+    media_count = from(m in PhoenixApp.Content.UserMedia, 
+      where: m.user_id == ^user.id and m.folder_path == ^path, 
+      select: count()
+    ) |> Repo.one() || 0
+
+    subfolder_count = from(f in UserFolder, 
+      where: f.user_id == ^user.id and f.parent_path == ^path, 
+      select: count()
+    ) |> Repo.one() || 0
+
+    file_count > 0 || media_count > 0 || subfolder_count > 0
+  end
+
+  @doc "Rename a folder"
+  def rename_folder(user, path, new_name) do
+    case get_folder_by_path(user, path) do
+      nil -> 
+        {:error, :not_found}
+      folder ->
+        new_path = Path.join(folder.parent_path, new_name) |> normalize_path()
+        
+        # Update folder
+        folder
+        |> UserFolder.changeset(%{name: new_name, path: new_path})
+        |> Repo.update()
+        |> case do
+          {:ok, updated_folder} ->
+            # Update all files and subfolders with the old path
+            update_paths_after_rename(user, path, new_path)
+            {:ok, updated_folder}
+          error -> error
+        end
+    end
+  end
+
+  defp update_paths_after_rename(user, old_path, new_path) do
+    # Update files
+    from(f in UserFile, 
+      where: f.user_id == ^user.id and f.folder_path == ^old_path
+    )
+    |> Repo.update_all(set: [folder_path: new_path])
+
+    from(f in UserFile, 
+      where: f.user_id == ^user.id and like(f.folder_path, ^"#{old_path}/%")
+    )
+    |> Repo.all()
+    |> Enum.each(fn file ->
+      new_folder_path = String.replace(file.folder_path, old_path, new_path, global: false)
+      file |> Ecto.Changeset.change(%{folder_path: new_folder_path}) |> Repo.update!()
+    end)
+
+    # Update media
+    from(m in PhoenixApp.Content.UserMedia, 
+      where: m.user_id == ^user.id and m.folder_path == ^old_path
+    )
+    |> Repo.update_all(set: [folder_path: new_path])
+
+    # Update subfolders
+    from(f in UserFolder, 
+      where: f.user_id == ^user.id and f.parent_path == ^old_path
+    )
+    |> Repo.update_all(set: [parent_path: new_path])
+
+    from(f in UserFolder, 
+      where: f.user_id == ^user.id and like(f.path, ^"#{old_path}/%")
+    )
+    |> Repo.all()
+    |> Enum.each(fn folder ->
+      new_folder_path = String.replace(folder.path, old_path, new_path, global: false)
+      new_parent_path = String.replace(folder.parent_path, old_path, new_path, global: false)
+      folder |> Ecto.Changeset.change(%{path: new_folder_path, parent_path: new_parent_path}) |> Repo.update!()
+    end)
+  end
+
+  @doc "Move a file to a different folder"
+  def move_file(user, file_id, new_folder_path) do
+    new_folder_path = normalize_path(new_folder_path)
+    
+    case get_user_file(user, file_id) do
+      nil -> {:error, :not_found}
+      file ->
+        file
+        |> Ecto.Changeset.change(%{folder_path: new_folder_path})
+        |> Repo.update()
+    end
+  end
+
+  defp get_user_file(user, id) do
+    from(f in UserFile, where: f.user_id == ^user.id and f.id == ^id)
+    |> Repo.one()
+  end
+
+  defp normalize_path(""), do: "/"
+  defp normalize_path(nil), do: "/"
+  defp normalize_path("/" <> _ = path) do
+    case String.trim_trailing(path, "/") do
+      "" -> "/"
+      p -> p
+    end
+  end
+  defp normalize_path(path), do: "/" <> String.trim_trailing(path, "/")
+
+  # ==================== FILE LISTING WITH FOLDERS ====================
+
+  @doc "List files and folders at a specific path"
+  def list_contents_at_path(user, path \\ "/") do
+    try do
+      path = normalize_path(path)
+      
+      # Get folders at this path
+      folders = list_folders_at_path(user, path)
+      |> Enum.map(fn folder ->
+        %{
+          id: folder.id,
+          name: folder.name,
+          type: :folder,
+          path: folder.path,
+          icon: Map.get(folder, :icon) || "📁",
+          color: Map.get(folder, :color),
+          inserted_at: folder.inserted_at,
+          file_size: 0,
+          content_type: "folder"
+        }
+      end)
+
+      # Get files at this path
+      files = list_files_at_path(user, path)
+      
+      folders ++ files
+    rescue
+      e ->
+        require Logger
+        Logger.warning("Error listing contents at path: #{inspect(e)}")
+        # Fall back to listing all user files
+        list_all_user_content(user)
+        |> Enum.map(fn file ->
+          %{
+            id: file.id,
+            name: file.original_filename || file.filename,
+            filename: file.filename,
+            original_filename: file.original_filename,
+            file_size: file.file_size,
+            content_type: file.content_type,
+            folder_path: "/",
+            url: file.url,
+            inserted_at: file.inserted_at,
+            type: :file,
+            source_type: file.type,
+            source: file
+          }
+        end)
+    end
+  end
+
+  @doc "List files at a specific folder path"
+  def list_files_at_path(user, folder_path \\ "/") do
+    folder_path = normalize_path(folder_path)
+    
+    # For root path ("/"), list all files (backwards compatible before folder_path migration)
+    # This also handles the case where folder_path column doesn't exist yet
+    user_files = try do
+      if folder_path == "/" do
+        # At root, show files that have no folder_path or folder_path = "/"
+        from(f in UserFile, 
+          where: f.user_id == ^user.id and (is_nil(f.folder_path) or f.folder_path == "/" or f.folder_path == ""),
+          order_by: [desc: f.inserted_at]
+        )
+        |> Repo.all()
+      else
+        from(f in UserFile, 
+          where: f.user_id == ^user.id and f.folder_path == ^folder_path,
+          order_by: [desc: f.inserted_at]
+        )
+        |> Repo.all()
+      end
+    rescue
+      # If folder_path column doesn't exist or any error, fall back to listing all files at root
+      _ ->
+        if folder_path == "/" do
+          from(f in UserFile, where: f.user_id == ^user.id, order_by: [desc: f.inserted_at])
+          |> Repo.all()
+        else
+          []
+        end
+    end
+    |> Enum.map(fn f -> 
+      %{
+        id: f.id,
+        name: f.original_filename || f.filename,
+        filename: f.filename,
+        original_filename: f.original_filename,
+        file_size: f.file_size,
+        content_type: f.content_type,
+        folder_path: Map.get(f, :folder_path, "/"),
+        url: safe_file_url(f),
+        inserted_at: f.inserted_at,
+        type: :file,
+        source_type: :user_file,
+        source: f
+      }
+    end)
+
+    user_media = try do
+      if folder_path == "/" do
+        from(m in PhoenixApp.Content.UserMedia, 
+          where: m.user_id == ^user.id and (is_nil(m.folder_path) or m.folder_path == "/" or m.folder_path == ""),
+          order_by: [desc: m.inserted_at]
+        )
+        |> Repo.all()
+      else
+        from(m in PhoenixApp.Content.UserMedia, 
+          where: m.user_id == ^user.id and m.folder_path == ^folder_path,
+          order_by: [desc: m.inserted_at]
+        )
+        |> Repo.all()
+      end
+    rescue
+      # If folder_path column doesn't exist or any error, fall back to listing all media at root
+      _ ->
+        if folder_path == "/" do
+          from(m in PhoenixApp.Content.UserMedia, where: m.user_id == ^user.id, order_by: [desc: m.inserted_at])
+          |> Repo.all()
+        else
+          []
+        end
+    end
+    |> Enum.map(fn m -> 
+      %{
+        id: m.id,
+        name: m.original_filename || m.filename,
+        filename: m.filename,
+        original_filename: m.original_filename,
+        file_size: m.file_size,
+        content_type: m.mime_type,
+        folder_path: Map.get(m, :folder_path, "/"),
+        url: m.url,
+        inserted_at: m.inserted_at,
+        type: :file,
+        source_type: :user_media,
+        source: m
+      }
+    end)
+
+    (user_files ++ user_media)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+  end
 
   # User file operations
   def list_user_files(user) do
-    from(f in UserFile, where: f.user_id == ^user.id, order_by: [desc: f.inserted_at])
-    |> Repo.all()
+    try do
+      from(f in UserFile, where: f.user_id == ^user.id, order_by: [desc: f.inserted_at])
+      |> Repo.all()
+    rescue
+      _ ->
+        # Fallback: Select specific fields that we know exist (excluding folder_path if missing)
+        from(f in UserFile, 
+          where: f.user_id == ^user.id, 
+          order_by: [desc: f.inserted_at],
+          select: %{
+            id: f.id,
+            filename: f.filename,
+            original_filename: f.original_filename,
+            content_type: f.content_type,
+            file_size: f.file_size,
+            file_path: f.file_path,
+            is_public: f.is_public,
+            description: f.description,
+            tags: f.tags,
+            user_id: f.user_id,
+            inserted_at: f.inserted_at,
+            updated_at: f.updated_at,
+            file: f.file
+          }
+        )
+        |> Repo.all()
+        |> Enum.map(fn data -> 
+          struct(UserFile, Map.put(data, :folder_path, "/"))
+        end)
+    end
   end
 
   def list_all_user_content(user) do
@@ -26,7 +418,7 @@ defmodule PhoenixApp.Files do
         original_filename: f.original_filename,
         file_size: f.file_size,
         content_type: f.content_type,
-        url: PhoenixApp.UserFileUpload.url({f.file, f}, :original),
+        url: safe_file_url(f),
         inserted_at: f.inserted_at,
         type: :file,
         source: f
@@ -152,12 +544,6 @@ defmodule PhoenixApp.Files do
       nil -> {:error, :not_found}
       file -> Repo.delete(file)
     end
-  end
-
-  def create_folder(_user, _folder_name) do
-    # Folder creation not implemented yet - requires database migration
-    # to add proper folder support or separate folders table
-    {:error, "Folder creation not implemented yet"}
   end
 
   def get_user_data_usage(user_id) do
@@ -344,5 +730,17 @@ defmodule PhoenixApp.Files do
     # This ensures consistency with other uploads
     user_dir = PhoenixApp.Uploads.user_dir(user.id, context: "files")
     File.mkdir_p!(user_dir)
+  end
+
+  defp safe_file_url(file) do
+    try do
+      if file.file do
+        PhoenixApp.UserFileUpload.url({file.file, file}, :original)
+      else
+        nil
+      end
+    rescue
+      _ -> nil
+    end
   end
 end

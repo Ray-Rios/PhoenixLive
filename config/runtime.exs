@@ -6,6 +6,9 @@ import Config
 # -------------------------------------------------
 config :swoosh, :api_client, false
 
+# Optional Projects API key used by Taskbar calendar to fetch project items
+config :phoenix_app, projects_api_key: System.get_env("PROJECTS_API_KEY") || ""
+
 # -------------------------------------------------
 # SECRET_KEY_BASE
 # -------------------------------------------------

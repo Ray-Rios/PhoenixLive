@@ -95,6 +95,24 @@ defmodule PhoenixAppWeb.Components.AdminSidebar do
             label="Orders"
             active={String.starts_with?(@current_path, "/admin/orders")}
           />
+          <.sidebar_link
+            href="/admin/projects"
+            icon="�"
+            label="Projects"
+            active={String.starts_with?(@current_path, "/admin/projects")}
+          />
+          <.sidebar_link
+            href="/admin/scheduler"
+            icon="⏰"
+            label="Scheduler"
+            active={String.starts_with?(@current_path, "/admin/scheduler")}
+          />
+          <.sidebar_link
+            href="/admin/subscriptions"
+            icon="🔄"
+            label="Subscriptions"
+            active={String.starts_with?(@current_path, "/admin/subscriptions")}
+          />
         </div>
         
         <!-- Tools Section -->
@@ -109,16 +127,16 @@ defmodule PhoenixAppWeb.Components.AdminSidebar do
             active={String.starts_with?(@current_path, "/admin/security")}
           />
           <.sidebar_link
+            href="/admin/emails"
+            icon="📧"
+            label="Email Logs"
+            active={String.starts_with?(@current_path, "/admin/emails")}
+          />
+          <.sidebar_link
             href="/admin/sql"
             icon="🗄️"
             label="SQL Console"
             active={String.starts_with?(@current_path, "/admin/sql")}
-          />
-          <.sidebar_link
-            href="/admin/files"
-            icon="📁"
-            label="Files"
-            active={String.starts_with?(@current_path, "/admin/files")}
           />
           <.sidebar_link
             href="/admin/api-toolbox"

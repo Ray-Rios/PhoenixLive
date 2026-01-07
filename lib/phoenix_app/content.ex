@@ -216,7 +216,38 @@ defmodule PhoenixApp.Content do
 
   # User Media
   def list_user_media(user) do
-    from(m in UserMedia, where: m.user_id == ^user.id, order_by: [desc: m.inserted_at])
-    |> Repo.all()
+    try do
+      from(m in UserMedia, where: m.user_id == ^user.id, order_by: [desc: m.inserted_at])
+      |> Repo.all()
+    rescue
+      _ ->
+        # Fallback: Select specific fields that we know exist (excluding folder_path if missing)
+        from(m in UserMedia, 
+          where: m.user_id == ^user.id, 
+          order_by: [desc: m.inserted_at],
+          select: %{
+            id: m.id,
+            filename: m.filename,
+            original_filename: m.original_filename,
+            file_type: m.file_type,
+            mime_type: m.mime_type,
+            file_size: m.file_size,
+            file_path: m.file_path,
+            url: m.url,
+            metadata: m.metadata,
+            alt_text: m.alt_text,
+            caption: m.caption,
+            usage_context: m.usage_context,
+            is_public: m.is_public,
+            user_id: m.user_id,
+            inserted_at: m.inserted_at,
+            updated_at: m.updated_at
+          }
+        )
+        |> Repo.all()
+        |> Enum.map(fn data -> 
+          struct(UserMedia, Map.put(data, :folder_path, "/"))
+        end)
+    end
   end
 end

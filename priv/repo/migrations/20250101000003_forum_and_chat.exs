@@ -170,6 +170,19 @@ defmodule PhoenixApp.Repo.Migrations.ForumAndChat do
       timestamps(type: :utc_datetime)
     end
 
+    execute """
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'channel_invites' AND column_name = 'created_by_id'
+      ) THEN
+        ALTER TABLE channel_invites 
+        ADD COLUMN created_by_id uuid REFERENCES users(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
+    """, ""
+
     create_if_not_exists unique_index(:channel_invites, [:code])
     create_if_not_exists index(:channel_invites, [:channel_id])
     create_if_not_exists index(:channel_invites, [:created_by_id])
@@ -209,6 +222,62 @@ defmodule PhoenixApp.Repo.Migrations.ForumAndChat do
       add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
       timestamps(type: :utc_datetime)
     end
+
+    execute """
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'user_id'
+      ) THEN
+        ALTER TABLE streaming_sessions 
+        ADD COLUMN user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+      END IF;
+      
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'channel_id'
+      ) THEN
+        ALTER TABLE streaming_sessions 
+        ADD COLUMN channel_id uuid REFERENCES chat_channels(id) ON DELETE CASCADE;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'title'
+      ) THEN
+        ALTER TABLE streaming_sessions ADD COLUMN title text;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'status'
+      ) THEN
+        ALTER TABLE streaming_sessions ADD COLUMN status text DEFAULT 'pending';
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'started_at'
+      ) THEN
+        ALTER TABLE streaming_sessions ADD COLUMN started_at timestamp(0) without time zone;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'ended_at'
+      ) THEN
+        ALTER TABLE streaming_sessions ADD COLUMN ended_at timestamp(0) without time zone;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'streaming_sessions' AND column_name = 'viewer_count'
+      ) THEN
+        ALTER TABLE streaming_sessions ADD COLUMN viewer_count integer DEFAULT 0;
+      END IF;
+    END $$;
+    """, ""
 
     create_if_not_exists index(:streaming_sessions, [:channel_id])
     create_if_not_exists index(:streaming_sessions, [:user_id])

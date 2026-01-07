@@ -10,12 +10,12 @@ defmodule PhoenixAppWeb.Endpoint do
 
   socket "/live", Phoenix.LiveView.Socket, 
     websocket: [
-      connect_info: [session: @session_options],
+      connect_info: [:x_headers, :peer_data, :user_agent, session: @session_options],
       timeout: 45_000,  # 45 second timeout (default is 60s)
       compress: true    # Enable compression for faster data transfer
     ],
     longpoll: [
-      connect_info: [session: @session_options],
+      connect_info: [:x_headers, :peer_data, :user_agent, session: @session_options],
       timeout: 45_000
     ]
   socket "/socket", PhoenixAppWeb.UserSocket,

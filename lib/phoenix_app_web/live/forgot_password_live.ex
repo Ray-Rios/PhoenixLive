@@ -6,10 +6,8 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
     current_user = maybe_fetch_user(session["user_id"])
     
     # Store IP address during mount since connect_info is only available here
-    ip_address = case get_connect_info(socket, :peer_data) do
-      %{address: {a, b, c, d}} -> "#{a}.#{b}.#{c}.#{d}"
-      _ -> "unknown"
-    end
+    # Use x-forwarded-for header when behind proxy/load balancer
+    ip_address = get_client_ip_from_socket(socket)
 
     # If user is already logged in, redirect to desktop
     if current_user do
@@ -173,5 +171,35 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
       </div>
     </div>
     """
+  end
+
+  # Extract client IP from socket, preferring x-forwarded-for header when behind proxy
+  defp get_client_ip_from_socket(socket) do
+    # First try x-forwarded-for header (set by load balancer/proxy)
+    case get_connect_info(socket, :x_headers) do
+      headers when is_list(headers) ->
+        case List.keyfind(headers, "x-forwarded-for", 0) do
+          {_, forwarded_for} ->
+            # x-forwarded-for can contain multiple IPs: "client, proxy1, proxy2"
+            # The first one is the original client IP
+            forwarded_for
+            |> String.split(",")
+            |> List.first()
+            |> String.trim()
+          nil ->
+            get_peer_ip(socket)
+        end
+      _ ->
+        get_peer_ip(socket)
+    end
+  end
+
+  defp get_peer_ip(socket) do
+    case get_connect_info(socket, :peer_data) do
+      %{address: {a, b, c, d}} -> "#{a}.#{b}.#{c}.#{d}"
+      %{address: {a, b, c, d, e, f, g, h}} -> 
+        "#{Integer.to_string(a, 16)}:#{Integer.to_string(b, 16)}:#{Integer.to_string(c, 16)}:#{Integer.to_string(d, 16)}:#{Integer.to_string(e, 16)}:#{Integer.to_string(f, 16)}:#{Integer.to_string(g, 16)}:#{Integer.to_string(h, 16)}"
+      _ -> "unknown"
+    end
   end
 end

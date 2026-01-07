@@ -13,9 +13,14 @@ ENV MIX_ENV=${MIX_ENV}
 RUN echo "{inet6, false}." > /etc/erl_inetrc
 ENV ERL_INETRC=/etc/erl_inetrc
 
-# Install hex and rebar
-RUN mix local.hex --force && \
-    mix local.rebar --force
+# Install hex and rebar - download hex directly with curl as fallback
+RUN apk add --no-cache curl && \
+    (mix archive.install github hexpm/hex branch latest --force || \
+     curl -fSL -o hex-2.3.1-otp-28.ez https://builds.hex.pm/installs/1.19.0/hex-2.3.1-otp-28.ez && \
+     mix archive.install hex-2.3.1-otp-28.ez --force && \
+     rm hex-2.3.1-otp-28.ez || \
+     mix local.hex --force)
+RUN mix local.rebar --force
 
 # Copy dependency files
 COPY mix.exs ./
@@ -90,7 +95,7 @@ RUN mkdir -p priv/static/assets priv/static/fonts && \
 FROM elixir:1.19-alpine AS app-builder
 
 # Install build dependencies
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     build-base \
     git \
     curl
@@ -113,9 +118,14 @@ ENV LIVE_VIEW_SIGNING_SALT=${LIVE_VIEW_SIGNING_SALT}
 RUN echo "{inet6, false}." > /etc/erl_inetrc
 ENV ERL_INETRC=/etc/erl_inetrc
 
-# Install hex and rebar
-RUN mix local.hex --force && \
-    mix local.rebar --force
+# Install hex and rebar - download hex directly with curl as fallback
+RUN apk update && apk add --no-cache curl && \
+    (mix archive.install github hexpm/hex branch latest --force || \
+     curl -fSL -o hex-2.3.1-otp-28.ez https://builds.hex.pm/installs/1.19.0/hex-2.3.1-otp-28.ez && \
+     mix archive.install hex-2.3.1-otp-28.ez --force && \
+     rm hex-2.3.1-otp-28.ez || \
+     mix local.hex --force)
+RUN mix local.rebar --force
 
 # Copy dependency files and deps from stage 1
 COPY mix.exs ./
@@ -155,12 +165,11 @@ RUN mix release
 # Use same Alpine version as elixir:1.19-alpine to match OpenSSL/crypto versions
 FROM alpine:3.22 AS runtime
 
-# Install runtime dependencies only
-RUN apk add --no-cache \
+# Install runtime dependencies only (redis-cli removed - app connects to external Redis server)
+RUN apk update && apk add --no-cache \
     bash \
     openssl \
     postgresql-client \
-    redis \
     curl \
     ca-certificates \
     libstdc++ \

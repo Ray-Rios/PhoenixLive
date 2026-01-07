@@ -460,6 +460,12 @@ defmodule PhoenixApp.Forum do
           {:ok, message} ->
             # Audit log: message created
             Task.start(fn -> PhoenixApp.Audit.log(user.id, "create_message", "message", message.id, %{channel_id: channel_id}) end)
+            
+            # Process @mentions and create notifications (async)
+            Task.start(fn -> 
+              PhoenixApp.Notifications.process_message_mentions(message, user)
+            end)
+            
             # Preload replies (empty) so it's a list, not NotLoaded
             message = Repo.preload(message, [:user, :reactions, :attachments, :replies])
             pubsub_broadcast("channel:#{channel_id}", {:new_message, message})

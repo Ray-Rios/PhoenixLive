@@ -23,6 +23,8 @@ defmodule PhoenixApp.Application do
     children = [
       # Start the Cluster Supervisor
       {Cluster.Supervisor, [topologies, [name: PhoenixApp.ClusterSupervisor]]},
+      # Log buffer must start early to capture startup logs
+      PhoenixApp.LogBuffer,
       PhoenixApp.Repo,
       pubsub_child,
       PhoenixAppWeb.Presence,
@@ -34,8 +36,13 @@ defmodule PhoenixApp.Application do
       PhoenixApp.Accounts.RateLimit,
       PhoenixApp.RateLimiter,
       PhoenixApp.NotFoundTracker,
+      # Scheduler Worker for cron-like event execution
+      PhoenixApp.Scheduler.Worker,
       PhoenixAppWeb.Endpoint
     ] ++ redis_children()
+
+    # Attach Email Logger
+    PhoenixApp.EmailLogging.TelemetryHandler.attach()
 
     opts = [strategy: :one_for_one, name: PhoenixApp.Supervisor]
     Supervisor.start_link(children, opts)

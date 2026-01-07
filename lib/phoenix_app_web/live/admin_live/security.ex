@@ -1,4 +1,4 @@
-defmodule PhoenixAppWeb.Admin.SecurityLive do
+defmodule PhoenixAppWeb.AdminLive.Security do
   use PhoenixAppWeb, :live_view
   alias PhoenixApp.Security
   alias PhoenixApp.RateLimiter
@@ -89,12 +89,34 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
     {:noreply, load_security_data(socket) |> put_flash(:info, "Rate limiter cleared for #{identifier}")}
   end
 
+  @impl true
+  def handle_event("fetch_logs", _params, socket) do
+    # Fetch actual server logs from the in-memory log buffer
+    logs = try do
+      entries = PhoenixApp.LogBuffer.get_entries(100)
+      
+      if entries == [] do
+        "No log entries captured yet.\n\nLogs are captured in real-time from the running application.\nTry refreshing in a few moments or trigger some activity."
+      else
+        log_lines = entries
+        |> Enum.map(fn entry -> entry.message end)
+        |> Enum.join("\n")
+        
+        "=== Application Server Logs (Last #{length(entries)} entries) ===\n\n#{log_lines}\n\n=== End of Logs ==="
+      end
+    rescue
+      e -> "Error fetching logs: #{Exception.message(e)}"
+    end
+    
+    {:noreply, assign(socket, server_logs: logs)}
+  end
+
   defp load_security_data(socket) do
     stats = Security.get_security_stats()
     
     socket
     |> assign(:stats, stats)
-    |> assign(:blocked_identifiers, Security.list_blocked_identifiers())
+    |> assign(:blocked_identifiers, Security.list_blocked_history(90)) # Show 90 days history
     |> assign(:allowed_identifiers, Security.list_allowed_identifiers())
     |> assign(:recent_failures, Security.get_recent_failed_attempts(50))
     |> assign(:rate_limiter_blocked, RateLimiter.list_blocked())
@@ -105,10 +127,27 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
   def render(assigns) do
     ~H"""
     <AdminSidebar.admin_layout current_path="/admin/security">
-      <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white">Security Dashboard</h1>
-        <p class="mt-2 text-sm text-gray-400">Monitor login attempts and manage security controls</p>
+      <div class="mb-8 flex justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-white">Security Dashboard</h1>
+          <p class="mt-2 text-sm text-gray-400">Monitor login attempts and manage security controls</p>
+        </div>
+        <button phx-click="fetch_logs" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+          View Server Logs
+        </button>
       </div>
+
+      <%= if assigns[:server_logs] do %>
+        <div class="mb-8 dark-glass shadow rounded-lg overflow-hidden">
+          <div class="px-4 py-5 sm:p-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg leading-6 font-medium text-white">Server Logs (Last 100 lines)</h3>
+              <button phx-click="fetch_logs" class="text-blue-400 hover:text-blue-300 text-sm">Refresh</button>
+            </div>
+            <pre class="bg-black/50 p-4 rounded text-xs text-gray-300 font-mono overflow-x-auto max-h-96 whitespace-pre-wrap"><%= @server_logs %></pre>
+          </div>
+        </div>
+      <% end %>
 
       <!-- Statistics Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -379,10 +418,10 @@ defmodule PhoenixAppWeb.Admin.SecurityLive do
       <div class="dark-glass shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
           <h3 class="text-lg leading-6 font-medium text-white mb-4">
-            Blocked Identifiers
+            Blocked Identifiers History (Last 90 Days)
           </h3>
           <%= if Enum.empty?(@blocked_identifiers) do %>
-            <p class="text-sm text-gray-400">No blocked identifiers</p>
+            <p class="text-sm text-gray-400">No blocked identifiers history</p>
           <% else %>
             <div class="overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-700">

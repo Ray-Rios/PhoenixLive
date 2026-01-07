@@ -21,6 +21,15 @@ For support and questions:
 - Create an issue in the GitHub repository
 - Check the Handy_Command_Samples.md for inspiration
 
+## Projects API (Calendar)
+
+A read-only API endpoint provides project items for the Taskbar Calendar app.
+
+- GET /api/projects/calendar — returns JSON: { projects: [ {id, name, start_date, end_date, status, path}, ... ] }
+- Authentication: the endpoint accepts either a valid Guardian Bearer token (Authorization: Bearer <token>) or an `X-API-Key` header matching the `PROJECTS_API_KEY` environment variable.
+
+Set the `PROJECTS_API_KEY` env var in your environment or Kubernetes runtime config to allow Taskbar calendar clients to fetch project items.
+
 ## Handling Build Warnings
 
 Recent build produced warnings:
