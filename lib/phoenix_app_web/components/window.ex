@@ -22,7 +22,8 @@ defmodule PhoenixAppWeb.Components.Window do
          phx-hook="DesktopWindow"
          phx-click="focus_window" 
          phx-target={@target}
-         phx-value-window_id={@window.id}>
+         phx-value-window_id={@window.id}
+         data-desktop-target="#phoenix-desktop">
       
       <!-- Window Header -->
       <div class="window-header auth-glass-panel border-b border-gray-600 px-4 py-2 flex justify-between items-center cursor-move">

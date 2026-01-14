@@ -165,7 +165,9 @@ defmodule PhoenixAppWeb.AdminLive.Scheduler do
   end
 
   @impl true
-  def handle_event("filter", %{"status" => status, "type" => type}, socket) do
+  def handle_event("filter", params, socket) do
+    status = Map.get(params, "status", socket.assigns.filter_status)
+    type = Map.get(params, "type", socket.assigns.filter_type)
     {:noreply, assign(socket, filter_status: status, filter_type: type)}
   end
 

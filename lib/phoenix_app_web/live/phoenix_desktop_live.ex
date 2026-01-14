@@ -2016,7 +2016,8 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   # Calculate user's storage usage
   defp calculate_user_storage(user) do
     if user do
-      user_path = Path.join([get_uploads_base_path(), "users", "#{user.id}"])
+      # Scan actual filesystem for accurate storage
+      user_path = Path.join([get_uploads_base_path(), user.id])
       get_dir_size(user_path)
     else
       0

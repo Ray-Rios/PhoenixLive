@@ -303,6 +303,8 @@ defmodule PhoenixAppWeb.ForumLive do
       case Forum.create_message(user, channel.id, %{content: content}) do
         {:ok, message} ->
           # 2. Process uploaded files and attach them to the created message
+          # Note: consume_uploaded_entries requires {:ok, value} or {:postpone, value} return
+          # So we wrap errors in {:ok, {:error, reason}} and filter them later
           results = consume_uploaded_entries(socket, :forum_attachment, fn %{path: path}, entry ->
             case PhoenixApp.Files.check_storage_limit(user, entry.client_size) do
               :ok ->
@@ -310,23 +312,26 @@ defmodule PhoenixAppWeb.ForumLive do
                 case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
                   {:ok, url_path} ->
                     # Create message attachment (channel_id is populated inside helper)
-                    Forum.create_message_attachment(message, %{
+                    case Forum.create_message_attachment(message, %{
                       "filename" => entry.client_name,
                       "content_type" => entry.client_type,
                       "file_size" => entry.client_size,
                       "file" => url_path,
                       "user_id" => user.id
-                    })
+                    }) do
+                      {:ok, attachment} -> {:ok, {:success, attachment}}
+                      {:error, reason} -> {:ok, {:error, reason}}
+                    end
 
                   {:error, reason} ->
-                    {:error, reason}
+                    {:ok, {:error, reason}}
                 end
               {:error, reason} ->
-                {:error, reason}
+                {:ok, {:error, reason}}
             end
           end)
 
-          # Check for errors
+          # Check for errors (wrapped in {:error, reason} inside the result)
           upload_errors = Enum.filter(results, fn
             {:error, _} -> true
             _ -> false
@@ -337,7 +342,13 @@ defmodule PhoenixAppWeb.ForumLive do
             |> assign(current_message: "")
             |> push_event("clear_input", %{id: "chat-input-textarea"})
           else
-            put_flash(socket, :error, "Some files failed to upload (Storage limit exceeded or other error).")
+            # Extract first error message for display
+            error_msg = case List.first(upload_errors) do
+              {:error, reason} when is_binary(reason) -> reason
+              {:error, reason} -> inspect(reason)
+              _ -> "Unknown upload error"
+            end
+            put_flash(socket, :error, "Upload failed: #{error_msg}")
             |> assign(current_message: "")
             |> push_event("clear_input", %{id: "chat-input-textarea"})
           end
@@ -405,18 +416,22 @@ defmodule PhoenixAppWeb.ForumLive do
                   case Forum.create_message(user, channel.id, %{content: content, parent_id: reply_to_id}) do
                     {:ok, message} ->
                       # Process uploaded files for reply
+                      # Note: consume_uploaded_entries requires {:ok, value} return
                       consume_uploaded_entries(socket, :reply_attachment, fn %{path: path}, entry ->
                         context = "forum/#{channel.id}/messages/#{message.id}"
                         case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
                           {:ok, url_path} ->
-                            Forum.create_message_attachment(message, %{
+                            case Forum.create_message_attachment(message, %{
                               "filename" => entry.client_name,
                               "content_type" => entry.client_type,
                               "file_size" => entry.client_size,
                               "file" => url_path,
                               "user_id" => user.id
-                            })
-                          {:error, reason} -> {:error, reason}
+                            }) do
+                              {:ok, attachment} -> {:ok, {:success, attachment}}
+                              {:error, reason} -> {:ok, {:error, reason}}
+                            end
+                          {:error, reason} -> {:ok, {:error, reason}}
                         end
                       end)
                       
@@ -523,18 +538,22 @@ defmodule PhoenixAppWeb.ForumLive do
           case Forum.update_message_by_user(user, message, %{content: content}) do
             {:ok, updated_message} ->
               # Process uploaded files for edit
+              # Note: consume_uploaded_entries requires {:ok, value} return
               consume_uploaded_entries(socket, :edit_attachment, fn %{path: path}, entry ->
                 context = "forum/#{channel.id}/messages/#{updated_message.id}"
                 case PhoenixApp.Uploads.upload_file(user, path, entry, context: context) do
                   {:ok, url_path} ->
-                    Forum.create_message_attachment(updated_message, %{
+                    case Forum.create_message_attachment(updated_message, %{
                       "filename" => entry.client_name,
                       "content_type" => entry.client_type,
                       "file_size" => entry.client_size,
                       "file" => url_path,
                       "user_id" => user.id
-                    })
-                  {:error, reason} -> {:error, reason}
+                    }) do
+                      {:ok, attachment} -> {:ok, {:success, attachment}}
+                      {:error, reason} -> {:ok, {:error, reason}}
+                    end
+                  {:error, reason} -> {:ok, {:error, reason}}
                 end
               end)
               
@@ -1362,7 +1381,8 @@ defmodule PhoenixAppWeb.ForumLive do
 
   def handle_channel_icon_progress(:channel_icon, entry, socket) do
     if entry.done? do
-      consume_uploaded_entries(socket, :channel_icon, fn %{path: path}, _entry ->
+      # Note: consume_uploaded_entries requires {:ok, value} return
+      results = consume_uploaded_entries(socket, :channel_icon, fn %{path: path}, _entry ->
         user = socket.assigns.current_user
         channel = socket.assigns.current_channel
         
@@ -1374,20 +1394,32 @@ defmodule PhoenixAppWeb.ForumLive do
                # Update channel
                case Forum.update_channel(channel, %{icon_path: url_path}) do
                  {:ok, _updated_channel} ->
-                   {:ok, url_path}
+                   {:ok, {:success, url_path}}
                  {:error, _} ->
-                   {:error, "Failed to update channel"}
+                   {:ok, {:error, "Failed to update channel"}}
                end
-             {:error, reason} -> {:error, reason}
+             {:error, reason} -> {:ok, {:error, reason}}
            end
         else
-           {:error, "Permission denied"}
+           {:ok, {:error, "Permission denied"}}
         end
+      end)
+      
+      # Check for errors
+      has_error = Enum.any?(results, fn
+        {:error, _} -> true
+        _ -> false
       end)
       
       # Refresh channel to show new icon
       channel = Forum.get_channel!(socket.assigns.current_channel.id)
-      {:noreply, assign(socket, current_channel: channel) |> put_flash(:info, "Channel icon updated")}
+      socket = assign(socket, current_channel: channel)
+      
+      if has_error do
+        {:noreply, put_flash(socket, :error, "Failed to upload channel icon")}
+      else
+        {:noreply, put_flash(socket, :info, "Channel icon updated")}
+      end
     else
       {:noreply, socket}
     end

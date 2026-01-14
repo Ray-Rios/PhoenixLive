@@ -16,6 +16,8 @@ const DesktopWindow: any = {
     this.minDragDistance = 5; // Minimum pixels to move before starting drag
     this.hasDragged = false;
     this.windowId = this.el.getAttribute('phx-value-window_id') || (this.el.id?.replace('window-',''));
+    // Get the target selector for LiveComponent events
+    this.desktopTarget = this.el.getAttribute('data-desktop-target') || '#phoenix-desktop';
 
     const header = this.el.querySelector('.window-header') as HTMLElement | null;
     if (!header) return;
@@ -70,8 +72,9 @@ const DesktopWindow: any = {
         const left = parseInt(this.el.style.left || '0', 10) || 0;
         const top = parseInt(this.el.style.top || '0', 10) || 0;
         try {
-          if ((this as any).pushEvent && this.windowId) {
-            (this as any).pushEvent('update_window_position', {
+          // Use pushEventTo to target the LiveComponent directly
+          if ((this as any).pushEventTo && this.windowId && this.desktopTarget) {
+            (this as any).pushEventTo(this.desktopTarget, 'update_window_position', {
               window_id: this.windowId,
               x: left,
               y: top
@@ -139,11 +142,14 @@ const ResizeHandle: any = {
     this.startPos = {} as any;
     this.window = null as any;
     this.windowId = null as any;
+    this.desktopTarget = '#phoenix-desktop'; // Target for LiveComponent events
 
     const onMouseDown = (e: MouseEvent) => {
       this.isResizing = true;
       this.window = this.el.closest('.desktop-window') as HTMLElement;
       this.windowId = this.window?.getAttribute('phx-value-window_id') || (this.window?.id?.replace('window-',''));
+      // Get target from parent window element
+      this.desktopTarget = this.window?.getAttribute('data-desktop-target') || '#phoenix-desktop';
 
       const rect = this.window.getBoundingClientRect();
       this.startSize = { width: rect.width, height: rect.height };
@@ -198,8 +204,9 @@ const ResizeHandle: any = {
         const left = parseInt(this.window.style.left || '0', 10) || 0;
         const top = parseInt(this.window.style.top || '0', 10) || 0;
         try {
-          if ((this as any).pushEvent && this.windowId) {
-            (this as any).pushEvent('update_window_layout', {
+          // Use pushEventTo to target the LiveComponent directly
+          if ((this as any).pushEventTo && this.windowId && this.desktopTarget) {
+            (this as any).pushEventTo(this.desktopTarget, 'update_window_layout', {
               window_id: this.windowId,
               width,
               height,

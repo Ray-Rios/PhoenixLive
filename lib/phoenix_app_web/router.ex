@@ -4,6 +4,7 @@ defmodule PhoenixAppWeb.Router do
 
   pipeline :browser do
     plug PhoenixAppWeb.Plugs.IpBlockerPlug
+    plug PhoenixAppWeb.Plugs.SuspiciousRequestPlug
     plug PhoenixAppWeb.Plugs.HoneypotPlug
     plug :accepts, ["html"]
     plug :fetch_session

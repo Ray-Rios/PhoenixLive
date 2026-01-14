@@ -6,7 +6,7 @@ defmodule PhoenixApp.Security do
 
   import Ecto.Query, warn: false
   alias PhoenixApp.Repo
-  alias PhoenixApp.Security.{LoginAttempt, BlockedIdentifier, DeviceFingerprint, BehavioralData, AllowedIdentifier}
+  alias PhoenixApp.Security.{LoginAttempt, BlockedIdentifier, DeviceFingerprint, BehavioralData, AllowedIdentifier, SuspiciousRequest}
   alias PhoenixApp.RateLimiter
 
   ## Login Attempts
@@ -306,5 +306,81 @@ defmodule PhoenixApp.Security do
 
   defp count_unique_fingerprints do
     Repo.aggregate(DeviceFingerprint, :count)
+  end
+
+  ## Suspicious Requests
+
+  @doc """
+  Records a suspicious request.
+  """
+  def record_suspicious_request(attrs) do
+    %SuspiciousRequest{}
+    |> SuspiciousRequest.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Counts suspicious requests from an IP within a time window (in seconds).
+  """
+  def count_suspicious_requests(ip_address, time_window_seconds) do
+    cutoff = DateTime.add(DateTime.utc_now(), -time_window_seconds, :second)
+    
+    from(sr in SuspiciousRequest,
+      where: sr.ip_address == ^ip_address and sr.inserted_at >= ^cutoff
+    )
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
+  Gets recent suspicious requests for the admin dashboard.
+  """
+  def get_recent_suspicious_requests(limit \\ 100) do
+    from(sr in SuspiciousRequest,
+      order_by: [desc: sr.inserted_at],
+      limit: ^limit
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets suspicious request statistics.
+  """
+  def get_suspicious_stats do
+    now = DateTime.utc_now()
+    one_hour_ago = DateTime.add(now, -3600, :second)
+    one_day_ago = DateTime.add(now, -86400, :second)
+
+    %{
+      total_last_hour: count_suspicious_since(one_hour_ago),
+      total_last_day: count_suspicious_since(one_day_ago),
+      by_type_last_day: suspicious_by_type_since(one_day_ago),
+      top_offenders: top_suspicious_ips(one_day_ago, 10)
+    }
+  end
+
+  defp count_suspicious_since(timestamp) do
+    from(sr in SuspiciousRequest, where: sr.inserted_at > ^timestamp)
+    |> Repo.aggregate(:count)
+  end
+
+  defp suspicious_by_type_since(timestamp) do
+    from(sr in SuspiciousRequest,
+      where: sr.inserted_at > ^timestamp,
+      group_by: sr.request_type,
+      select: {sr.request_type, count(sr.id)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp top_suspicious_ips(timestamp, limit) do
+    from(sr in SuspiciousRequest,
+      where: sr.inserted_at > ^timestamp,
+      group_by: sr.ip_address,
+      select: {sr.ip_address, count(sr.id)},
+      order_by: [desc: count(sr.id)],
+      limit: ^limit
+    )
+    |> Repo.all()
   end
 end

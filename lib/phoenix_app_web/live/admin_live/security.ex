@@ -90,6 +90,37 @@ defmodule PhoenixAppWeb.AdminLive.Security do
   end
 
   @impl true
+  def handle_event("block_ip_quick", %{"ip" => ip}, socket) do
+    case Security.block_identifier(%{
+      identifier: ip,
+      identifier_type: "ip",
+      reason: "Blocked from security dashboard - vulnerability scanning",
+      blocked_at: DateTime.utc_now(),
+      auto_blocked: false,
+      blocked_by_user_id: socket.assigns.current_user.id
+    }) do
+      {:ok, _} ->
+        # Also block in rate limiter and ETS
+        RateLimiter.block(ip)
+        ensure_ets_table()
+        :ets.insert(:blocked_ips, {ip, System.system_time(:second)})
+        {:noreply, load_security_data(socket) |> put_flash(:info, "IP #{ip} blocked successfully")}
+      
+      {:error, _changeset} ->
+        {:noreply, socket |> put_flash(:error, "Failed to block IP")}
+    end
+  end
+
+  defp ensure_ets_table do
+    case :ets.whereis(:blocked_ips) do
+      :undefined ->
+        :ets.new(:blocked_ips, [:set, :public, :named_table])
+      _ ->
+        :ok
+    end
+  end
+
+  @impl true
   def handle_event("fetch_logs", _params, socket) do
     # Fetch actual server logs from the in-memory log buffer
     logs = try do
@@ -113,14 +144,62 @@ defmodule PhoenixAppWeb.AdminLive.Security do
 
   defp load_security_data(socket) do
     stats = Security.get_security_stats()
+    suspicious_stats = Security.get_suspicious_stats()
     
     socket
     |> assign(:stats, stats)
+    |> assign(:suspicious_stats, suspicious_stats)
+    |> assign(:suspicious_requests, Security.get_recent_suspicious_requests(50))
     |> assign(:blocked_identifiers, Security.list_blocked_history(90)) # Show 90 days history
     |> assign(:allowed_identifiers, Security.list_allowed_identifiers())
     |> assign(:recent_failures, Security.get_recent_failed_attempts(50))
     |> assign(:rate_limiter_blocked, RateLimiter.list_blocked())
     |> assign(:page_title, "Security Dashboard")
+  end
+
+  defp scan_type_color(type) do
+    case type do
+      "wordpress_scan" -> "bg-red-800 text-red-200"
+      "php_probe" -> "bg-orange-800 text-orange-200"
+      "shell_probe" -> "bg-red-900 text-red-100"
+      "backdoor_probe" -> "bg-red-900 text-red-100"
+      "config_probe" -> "bg-yellow-800 text-yellow-200"
+      "env_probe" -> "bg-yellow-800 text-yellow-200"
+      "git_probe" -> "bg-purple-800 text-purple-200"
+      "htaccess_probe" -> "bg-gray-700 text-gray-200"
+      "phpmyadmin_probe" -> "bg-orange-800 text-orange-200"
+      "mysql_probe" -> "bg-blue-800 text-blue-200"
+      "adminer_probe" -> "bg-blue-800 text-blue-200"
+      "cgi_probe" -> "bg-gray-700 text-gray-200"
+      "sql_injection" -> "bg-red-900 text-red-100"
+      "xss_attempt" -> "bg-red-900 text-red-100"
+      "lfi_attempt" -> "bg-red-900 text-red-100"
+      "path_traversal" -> "bg-red-800 text-red-200"
+      _ -> "bg-gray-700 text-gray-200"
+    end
+  end
+
+  defp humanize_scan_type(type) do
+    case type do
+      "wordpress_scan" -> "WordPress"
+      "php_probe" -> "PHP"
+      "shell_probe" -> "Shell"
+      "backdoor_probe" -> "Backdoor"
+      "config_probe" -> "Config"
+      "env_probe" -> ".env"
+      "git_probe" -> ".git"
+      "htaccess_probe" -> ".htaccess"
+      "phpmyadmin_probe" -> "phpMyAdmin"
+      "mysql_probe" -> "MySQL"
+      "adminer_probe" -> "Adminer"
+      "cgi_probe" -> "CGI"
+      "sql_injection" -> "SQLi"
+      "xss_attempt" -> "XSS"
+      "lfi_attempt" -> "LFI"
+      "path_traversal" -> "Path Traversal"
+      "security_txt" -> "security.txt"
+      _ -> type
+    end
   end
 
   @impl true
@@ -150,7 +229,7 @@ defmodule PhoenixAppWeb.AdminLive.Security do
       <% end %>
 
       <!-- Statistics Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <div class="dark-glass overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -242,6 +321,33 @@ defmodule PhoenixAppWeb.AdminLive.Security do
                   </dt>
                   <dd class="text-2xl font-semibold text-white">
                     <%= @stats.unique_fingerprints %>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dark-glass overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-400 truncate">
+                    Suspicious (24h)
+                  </dt>
+                  <dd class="flex items-baseline">
+                    <div class="text-2xl font-semibold text-white">
+                      <%= @suspicious_stats.total_last_day %>
+                    </div>
+                    <div class="ml-2 flex items-baseline text-sm font-semibold text-yellow-500">
+                      <%= @suspicious_stats.total_last_hour %>/hr
+                    </div>
                   </dd>
                 </dl>
               </div>
@@ -541,6 +647,108 @@ defmodule PhoenixAppWeb.AdminLive.Security do
                           class="text-red-400 hover:text-red-300"
                         >
                           Remove
+                        </button>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Suspicious Requests (Vulnerability Scans) -->
+      <div class="dark-glass shadow rounded-lg mb-8">
+        <div class="px-4 py-5 sm:p-6">
+          <h3 class="text-lg leading-6 font-medium text-white mb-4">
+            Suspicious Requests (Vulnerability Scans)
+          </h3>
+          
+          <!-- Top Offenders Summary -->
+          <%= if not Enum.empty?(@suspicious_stats.top_offenders) do %>
+            <div class="mb-6 p-4 bg-yellow-900/20 border border-yellow-700 rounded-lg">
+              <h4 class="text-sm font-medium text-yellow-400 mb-2">Top Offending IPs (Last 24h)</h4>
+              <div class="flex flex-wrap gap-2">
+                <%= for {ip, count} <- @suspicious_stats.top_offenders do %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-800 text-yellow-200">
+                    <%= ip %>: <%= count %> requests
+                    <button
+                      phx-click="block_ip_quick"
+                      phx-value-ip={ip}
+                      class="ml-2 text-red-400 hover:text-red-300"
+                      title="Block this IP"
+                    >
+                      🚫
+                    </button>
+                  </span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
+          <!-- Scan Types Breakdown -->
+          <%= if not Enum.empty?(@suspicious_stats.by_type_last_day) do %>
+            <div class="mb-6 p-4 bg-gray-800/50 rounded-lg">
+              <h4 class="text-sm font-medium text-gray-300 mb-2">Scan Types (Last 24h)</h4>
+              <div class="flex flex-wrap gap-2">
+                <%= for {type, count} <- @suspicious_stats.by_type_last_day do %>
+                  <span class={"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium #{scan_type_color(type)}"}>
+                    <%= humanize_scan_type(type) %>: <%= count %>
+                  </span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
+          <%= if Enum.empty?(@suspicious_requests) do %>
+            <p class="text-sm text-gray-400">No suspicious requests detected</p>
+          <% else %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-700">
+                <thead>
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Time
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      IP Address
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Path
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700">
+                  <%= for request <- @suspicious_requests do %>
+                    <tr>
+                      <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-400">
+                        <%= Calendar.strftime(request.inserted_at, "%m-%d %H:%M:%S") %>
+                      </td>
+                      <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-white">
+                        <%= request.ip_address %>
+                      </td>
+                      <td class="px-4 py-3 whitespace-nowrap">
+                        <span class={"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium #{scan_type_color(request.request_type)}"}>
+                          <%= humanize_scan_type(request.request_type) %>
+                        </span>
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-400 max-w-xs truncate" title={request.path}>
+                        <%= String.slice(request.path, 0..50) %><%= if String.length(request.path) > 50, do: "..." %>
+                      </td>
+                      <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                        <button
+                          phx-click="block_ip_quick"
+                          phx-value-ip={request.ip_address}
+                          class="text-red-400 hover:text-red-300"
+                        >
+                          Block
                         </button>
                       </td>
                     </tr>

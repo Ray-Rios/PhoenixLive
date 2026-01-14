@@ -250,10 +250,13 @@ defmodule PhoenixApp.Files do
         }
       end)
 
-      # Get files at this path
+      # Get files at this path (UserFile + UserMedia)
       files = list_files_at_path(user, path)
       
-      folders ++ files
+      # Also include forum attachments (these are actual uploaded working files)
+      attachments = list_user_attachments(user, path)
+      
+      folders ++ files ++ attachments
     rescue
       e ->
         require Logger
@@ -351,6 +354,8 @@ defmodule PhoenixApp.Files do
           []
         end
     end
+    # Note: Stale media filtering disabled to prevent potential issues
+    # Old records with broken URLs will show as 404 when accessed
     |> Enum.map(fn m -> 
       %{
         id: m.id,
@@ -372,7 +377,39 @@ defmodule PhoenixApp.Files do
     |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
   end
 
-  # User file operations
+  @doc "List forum/chat attachments for a user - these are actual uploaded files"
+  def list_user_attachments(user, folder_path \\ "/") do
+    # Only show at root level for now (these don't have folder structure)
+    if folder_path == "/" do
+      try do
+        from(a in MessageAttachment, 
+          where: a.user_id == ^user.id,
+          order_by: [desc: a.inserted_at]
+        )
+        |> Repo.all()
+        |> Enum.map(fn a -> 
+          %{
+            id: a.id,
+            name: a.original_filename || a.filename,
+            filename: a.filename,
+            original_filename: a.original_filename,
+            file_size: a.file_size,
+            content_type: a.content_type,
+            folder_path: "/",
+            url: a.url,
+            inserted_at: a.inserted_at,
+            type: :file,
+            source_type: :message_attachment,
+            source: a
+          }
+        end)
+      rescue
+        _ -> []
+      end
+    else
+      []
+    end
+  end
   def list_user_files(user) do
     try do
       from(f in UserFile, where: f.user_id == ^user.id, order_by: [desc: f.inserted_at])
@@ -410,6 +447,17 @@ defmodule PhoenixApp.Files do
     files = list_user_files(user)
     media = PhoenixApp.Content.list_user_media(user)
     
+    # Also include forum message attachments (these are actual working uploads)
+    attachments = try do
+      from(a in MessageAttachment, 
+        where: a.user_id == ^user.id,
+        order_by: [desc: a.inserted_at]
+      )
+      |> Repo.all()
+    rescue
+      _ -> []
+    end
+    
     # Normalize
     normalized_files = Enum.map(files, fn f -> 
       %{
@@ -439,7 +487,21 @@ defmodule PhoenixApp.Files do
       }
     end)
     
-    (normalized_files ++ normalized_media)
+    normalized_attachments = Enum.map(attachments, fn a ->
+      %{
+        id: a.id,
+        filename: a.filename,
+        original_filename: a.original_filename,
+        file_size: a.file_size,
+        content_type: a.content_type,
+        url: a.url,
+        inserted_at: a.inserted_at,
+        type: :attachment,
+        source: a
+      }
+    end)
+    
+    (normalized_files ++ normalized_media ++ normalized_attachments)
     |> Enum.sort_by(& &1.inserted_at, {:desc, Date})
   end
 
@@ -741,6 +803,67 @@ defmodule PhoenixApp.Files do
       end
     rescue
       _ -> nil
+    end
+  end
+
+  @doc """
+  Check if a media file actually exists on disk.
+  Used to filter out stale database records pointing to deleted files.
+  """
+  def media_file_exists?(media) do
+    try do
+      url = media.url || ""
+      # Extract relative path from URL
+      # URL format: /uploads/{user_id}/{context}/... or /uploads/{user_id}/2025/...
+      cond do
+        String.starts_with?(url, "/uploads/") ->
+          # Convert URL to filesystem path
+          relative_path = String.replace_prefix(url, "/uploads/", "")
+          base_path = get_uploads_base_path()
+          full_path = Path.join(base_path, relative_path)
+          File.exists?(full_path)
+        true ->
+          # Unknown URL format - assume it doesn't exist
+          false
+      end
+    rescue
+      _ -> false
+    end
+  end
+
+  defp get_uploads_base_path do
+    cond do
+      File.exists?("/app/uploads") -> "/app/uploads"
+      File.exists?("uploads") -> Path.join(File.cwd!(), "uploads")
+      true -> Path.join(File.cwd!(), "uploads")
+    end
+  end
+
+  @doc """
+  Clean up stale UserMedia records that point to non-existent files.
+  Returns the count of records deleted.
+  """
+  def cleanup_stale_media(user) do
+    try do
+      media_records = from(m in PhoenixApp.Content.UserMedia, 
+        where: m.user_id == ^user.id
+      ) |> Repo.all()
+
+      stale_ids = media_records
+      |> Enum.filter(fn m -> not media_file_exists?(m) end)
+      |> Enum.map(& &1.id)
+
+      if stale_ids != [] do
+        {count, _} = from(m in PhoenixApp.Content.UserMedia, 
+          where: m.id in ^stale_ids
+        ) |> Repo.delete_all()
+        
+        {:ok, count}
+      else
+        {:ok, 0}
+      end
+    rescue
+      e -> {:error, e}
     end
   end
 end

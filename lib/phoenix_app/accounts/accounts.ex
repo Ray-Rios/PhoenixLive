@@ -267,7 +267,7 @@ defmodule PhoenixApp.Accounts do
 
 
 
-  defp record_failed_login(ip_address, user, identifier_attempted, opts \\ []) do
+  defp record_failed_login(ip_address, user, identifier_attempted, opts) do
     user_agent = Keyword.get(opts, :user_agent, "Unknown")
     
     # Record in RateLimiter
@@ -284,7 +284,7 @@ defmodule PhoenixApp.Accounts do
     })
   end
 
-  defp reset_failed_login_attempts(user, ip_address, opts \\ []) do
+  defp reset_failed_login_attempts(user, ip_address, opts) do
     user_agent = Keyword.get(opts, :user_agent, "Unknown")
     
     # Record successful login in Security Context
