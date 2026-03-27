@@ -163,7 +163,7 @@ RUN mix release
 # STAGE 4: Runtime Image
 # ================================
 # Use same Alpine version as elixir:1.19-alpine to match OpenSSL/crypto versions
-FROM alpine:3.22 AS runtime
+FROM alpine:3.23 AS runtime
 
 # Install runtime dependencies only (redis-cli removed - app connects to external Redis server)
 RUN apk update && apk add --no-cache \
