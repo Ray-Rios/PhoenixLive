@@ -31,7 +31,7 @@ RUN mix deps.get --only prod
 # ================================
 # STAGE 2: Build Assets
 # ================================
-FROM node:20-alpine AS assets-builder
+FROM node:25-alpine AS assets-builder
 
 # Install curl for health checks later
 RUN apk add --no-cache curl
