@@ -6,7 +6,6 @@ defmodule PhoenixAppWeb.Plugs.SuspiciousRequestPlug do
   Auto-blocks IPs that make too many suspicious requests.
   """
 
-  import Plug.Conn
   require Logger
 
   @suspicious_patterns [

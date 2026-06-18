@@ -1409,7 +1409,6 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           calendar_events={@calendar_events}
           selected_date={@selected_date}
           target={@myself}
-          uploads={@uploads}
         />
       </div>
 

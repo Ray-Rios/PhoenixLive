@@ -1,6 +1,6 @@
 // Character Model Manager - Replaces Babylon.js character system
 import * as THREE from "three";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
+import UniversalModelLoader from '../loaders/universal-model-loader';
 import type { 
   PlayerCharacter, 
   CreatureNPC, 
@@ -12,9 +12,18 @@ export class CharacterModelManager {
   private loadedModels: Map<string, LoadedModel> = new Map();
   private characters: Map<string, PlayerCharacter> = new Map();
   private creatures: Map<string, CreatureNPC> = new Map();
+  private creatingCharacters: Map<string, Promise<PlayerCharacter>> = new Map();
+  private activeCharacterAnimations: Map<string, string> = new Map();
+  private universalLoader: UniversalModelLoader;
+  private activeScene: THREE.Scene | null = null;
 
   constructor() {
+    this.universalLoader = new UniversalModelLoader();
     console.log('🎭 CharacterModelManager initialized');
+  }
+
+  setActiveScene(scene: THREE.Scene | null): void {
+    this.activeScene = scene;
   }
 
   // Load FBX character models
@@ -60,6 +69,7 @@ export class CharacterModelManager {
     
     // Clone the model for this character instance
     const characterMesh = this.cloneModel(loadedModel);
+    this.normalizeCharacterMesh(characterMesh);
     characterMesh.position.set(position.x, position.y, position.z);
 
     // Create animation mixer
@@ -68,14 +78,7 @@ export class CharacterModelManager {
       : null;
 
     // Setup animations
-    const animations = new Map();
-    if (mixer && loadedModel.animations.length > 0) {
-      loadedModel.animations.forEach((animation, index) => {
-        const actionName = this.getAnimationName(index);
-        const action = mixer.clipAction(animation);
-        animations.set(actionName, action);
-      });
-    }
+    const animations = this.buildAnimationActionMap(mixer, loadedModel.animations as unknown as THREE.AnimationClip[]);
 
     const character: PlayerCharacter = {
       id,
@@ -112,12 +115,167 @@ export class CharacterModelManager {
     this.characters.set(id, character);
     
     // Add to scene
-    if (window.ThreeJSMMO?.scene?.scene) {
-      window.ThreeJSMMO.scene.scene.add(characterMesh);
+    const sceneRef = this.activeScene || window.ThreeJSMMO?.scene?.scene || null;
+    if (sceneRef) {
+      sceneRef.add(characterMesh);
     }
 
     console.log(`✅ Player character created: ${name} (${characterType})`);
     return character;
+  }
+
+  async createPlayerCharacterFromModelPath(
+    id: string,
+    name: string,
+    characterType: string,
+    modelPath: string,
+    position: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 },
+    isLocalPlayer: boolean = false
+  ): Promise<PlayerCharacter> {
+    const existingCharacter = this.characters.get(id);
+    if (existingCharacter) {
+      return existingCharacter;
+    }
+
+    const inFlight = this.creatingCharacters.get(id);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const createPromise = this.createPlayerCharacterFromModelPathInternal(
+      id,
+      name,
+      characterType,
+      modelPath,
+      position,
+      isLocalPlayer
+    );
+
+    this.creatingCharacters.set(id, createPromise);
+
+    try {
+      return await createPromise;
+    } finally {
+      this.creatingCharacters.delete(id);
+    }
+  }
+
+  private async createPlayerCharacterFromModelPathInternal(
+    id: string,
+    name: string,
+    characterType: string,
+    modelPath: string,
+    position: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 },
+    isLocalPlayer: boolean = false
+  ): Promise<PlayerCharacter> {
+    let characterMesh: any;
+    let mixer: THREE.AnimationMixer | null = null;
+    let animations: any = new Map();
+
+    if (modelPath.startsWith('builtin://')) {
+      characterMesh = this.buildBuiltinCharacterMesh(modelPath);
+      characterMesh.position.set(position.x, position.y, position.z);
+    } else {
+      const loadedModel = await this.loadCharacterModel(modelPath, characterType, {
+        scale: 1,
+        castShadow: true,
+        receiveShadow: true,
+        enableAnimations: true,
+        position,
+        rotation: { x: 0, y: 0, z: 0 }
+      });
+
+      characterMesh = this.cloneModel(loadedModel);
+      this.normalizeCharacterMesh(characterMesh);
+      characterMesh.position.set(position.x, position.y, position.z);
+
+      mixer = loadedModel.animations.length > 0
+        ? new THREE.AnimationMixer(characterMesh)
+        : null;
+
+      animations = this.buildAnimationActionMap(mixer, loadedModel.animations as unknown as THREE.AnimationClip[]);
+    }
+
+    const character: PlayerCharacter = {
+      id,
+      name,
+      mesh: characterMesh,
+      mixer,
+      animations,
+      position: new THREE.Vector3(position.x, position.y, position.z),
+      rotation: new THREE.Euler(0, 0, 0),
+      stats: {
+        level: 1,
+        health: 100,
+        maxHealth: 100,
+        mana: 50,
+        maxMana: 50,
+        experience: 0,
+        strength: 10,
+        dexterity: 10,
+        intelligence: 10,
+        constitution: 10
+      },
+      equipment: {
+        helmet: null,
+        armor: null,
+        weapon: null,
+        shield: null,
+        boots: null,
+        gloves: null
+      },
+      isMoving: false,
+      isLocalPlayer
+    };
+
+    const duplicate = this.characters.get(id);
+    if (duplicate) {
+      this.removeCharacter(id);
+    }
+
+    this.characters.set(id, character);
+
+    const sceneRef = this.activeScene || window.ThreeJSMMO?.scene?.scene || null;
+    if (sceneRef) {
+      sceneRef.add(characterMesh);
+    }
+
+    return character;
+  }
+
+  private buildBuiltinCharacterMesh(modelPath: string): THREE.Group {
+    const group = new THREE.Group();
+    const variant = modelPath.replace('builtin://', '');
+
+    const bodyColor =
+      variant === 'sentinel' ? 0x22d3ee :
+      variant === 'runner' ? 0xf59e0b :
+      0x34d399;
+
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.42, 1.1, 8, 12),
+      new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.42, metalness: 0.18 })
+    );
+    body.castShadow = true;
+    body.receiveShadow = true;
+    body.position.y = 1.2;
+
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.05 })
+    );
+    head.position.y = 2.05;
+    head.castShadow = true;
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.52, 0.06, 14, 32),
+      new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0369a1, emissiveIntensity: 0.6 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.08;
+
+    group.add(body, head, ring);
+    return group;
   }
 
   // Create creature/NPC instance  
@@ -131,20 +289,14 @@ export class CharacterModelManager {
     const loadedModel = await this.loadCharacterModel(modelPath, creatureType);
     
     const creatureMesh = this.cloneModel(loadedModel);
+    this.normalizeCharacterMesh(creatureMesh);
     creatureMesh.position.set(position.x, position.y, position.z);
 
     const mixer = loadedModel.animations.length > 0 
       ? new THREE.AnimationMixer(creatureMesh) 
       : null;
 
-    const animations = new Map();
-    if (mixer && loadedModel.animations.length > 0) {
-      loadedModel.animations.forEach((animation, index) => {
-        const actionName = this.getAnimationName(index);
-        const action = mixer.clipAction(animation);
-        animations.set(actionName, action);
-      });
-    }
+    const animations = this.buildAnimationActionMap(mixer, loadedModel.animations as unknown as THREE.AnimationClip[]);
 
     const creature: CreatureNPC = {
       id,
@@ -163,14 +315,38 @@ export class CharacterModelManager {
     this.creatures.set(id, creature);
     
     // Add to scene
-    if (window.ThreeJSMMO?.scene?.scene) {
-      window.ThreeJSMMO.scene.scene.add(creatureMesh);
+    const sceneRef = this.activeScene || window.ThreeJSMMO?.scene?.scene || null;
+    if (sceneRef) {
+      sceneRef.add(creatureMesh);
     }
 
     console.log(`✅ Creature created: ${name} (${creatureType})`);
     return creature;
   }
 
+  private normalizeCharacterMesh(mesh: THREE.Object3D): void {
+    const box = new THREE.Box3().setFromObject(mesh);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+
+    const maxAxis = Math.max(size.x, size.y, size.z);
+    if (maxAxis > 0) {
+      const targetHeight = 2.2;
+      const scale = targetHeight / Math.max(size.y, 0.001);
+      mesh.scale.multiplyScalar(scale);
+    }
+
+    const normalizedBox = new THREE.Box3().setFromObject(mesh);
+    const normalizedCenter = new THREE.Vector3();
+    normalizedBox.getCenter(normalizedCenter);
+
+    // Center model over X/Z and place feet at y=0 to avoid underground spawns.
+    mesh.position.x -= normalizedCenter.x;
+    mesh.position.z -= normalizedCenter.z;
+    mesh.position.y -= normalizedBox.min.y;
+  }
   // Play character animation
   playCharacterAnimation(characterId: string, animationName: string, loop: boolean = true): void {
     const character = this.characters.get(characterId);
@@ -191,6 +367,54 @@ export class CharacterModelManager {
     action.play();
 
     console.log(`🎬 Playing animation ${animationName} for character ${characterId}`);
+  }
+
+  updateCharacterMotionState(
+    characterId: string,
+    state: { isMoving: boolean; isRunning?: boolean; isJumping?: boolean }
+  ): void {
+    const character = this.characters.get(characterId);
+    if (!character || !character.mixer || character.animations.size === 0) return;
+
+    const requested = state.isJumping
+      ? 'jump'
+      : state.isMoving
+        ? state.isRunning
+          ? 'run'
+          : 'walk'
+        : 'idle';
+
+    const resolved = this.resolveAvailableAnimation(character.animations, requested);
+    const previous = this.activeCharacterAnimations.get(characterId);
+
+    if (previous === resolved) return;
+
+    const nextAction = character.animations.get(resolved);
+    if (!nextAction) return;
+
+    const prevAction = previous ? character.animations.get(previous) : undefined;
+
+    nextAction.enabled = true;
+    nextAction.reset();
+    nextAction.setLoop(THREE.LoopRepeat, Infinity);
+    nextAction.clampWhenFinished = false;
+
+    if (prevAction) {
+      nextAction.crossFadeFrom(prevAction, 0.2, true);
+    }
+
+    nextAction.play();
+    this.activeCharacterAnimations.set(characterId, resolved);
+  }
+
+  updateAnimations(deltaSeconds: number): void {
+    this.characters.forEach((character) => {
+      character.mixer?.update(deltaSeconds);
+    });
+
+    this.creatures.forEach((creature) => {
+      creature.mixer?.update(deltaSeconds);
+    });
   }
 
   // Update character position
@@ -216,14 +440,16 @@ export class CharacterModelManager {
     const character = this.characters.get(characterId);
     if (character) {
       // Remove from scene
-      if (window.ThreeJSMMO?.scene?.scene) {
-        window.ThreeJSMMO.scene.scene.remove(character.mesh);
+      const sceneRef = this.activeScene || window.ThreeJSMMO?.scene?.scene || null;
+      if (sceneRef) {
+        sceneRef.remove(character.mesh);
       }
       
       // Dispose resources
       this.disposeCharacterMesh(character.mesh);
       
       this.characters.delete(characterId);
+      this.activeCharacterAnimations.delete(characterId);
       console.log(`🗑️ Character removed: ${characterId}`);
     }
   }
@@ -233,8 +459,9 @@ export class CharacterModelManager {
     const creature = this.creatures.get(creatureId);
     if (creature) {
       // Remove from scene
-      if (window.ThreeJSMMO?.scene?.scene) {
-        window.ThreeJSMMO.scene.scene.remove(creature.mesh);
+      const sceneRef = this.activeScene || window.ThreeJSMMO?.scene?.scene || null;
+      if (sceneRef) {
+        sceneRef.remove(creature.mesh);
       }
       
       // Dispose resources
@@ -257,56 +484,37 @@ export class CharacterModelManager {
 
   // Private helper methods
   private async loadFBXModel(modelPath: string, options: Partial<ModelLoadOptions>): Promise<LoadedModel> {
-    // Use the FBXLoader from the bundle
-    return new Promise((resolve, reject) => {
-      const loader = new FBXLoader();
-      loader.load(
-        modelPath,
-        (fbx: any) => {
-          // Apply options
-          if (options.scale) {
-            fbx.scale.setScalar(options.scale);
-          }
-          if (options.position) {
-            fbx.position.set(options.position.x, options.position.y, options.position.z);
-          }
-          if (options.rotation) {
-            fbx.rotation.set(options.rotation.x, options.rotation.y, options.rotation.z);
-          }
-          if (options.castShadow) {
-            fbx.traverse((child: any) => {
-              if (child.isMesh) child.castShadow = true;
-            });
-          }
-          if (options.receiveShadow) {
-            fbx.traverse((child: any) => {
-              if (child.isMesh) child.receiveShadow = true;
-            });
-          }
+    const asset = await this.universalLoader.loadModel(modelPath);
+    const cloned = this.universalLoader.cloneModel(asset) as THREE.Group;
 
-          const model: LoadedModel = {
-            name: modelPath.split('/').pop() || 'unknown',
-            mesh: fbx,
-            animations: fbx.animations || [],
-            mixer: null,
-            boundingBox: { 
-              min: new THREE.Vector3(-1, 0, -1), 
-              max: new THREE.Vector3(1, 4, 1) 
-            },
-            triangleCount: 100 // Placeholder
-          };
+    if (options.scale) {
+      cloned.scale.setScalar(options.scale);
+    }
+    if (options.position) {
+      cloned.position.set(options.position.x, options.position.y, options.position.z);
+    }
+    if (options.rotation) {
+      cloned.rotation.set(options.rotation.x, options.rotation.y, options.rotation.z);
+    }
 
-          resolve(model);
-        },
-        (_progress: unknown) => {
-          // Progress callback
-        },
-        (error: unknown) => {
-          console.error('FBX loading error:', error);
-          reject(error);
-        }
-      );
+    cloned.traverse((child: any) => {
+      if (child.isMesh) {
+        if (options.castShadow) child.castShadow = true;
+        if (options.receiveShadow) child.receiveShadow = true;
+      }
     });
+
+    return {
+      name: modelPath.split('/').pop() || 'unknown',
+      mesh: cloned,
+      animations: asset.animations as unknown as THREE.AnimationAction[],
+      mixer: null,
+      boundingBox: {
+        min: new THREE.Vector3(-1, 0, -1),
+        max: new THREE.Vector3(1, 4, 1)
+      },
+      triangleCount: 100
+    };
   }
 
   private cloneModel(loadedModel: LoadedModel): any {
@@ -339,11 +547,70 @@ export class CharacterModelManager {
     return modelPaths[creatureType] || modelPaths['skeleton'];
   }
 
-  private getAnimationName(index: number): string {
-    const animationNames = [
-      'idle', 'walk', 'run', 'attack', 'cast', 'death', 'jump', 'crouch'
-    ];
-    return animationNames[index] || `animation_${index}`;
+  private buildAnimationActionMap(
+    mixer: THREE.AnimationMixer | null,
+    clips: THREE.AnimationClip[]
+  ): Map<string, THREE.AnimationAction> {
+    const animationMap = new Map<string, THREE.AnimationAction>();
+    if (!mixer || clips.length === 0) return animationMap;
+
+    clips.forEach((clip, index) => {
+      const key = this.canonicalAnimationName(clip.name, index);
+      const action = mixer.clipAction(clip);
+
+      if (!animationMap.has(key)) {
+        animationMap.set(key, action);
+      }
+
+      // Keep original clip names available for debugging/custom triggers.
+      if (clip.name && !animationMap.has(clip.name)) {
+        animationMap.set(clip.name, action);
+      }
+    });
+
+    if (!animationMap.has('idle') && clips.length > 0) {
+      animationMap.set('idle', mixer.clipAction(clips[0]));
+    }
+
+    return animationMap;
+  }
+
+  private canonicalAnimationName(name: string, index: number): string {
+    const lower = (name || '').toLowerCase();
+
+    if (/(^|_|\b)(idle|stand|breath|wait)(_|\b)/.test(lower)) return 'idle';
+    if (/(^|_|\b)(walk|locomotion|move)(_|\b)/.test(lower)) return 'walk';
+    if (/(^|_|\b)(run|sprint|jog)(_|\b)/.test(lower)) return 'run';
+    if (/(^|_|\b)(jump|hop|leap|fall)(_|\b)/.test(lower)) return 'jump';
+    if (/(^|_|\b)(attack|hit|slash|bite|claw|punch|kick)(_|\b)/.test(lower)) return 'attack';
+    if (/(^|_|\b)(cast|spell|magic)(_|\b)/.test(lower)) return 'cast';
+    if (/(^|_|\b)(death|die|dead|knockout)(_|\b)/.test(lower)) return 'death';
+    if (/(^|_|\b)(crouch|duck)(_|\b)/.test(lower)) return 'crouch';
+
+    return index === 0 ? 'idle' : `animation_${index}`;
+  }
+
+  private resolveAvailableAnimation(animations: Map<string, THREE.AnimationAction>, requested: string): string {
+    if (animations.has(requested)) return requested;
+
+    const fallbackChain: Record<string, string[]> = {
+      run: ['walk', 'idle'],
+      walk: ['run', 'idle'],
+      jump: ['run', 'walk', 'idle'],
+      attack: ['idle'],
+      cast: ['idle'],
+      death: ['idle'],
+      crouch: ['idle'],
+      idle: []
+    };
+
+    const fallbacks = fallbackChain[requested] || ['idle'];
+    for (const fallback of fallbacks) {
+      if (animations.has(fallback)) return fallback;
+    }
+
+    const first = animations.keys().next();
+    return first.done ? requested : first.value;
   }
 
   private getCreatureStats(creatureType: string): any {
@@ -389,6 +656,9 @@ export class CharacterModelManager {
     
     // Clear caches
     this.loadedModels.clear();
+    this.creatingCharacters.clear();
+    this.activeCharacterAnimations.clear();
+    this.universalLoader.dispose();
     
     console.log('✅ CharacterModelManager disposed');
   }

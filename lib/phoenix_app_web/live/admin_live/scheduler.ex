@@ -6,7 +6,6 @@ defmodule PhoenixAppWeb.AdminLive.Scheduler do
   alias PhoenixApp.Scheduler
   alias PhoenixApp.Scheduler.ScheduledEvent
   alias PhoenixAppWeb.Components.AdminSidebar
-  alias Phoenix.LiveView.JS
 
   on_mount {PhoenixAppWeb.UserAuth, :require_admin_user}
 
@@ -409,8 +408,8 @@ defmodule PhoenixAppWeb.AdminLive.Scheduler do
 
       <!-- Create/Edit Form Modal -->
       <%= if @show_form do %>
-        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" phx-click="close_form">
-          <div class="bg-gray-900 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-700" phx-click={JS.stop_propagation()} phx-window-keydown="close_form" phx-key="Escape">
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div class="bg-gray-900 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-700" phx-click-away="close_form" phx-window-keydown="close_form" phx-key="Escape">
             <div class="flex justify-between items-center mb-6">
               <h3 class="text-xl font-semibold text-white">
                 <%= if @form_mode == :create, do: "Create Scheduled Event", else: "Edit Event" %>

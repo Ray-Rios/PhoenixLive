@@ -31,6 +31,7 @@ import { GlobalHooks } from "./global_hooks";
 import { ProfileSettings } from "./profile_settings";
 import { ColorPicker, OpacitySlider } from "./color_picker";
 import { AudioHook } from "./audio";
+import { DesktopCharacterUIScene } from "./threejs/scenes/desktop-character-ui-scene";
 
 // Import Desktop hooks
 import "./desktop";
@@ -113,7 +114,8 @@ async function loadHeavyModulesAndConnect() {
       NebulaScene: { mounted() { console.log('⏳ NebulaScene loading...'); } },
       StarfieldScene: { mounted() { console.log('⏳ StarfieldScene loading...'); } },
       VoidScene: { mounted() { console.log('⏳ VoidScene loading...'); } },
-      GlobalCameraController: { mounted() { console.log('⏳ GlobalCameraController loading...'); } }
+      GlobalCameraController: { mounted() { console.log('⏳ GlobalCameraController loading...'); } },
+      DesktopCharacterUIScene
     };
     
     // Create and connect LiveSocket NOW - essential hooks ready
@@ -188,7 +190,8 @@ async function loadHeavyModulesAndConnect() {
       ReloadPage: (window as any)._ReloadPage,
       FullscreenContainer: (window as any)._FullscreenContainer,
       SidebarResizer: (window as any)._SidebarResizer,
-      AdminSidebarResizer: (window as any)._AdminSidebarResizer
+      AdminSidebarResizer: (window as any)._AdminSidebarResizer,
+      DesktopCharacterUIScene
     };
     
     liveSocket = new LiveSocket("/live", Socket, {

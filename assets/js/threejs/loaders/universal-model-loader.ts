@@ -93,15 +93,8 @@ export class UniversalModelLoader {
         path,
         (gltf) => {
           const model = gltf.scene;
-          const animations = gltf.animations || [];
-          
-          // Setup model
-          model.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
+          const animations = this.normalizeAnimationClips(gltf.animations || []);
+          this.standardizeModelForMMO(model);
 
           resolve({
             model,
@@ -129,15 +122,8 @@ export class UniversalModelLoader {
         path,
         (fbx) => {
           const model = fbx;
-          const animations = fbx.animations || [];
-          
-          // Setup model
-          model.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
+          const animations = this.normalizeAnimationClips(fbx.animations || []);
+          this.standardizeModelForMMO(model);
 
           resolve({
             model,
@@ -177,6 +163,49 @@ export class UniversalModelLoader {
       animations: [],
       format: 'fallback'
     };
+  }
+
+  private standardizeModelForMMO(model: THREE.Object3D): void {
+    model.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) return;
+
+      const mesh = child as THREE.Mesh;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = true;
+
+      const normalizeMaterial = (mat: THREE.Material) => {
+        const material = mat as THREE.MeshStandardMaterial;
+        if ((material as any).map) {
+          const tex = (material as any).map as THREE.Texture;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.needsUpdate = true;
+        }
+
+        if (material.transparent && material.side === THREE.FrontSide) {
+          material.side = THREE.DoubleSide;
+        }
+
+        material.needsUpdate = true;
+      };
+
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((mat) => normalizeMaterial(mat));
+      } else if (mesh.material) {
+        normalizeMaterial(mesh.material);
+      }
+    });
+  }
+
+  private normalizeAnimationClips(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
+    return clips
+      .filter((clip) => clip && clip.tracks && clip.tracks.length > 0)
+      .map((clip, index) => {
+        if (!clip.name || clip.name.trim() === '') {
+          clip.name = `clip_${index}`;
+        }
+        return clip;
+      });
   }
 
   /**

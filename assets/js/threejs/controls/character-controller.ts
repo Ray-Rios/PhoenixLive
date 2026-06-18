@@ -80,10 +80,13 @@ export class CharacterController {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
     this.keys[event.code] = true;
   }
 
   private onKeyUp(event: KeyboardEvent): void {
+    // Always clear on keyup to prevent stuck-key issues when focus changes mid-press
     this.keys[event.code] = false;
   }
 
@@ -150,11 +153,11 @@ export class CharacterController {
     // - Right-click + drag: Rotate camera
     
     if (forward) {
-      movement.z -= 1;
+      movement.z += 1;
       this.isMoving = true;
     }
     if (backward) {
-      movement.z += 1;
+      movement.z -= 1;
       this.isMoving = true;
     }
     
@@ -304,6 +307,18 @@ export class CharacterController {
    */
   setPositionCallback(callback: (x: number, y: number, z: number, rotation: number) => void): void {
     this.onPositionUpdate = callback;
+  }
+
+  /**
+   * Movement state snapshot for animation/state sync.
+   */
+  getMovementState(): { isMoving: boolean; isRunning: boolean; isGrounded: boolean; isCrouching: boolean } {
+    return {
+      isMoving: this.isMoving,
+      isRunning: this.isRunning,
+      isGrounded: this.isGrounded,
+      isCrouching: this.isCrouching
+    };
   }
 
   /**

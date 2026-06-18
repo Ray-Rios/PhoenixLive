@@ -48,6 +48,7 @@ kubectl cp pvc postgres-pvc -n phoenixapp-dev
 kubectl delete pvc postgres-pvc -n phoenixapp-dev
 kubectl logs -f deployment/phoenix-web -n phoenixapp   # -f follow logs
 kubectl logs -n phoenixapp -l app=phoenix-web -f
+
 kubectl delete namespace phoenixapp-dev --ignore-not-found=true   #Deletes everything including pvcs
 kubectl delete namespace phoenixapp --ignore-not-found=true && docker system prune -a -f --volumes && ./deploy-prod.sh
 

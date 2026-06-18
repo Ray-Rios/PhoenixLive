@@ -20,10 +20,12 @@ spec:
       initContainers:
       - name: fix-permissions
         image: alpine:3.22
-        command: ['sh', '-c', 'chown -R 100:101 /app/uploads && chmod -R 755 /app/uploads']
+        command: ['sh', '-c', 'chown -R 100:101 /app/uploads /app/priv/static/models && chmod -R 755 /app/uploads /app/priv/static/models']
         volumeMounts:
         - name: uploads
           mountPath: /app/uploads
+        - name: models
+          mountPath: /app/priv/static/models
       containers:
       - name: phoenix
         image: phoenixapp:latest
@@ -78,9 +80,8 @@ spec:
         volumeMounts:
         - name: uploads
           mountPath: /app/uploads
-        # Models volume temporarily disabled - uncomment when PV issue is resolved
-        # - name: models
-        #   mountPath: /app/priv/static/models
+        - name: models
+          mountPath: /app/priv/static/models
         # Temporarily removed security context to fix permission issues
         # securityContext:
         #   allowPrivilegeEscalation: false
@@ -91,10 +92,9 @@ spec:
       - name: uploads
         persistentVolumeClaim:
           claimName: phoenix-uploads-pvc
-      # Models volume temporarily disabled - uncomment when PV issue is resolved
-      # - name: models
-      #   persistentVolumeClaim:
-      #     claimName: phoenix-models-pvc
+      - name: models
+        persistentVolumeClaim:
+          claimName: phoenix-models-pvc
 ---
 apiVersion: v1
 kind: Service

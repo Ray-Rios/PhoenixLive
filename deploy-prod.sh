@@ -235,6 +235,17 @@ if kubectl get pv phoenix-uploads-local-pv &> /dev/null; then
         print_status "Phoenix uploads PV will be recreated"
     fi
 fi
+
+# Reclaim phoenix-models PV (manual storage)
+if kubectl get pv phoenix-models-local-pv &> /dev/null; then
+    PV_STATUS=$(kubectl get pv phoenix-models-local-pv -o jsonpath='{.status.phase}')
+
+    if [ "$PV_STATUS" = "Released" ]; then
+        # Remove claimRef to make it Available again for phoenix-models-pvc
+        kubectl patch pv phoenix-models-local-pv --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]' 2>/dev/null || true
+        print_status "Phoenix models PV reclaimed"
+    fi
+fi
 echo "🐦‍🔥 Deploying Production"
 echo "======================================"
 
@@ -428,6 +439,32 @@ for i in {1..10}; do
             kubectl apply -f k3s/base/phoenix-uploads-pvc.yaml
             sleep 3
             print_status "Phoenix uploads PV/PVC recreated"
+        fi
+    fi
+    echo -n "."
+    sleep 2
+done
+echo ""
+
+# Check if phoenix-models-pvc is bound (manual storage class can be finicky)
+echo "⏳ Checking phoenix-models-pvc binding..."
+for i in {1..10}; do
+    MODELS_PVC_STATUS=$(kubectl get pvc phoenix-models-pvc -n phoenixapp -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+    if [ "$MODELS_PVC_STATUS" = "Bound" ]; then
+        print_status "Phoenix models PVC is bound"
+        break
+    elif [ "$MODELS_PVC_STATUS" = "Pending" ]; then
+        if [ $i -eq 10 ]; then
+            echo "⚠️  Phoenix models PVC stuck in Pending, attempting fix..."
+            # Delete and recreate both PV and PVC for manual storage class
+            kubectl delete pvc phoenix-models-pvc -n phoenixapp --force --grace-period=0 2>/dev/null || true
+            sleep 2
+            kubectl delete pv phoenix-models-local-pv --force --grace-period=0 2>/dev/null || true
+            sleep 2
+            kubectl apply -f k3s/base/phoenix-models-pv.yaml
+            kubectl apply -f k3s/base/phoenix-models-pvc.yaml
+            sleep 3
+            print_status "Phoenix models PV/PVC recreated"
         fi
     fi
     echo -n "."
