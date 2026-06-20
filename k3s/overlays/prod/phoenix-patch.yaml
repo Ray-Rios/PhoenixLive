@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: phoenix-web
 spec:
-  replicas: 2
+  replicas: 1
   template:
     spec:
       containers:

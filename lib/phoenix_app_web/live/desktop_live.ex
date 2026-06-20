@@ -273,7 +273,7 @@ defmodule PhoenixAppWeb.DesktopLive do
       topic = socket.assigns.current_zone_topic
       now_ms = System.monotonic_time(:millisecond)
 
-      last_presence_ms = socket.assigns.last_presence_update_ms || 0
+      last_presence_ms = socket.assigns.last_presence_update_ms || (now_ms - @presence_broadcast_interval_ms - 1)
       should_broadcast = not is_nil(topic) and now_ms - last_presence_ms >= @presence_broadcast_interval_ms
 
       if should_broadcast do
@@ -284,10 +284,7 @@ defmodule PhoenixAppWeb.DesktopLive do
         end)
       end
 
-      last_remote_ms = socket.assigns.last_remote_broadcast_ms || 0
-      should_broadcast_remote = not is_nil(topic) and now_ms - last_remote_ms >= @remote_position_broadcast_interval_ms
-
-      if should_broadcast_remote do
+      if not is_nil(topic) do
         PubSub.broadcast(PhoenixApp.PubSub, topic, {:zone_position_update, %{
           character_id: current_character.character_id,
           character_name: current_character.name,
@@ -301,7 +298,7 @@ defmodule PhoenixAppWeb.DesktopLive do
         }})
       end
 
-      last_persist_ms = socket.assigns.last_position_persist_ms || 0
+      last_persist_ms = socket.assigns.last_position_persist_ms || (now_ms - @position_persist_interval_ms - 1)
       should_persist = now_ms - last_persist_ms >= @position_persist_interval_ms
 
       if should_persist do
@@ -319,14 +316,15 @@ defmodule PhoenixAppWeb.DesktopLive do
            }),
          last_world_update_ms: now_ms,
          last_presence_update_ms: if(should_broadcast, do: now_ms, else: last_presence_ms),
-           last_position_persist_ms: if(should_persist, do: now_ms, else: last_persist_ms),
-           last_remote_broadcast_ms: if(should_broadcast_remote, do: now_ms, else: last_remote_ms)
+         last_position_persist_ms: if(should_persist, do: now_ms, else: last_persist_ms)
        )}
     else
       {:error, :invalid_move} ->
+        Logger.warning("desktop_live:world_position_update_REJECTED invalid_move character_id=#{inspect(current_character(socket) && current_character(socket).character_id)}")
         {:noreply, push_authoritative_correction(socket)}
 
-      _ ->
+      other ->
+        Logger.warning("desktop_live:world_position_update_REJECTED other=#{inspect(other)} character_id=#{inspect(current_character(socket) && current_character(socket).character_id)}")
         {:noreply, socket}
     end
   end

@@ -23,6 +23,9 @@ metadata:
       more_set_headers "X-Frame-Options: DENY";
       more_set_headers "X-Content-Type-Options: nosniff";
       more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      # WebSocket upgrade support
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
       # Drop common WordPress scanner paths fast
       if ($request_uri ~* "^/(wp-admin|wp-login\\.php|wordpress|xmlrpc\\.php)") { return 404; }
 spec:

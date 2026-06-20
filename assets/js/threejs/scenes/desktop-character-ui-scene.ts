@@ -229,6 +229,10 @@ export const DesktopCharacterUIScene = {
   },
 
   destroyed(this: any) {
+    if (this.positionHeartbeatInterval) {
+      clearInterval(this.positionHeartbeatInterval);
+      this.positionHeartbeatInterval = null;
+    }
     cancelAnimationFrame(this.animationFrame);
     window.removeEventListener('resize', this.handleResize);
     window.removeEventListener('keydown', this.handleWorldKeyDown);
@@ -249,6 +253,20 @@ export const DesktopCharacterUIScene = {
     this.worldGroup = null;
     this.removeWorldOverlayUI();
     this.nameplateEls.clear();
+  },
+
+  reconnected(this: any) {
+    // Reset any stuck push lock — the same hook instance is reused across reconnects,
+    // so a _pushPending=true left over from before the disconnect would block all sends.
+    this._pushPending = false;
+    if (this._pushPendingTimer) {
+      clearTimeout(this._pushPendingTimer);
+      this._pushPendingTimer = null;
+    }
+    // Re-sync other players in case presence state changed while offline.
+    if (this.worldInitialized && this.state?.uiState === 'world') {
+      void this.syncOtherPlayers();
+    }
   },
 
   setupLights(this: any) {
@@ -397,6 +415,28 @@ export const DesktopCharacterUIScene = {
     }
 
     this.worldInitialized = true;
+
+    // Fallback heartbeat so position keeps sending even when tab is backgrounded
+    // (requestAnimationFrame throttles to ~1fps in background tabs)
+    this.positionHeartbeatInterval = setInterval(() => {
+      if (!this.worldInitialized || !this.el?.isConnected) {
+        clearInterval(this.positionHeartbeatInterval);
+        this.positionHeartbeatInterval = null;
+        return;
+      }
+      const currentId = this.state?.currentPlayer?.character_id;
+      const localCharacter = currentId ? this.characterManager?.getAllCharacters().get(currentId) : null;
+      if (localCharacter) {
+        this.sendLocalPosition(
+          localCharacter.mesh.position.x,
+          localCharacter.mesh.position.y,
+          localCharacter.mesh.position.z,
+          localCharacter.mesh.rotation.y,
+          true
+        );
+      }
+    }, 500);
+
     await this.syncOtherPlayers();
   },
 
@@ -503,7 +543,9 @@ export const DesktopCharacterUIScene = {
     this.remoteNetTargets.forEach((target: any, id: string) => {
       if (id === currentId) return;
       const character = this.characterManager.getAllCharacters().get(id);
-      if (!character) return;
+      if (!character) {
+        return;
+      }
 
       const currentPos = character.mesh.position;
       const dx = target.x - currentPos.x;
@@ -553,11 +595,20 @@ export const DesktopCharacterUIScene = {
   },
 
   teardownWorldMode(this: any) {
+    if (this.positionHeartbeatInterval) {
+      clearInterval(this.positionHeartbeatInterval);
+      this.positionHeartbeatInterval = null;
+    }
+    if (this._pushPendingTimer) {
+      clearTimeout(this._pushPendingTimer);
+      this._pushPendingTimer = null;
+    }
     this.controller?.dispose();
     this.controller = null;
     this.movementAccumulator = 0;
     this.lastPositionPushMs = 0;
     this.lastSentLocalPosition = null;
+    this._pushPending = false;
     this.remoteNetTargets.clear();
     this.remoteLastSeenMs.clear();
     this.worldInitialized = false;
@@ -606,7 +657,7 @@ export const DesktopCharacterUIScene = {
     logoutButton.className = 'rounded bg-rose-700 hover:bg-rose-600 px-2 py-1 text-[11px] text-white';
     logoutButton.textContent = 'Logout';
     logoutButton.addEventListener('click', () => {
-      this.pushEvent('logout_character', {});
+      (this.pushEvent('logout_character', {}) as any)?.catch?.(() => {});
     });
 
     const input = document.createElement('input');
@@ -624,7 +675,7 @@ export const DesktopCharacterUIScene = {
       event.preventDefault();
       const message = input.value.trim();
       if (!message) return;
-      this.pushEvent('world_chat_message', { message });
+      (this.pushEvent('world_chat_message', { message }) as any)?.catch?.(() => {});
       this.appendChatMessage('You', message);
       input.value = '';
     });
@@ -940,6 +991,9 @@ export const DesktopCharacterUIScene = {
   },
 
   sendLocalPosition(this: any, x: number, y: number, z: number, heading: number, force = false) {
+    // Don't send if a previous push is still in-flight — prevents flooding long-poll
+    if (this._pushPending) return;
+
     const now = performance.now();
     const prev = this.lastSentLocalPosition;
 
@@ -957,13 +1011,33 @@ export const DesktopCharacterUIScene = {
 
     this.lastPositionPushMs = now;
     this.lastSentLocalPosition = { x, y, z, heading };
+    this._pushPending = true;
 
-    this.pushEvent('world_position_update', {
-      x,
-      y,
-      z,
-      heading
-    });
+    // Watchdog: auto-reset after 5 s in case the promise never resolves
+    if (this._pushPendingTimer) clearTimeout(this._pushPendingTimer);
+    this._pushPendingTimer = setTimeout(() => {
+      this._pushPending = false;
+      this._pushPendingTimer = null;
+    }, 5000);
+
+    const clearPending = () => {
+      this._pushPending = false;
+      if (this._pushPendingTimer) {
+        clearTimeout(this._pushPendingTimer);
+        this._pushPendingTimer = null;
+      }
+    };
+
+    try {
+      const p = this.pushEvent('world_position_update', { x, y, z, heading });
+      if (p && typeof p.then === 'function') {
+        p.then(clearPending, clearPending);
+      } else {
+        clearPending();
+      }
+    } catch (_e) {
+      clearPending();
+    }
   },
 
   resetSelectionCamera(this: any) {
@@ -988,12 +1062,12 @@ export const DesktopCharacterUIScene = {
     const { panelId, characterId } = first.userData || {};
 
     if (characterId) {
-      this.pushEvent('select_character', { character_id: characterId });
+      (this.pushEvent('select_character', { character_id: characterId }) as any)?.catch?.(() => {});
       return;
     }
 
     if (panelId === 'login' && this.state?.canLogin) {
-      this.pushEvent('login_character', {});
+      (this.pushEvent('login_character', {}) as any)?.catch?.(() => {});
       return;
     }
 
@@ -1002,7 +1076,7 @@ export const DesktopCharacterUIScene = {
       const name = character?.name || 'this character';
       const confirmed = window.confirm(`Delete ${name}? This cannot be undone.`);
       if (confirmed) {
-        this.pushEvent('delete_character', { character_id: this.state.selectedCharacterId });
+        (this.pushEvent('delete_character', { character_id: this.state.selectedCharacterId }) as any)?.catch?.(() => {});
       }
       return;
     }
@@ -1074,7 +1148,7 @@ export const DesktopCharacterUIScene = {
       const characterType = typeInput.value.trim();
       const modelPath = modelSelect.value;
       this.removeCharacterCreator();
-      this.pushEvent('three_ui_create_character', { name, character_type: characterType, model_path: modelPath });
+      (this.pushEvent('three_ui_create_character', { name, character_type: characterType, model_path: modelPath }) as any)?.catch?.(() => {});
     });
 
     cancelBtn.addEventListener('click', () => this.removeCharacterCreator());
@@ -1137,7 +1211,10 @@ export const DesktopCharacterUIScene = {
 
       const currentId = this.state?.currentPlayer?.character_id;
       const localCharacter = currentId ? this.characterManager?.getAllCharacters().get(currentId) : null;
-      if (localCharacter) {
+      if (!localCharacter) {
+        this._noCharFrames = (this._noCharFrames || 0) + 1;
+      } else {
+        this._noCharFrames = 0;
         this.sendLocalPosition(
           localCharacter.mesh.position.x,
           localCharacter.mesh.position.y,

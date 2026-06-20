@@ -1,6 +1,14 @@
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
 import "phoenix_html";
 
+// Suppress Phoenix channel timeout rejections during normal disconnect/reconnect cycles.
+// These are expected behavior (long-poll reconnects, WebSocket drops) and not real errors.
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason && event.reason.timeout === true) {
+    event.preventDefault();
+  }
+});
+
 // App version for cache debugging
 const APP_VERSION = "2025.12.21.2";
 console.log(`🔧 PhoenixApp v${APP_VERSION}`);
@@ -123,7 +131,6 @@ async function loadHeavyModulesAndConnect() {
       params: { _csrf_token: csrfToken },
       hooks: Hooks,
       timeout: 30000, // 30 second timeout for slower connections
-      longPollFallbackMs: 2500, // Fallback to longpoll after 2.5s of websocket failure
     });
     
     // Expose liveSocket globally
@@ -198,7 +205,6 @@ async function loadHeavyModulesAndConnect() {
       params: { _csrf_token: csrfToken },
       hooks: fallbackHooks,
       timeout: 30000, // 30 second timeout for slower connections
-      longPollFallbackMs: 2500, // Fallback to longpoll after 2.5s of websocket failure
     });
     
     (window as any).liveSocket = liveSocket;
