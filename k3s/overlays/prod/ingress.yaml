@@ -72,10 +72,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - mail.phxlive.net
+    - mailhog.phxlive.net
     secretName: mailhog-tls
   rules:
-  - host: mail.phxlive.net
+  - host: mailhog.phxlive.net
     http:
       paths:
       - path: /

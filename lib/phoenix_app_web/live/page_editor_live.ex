@@ -345,7 +345,7 @@ defmodule PhoenixAppWeb.PageEditorLive do
         <div class="container mx-auto px-4">
           <div class="flex items-center justify-between h-14">
             <div class="flex items-center gap-4">
-              <.link navigate={~p"/world"} class="text-gray-400 hover:text-white">
+              <.link navigate={~p"/games"} class="text-gray-400 hover:text-white">
                 ← Back to World
               </.link>
               <h1 class="text-xl font-bold text-white"><%= @page_title %></h1>

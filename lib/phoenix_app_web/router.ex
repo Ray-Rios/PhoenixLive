@@ -79,7 +79,7 @@ defmodule PhoenixAppWeb.Router do
     live "/checkout", CheckoutLive, :index
     live "/forum", ForumLive, :index
     live "/forum/:channel_id", ForumLive, :channel
-    live "/world", WorldLive, :index
+    live "/games", GamesLive, :index
 
     # Profile routes (with auth check in mount)
     live "/profile", ProfileLive, :index
@@ -134,7 +134,6 @@ defmodule PhoenixAppWeb.Router do
     post "/login", Api.ApiAuthController, :login
     post "/authenticate", Api.ApiAuthController, :authenticate
     post "/verify", Api.ApiAuthController, :verify_token
-    post "/verify-bearer", Api.ApiAuthController, :verify_bearer
     post "/logout", Api.ApiAuthController, :logout
     
     # Email verification endpoints
@@ -151,12 +150,47 @@ defmodule PhoenixAppWeb.Router do
   end
 
   # --------------------
+  # Auth endpoints that read the Authorization header.
+  #
+  # These MUST NOT sit in the `:api` pipeline above. That pipeline runs no
+  # Guardian plugs, so `Guardian.Plug.current_token/1` is always nil there and
+  # `verify_bearer` would 401 unconditionally regardless of the token sent.
+  # `:api_auth` installs VerifyHeader + LoadResource, which is what these need.
+  # --------------------
+  scope "/api/auth", PhoenixAppWeb do
+    pipe_through :api_auth
+
+    post "/verify-bearer", Api.ApiAuthController, :verify_bearer
+  end
+
+  # --------------------
   # Scheduler Webhook (Public with secret)
   # --------------------
   scope "/api/webhooks", PhoenixAppWeb do
     pipe_through :api
     
     post "/scheduler/:secret", Api.SchedulerController, :trigger_webhook
+  end
+
+  # --------------------
+  # Games Platform API (RaysSpaceSim and future titles)
+  # Auth enforced per-request by GamesApiKeyOrAuth (player JWT or server API key)
+  # --------------------
+  scope "/api/games", PhoenixAppWeb do
+    pipe_through :api_auth
+
+    # Shard registry. `servers` is readable by any authenticated player;
+    # `heartbeat` and `offline` are refused unless the caller presented the
+    # server API key (enforced in the controller, not here).
+    get "/:game_slug/servers", Api.GamesController, :list_servers
+    post "/:game_slug/servers/heartbeat", Api.GamesController, :heartbeat_server
+    post "/:game_slug/servers/offline", Api.GamesController, :deregister_server
+
+    get "/:game_slug/characters", Api.GamesController, :list_characters
+    post "/:game_slug/characters", Api.GamesController, :create_character
+    get "/:game_slug/characters/:id", Api.GamesController, :get_character
+    put "/:game_slug/characters/:id", Api.GamesController, :update_character
+    delete "/:game_slug/characters/:id", Api.GamesController, :delete_character
   end
 
   # --------------------

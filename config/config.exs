@@ -25,7 +25,7 @@ config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 # Ecto Repos
 # ----------------------------
 config :phoenix_app,
-  ecto_repos: [PhoenixApp.Repo], # updated to use PhoenixApp.Repo
+  ecto_repos: [PhoenixApp.Repo, PhoenixApp.GamesRepo], # PhoenixApp.Repo = main app, GamesRepo = isolated multiplayer game data
   generators: [timestamp_type: :utc_datetime]
 
 # ----------------------------
@@ -98,6 +98,21 @@ config :phoenix_app, PhoenixApp.Repo,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10,
   migration_primary_key: [type: :bigserial],
+  migration_lock: false
+
+# ----------------------------
+# Games Repo defaults (isolated database for multiplayer game data - RaysSpaceSim, future games)
+# ----------------------------
+config :phoenix_app, PhoenixApp.GamesRepo,
+  username: System.get_env("DB_USERNAME") || "root",
+  password: System.get_env("DB_PASSWORD") || "postgres",
+  database: System.get_env("GAMES_DB_NAME") || "phoenix_games_dev",
+  hostname: System.get_env("DB_HOST") || "db",
+  port: String.to_integer(System.get_env("DB_PORT") || "26257"),
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10,
+  priv: "priv/games_repo",
+  migration_primary_key: [type: :binary_id],
   migration_lock: false
 
 

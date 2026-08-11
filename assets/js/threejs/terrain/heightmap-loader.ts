@@ -1,4 +1,4 @@
-// RAW Heightmap Terrain Loader for EverQuest-style worlds
+// RAW Heightmap Terrain Loader for game worlds
 import * as THREE from 'three';
 
 export interface HeightmapConfig {

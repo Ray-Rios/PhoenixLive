@@ -26,6 +26,7 @@ defmodule PhoenixApp.Application do
       # Log buffer must start early to capture startup logs
       PhoenixApp.LogBuffer,
       PhoenixApp.Repo,
+      PhoenixApp.GamesRepo,
       pubsub_child,
       PhoenixAppWeb.Presence,
       {Finch, name: PhoenixApp.Finch},

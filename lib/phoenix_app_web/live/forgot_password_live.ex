@@ -11,7 +11,7 @@ defmodule PhoenixAppWeb.ForgotPasswordLive do
 
     # If user is already logged in, redirect to desktop
     if current_user do
-      {:ok, redirect(socket, to: ~p"/world")}
+      {:ok, redirect(socket, to: ~p"/games")}
     else
       form_data = %{}
       form = to_form(form_data, as: "forgot_password")

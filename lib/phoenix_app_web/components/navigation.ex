@@ -21,7 +21,7 @@ defmodule PhoenixAppWeb.Components.Navigation do
         <div class="flex top-8 justify-between items-center">
           <!-- Left side - Logo and main navigation -->
           <div class="flex items-center space-x-4 flex-1 min-w-0">
-            <.link navigate={~p"/world"} class="text-xl font-bold text-white hover:text-blue-400 transition-colors duration-300 flex-shrink-0">
+            <.link navigate={~p"/games"} class="text-xl font-bold text-white hover:text-blue-400 transition-colors duration-300 flex-shrink-0">
               Phx<span class="rainbow-text">Live</span>
             </.link>
             <div class="hidden lg:flex space-x-4 flex-1 justify-center">
@@ -39,8 +39,8 @@ defmodule PhoenixAppWeb.Components.Navigation do
               <.link navigate={~p"/forum"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 💬 Forum
               </.link>
-              <.link navigate={~p"/world"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                🖥️ Desktop
+              <.link navigate={~p"/games"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
+                🎮 Games
               </.link>
               <.link navigate={~p"/blog"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 🚬 Blog

@@ -9,6 +9,9 @@ config :swoosh, :api_client, false
 # Optional Projects API key used by Taskbar calendar to fetch project items
 config :phoenix_app, projects_api_key: System.get_env("PROJECTS_API_KEY") || ""
 
+# API key used by trusted dedicated game servers (e.g. RaysSpaceSim) to act on behalf of players
+config :phoenix_app, games_server_api_key: System.get_env("GAMES_SERVER_API_KEY") || ""
+
 # -------------------------------------------------
 # SECRET_KEY_BASE
 # -------------------------------------------------
@@ -78,6 +81,30 @@ config :phoenix_app, PhoenixApp.Repo,
   migration_lock: nil,
   parameters: [
     application_name: "phoenix_app"
+  ]
+
+# -------------------------------------------------
+# Games Repo Database URL (isolated multiplayer game data)
+# -------------------------------------------------
+games_db_name = System.get_env("GAMES_DB_NAME") || "phoenix_games_dev"
+
+games_database_url =
+  System.get_env("GAMES_DATABASE_URL") ||
+    "postgresql://#{db_username}:#{db_password}@#{db_host}:#{db_port}/#{games_db_name}"
+
+config :phoenix_app, PhoenixApp.GamesRepo,
+  adapter: Ecto.Adapters.Postgres,
+  url: games_database_url,
+  pool_size: db_pool,
+  timeout: 60_000,
+  ownership_timeout: 60_000,
+  queue_target: 5000,
+  queue_interval: 1000,
+  priv: "priv/games_repo",
+  migration_primary_key: [type: :binary_id],
+  migration_lock: nil,
+  parameters: [
+    application_name: "phoenix_app_games"
   ]
 
 # -------------------------------------------------

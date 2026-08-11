@@ -30,6 +30,18 @@ A read-only API endpoint provides project items for the Taskbar Calendar app.
 
 Set the `PROJECTS_API_KEY` env var in your environment or Kubernetes runtime config to allow Taskbar calendar clients to fetch project items.
 
+## Games Platform API (RaysSpaceSim and future titles)
+
+Generic multiplayer game data API, backed by an isolated `PhoenixApp.GamesRepo` database (`phoenix_games_dev`/`phoenix_games_prod`) separate from the main site DB.
+
+- GET /api/games/:game_slug/characters — list the authenticated player's characters for a game
+- POST /api/games/:game_slug/characters — create a character (`name`, optional `stats`, `settings`)
+- GET /api/games/:game_slug/characters/:id — fetch one owned character
+- PUT /api/games/:game_slug/characters/:id — update `name`/`stats`/`settings` (checkpoint save)
+- DELETE /api/games/:game_slug/characters/:id
+
+Authentication: a valid Guardian Bearer token (the player), or an `X-API-Key` header matching `GAMES_SERVER_API_KEY` for a trusted dedicated game server acting on a player's behalf (must also pass `user_id`).
+
 ## Handling Build Warnings
 
 Recent build produced warnings:

@@ -7,7 +7,7 @@ defmodule PhoenixAppWeb.ResetPasswordLive do
 
     # If user is already logged in, redirect to desktop
     if current_user do
-      {:ok, redirect(socket, to: ~p"/world")}
+      {:ok, redirect(socket, to: ~p"/games")}
     else
       # Validate the token first
       case validate_reset_token(token) do

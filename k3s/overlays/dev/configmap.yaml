@@ -9,6 +9,8 @@ data:
   DB_PORT: "5432"
   DB_NAME: "phoenixapp_dev"
   DATABASE_URL: "postgresql://postgres:postgres@db:5432/phoenixapp_dev"
+  GAMES_DB_NAME: "phoenix_games_dev"
+  GAMES_DATABASE_URL: "postgresql://postgres:postgres@db:5432/phoenix_games_dev"
   REDIS_URL: "redis://redis:6379/0"
   SMTP_HOST: "mailhog"
   SMTP_PORT: "1025"

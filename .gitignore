@@ -62,4 +62,21 @@ docker-compose.override.yml
 
 # Additional security - API keys and tokens
 *.env.*
-!.env.exampleuploads/
+# A missing newline had fused this negation with the `uploads/` rule below
+# ("!.env.exampleuploads/"), so uploads/ was never actually ignored. Nothing
+# had been committed from it yet, so this is a fix rather than a cleanup.
+!.env.example
+
+# User uploads — runtime data, synced separately via sync-uploads-*.sh
+uploads/
+
+# ============================================================
+# RaysSpaceSim — separate git repository
+#
+# The UE5 project lives inside this folder for tooling convenience but has its
+# own history and remote (github.com/Ray-Rios/RaysSpaceSim). It must stay
+# ignored here: without this rule, `git add -A` records it as a gitlink — a
+# submodule pointer with no .gitmodules — which looks committed but clones as
+# an empty directory.
+# ============================================================
+RaysSpaceSim/

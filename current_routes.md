@@ -15,12 +15,15 @@
   GET   /checkout                          PhoenixAppWeb.CheckoutLive :index
   GET   /chat                              PhoenixAppWeb.ChatLive :index
   GET   /forum/:channel_id                 PhoenixAppWeb.ForumLive :channel
-  GET   /desktop                           PhoenixAppWeb.DesktopLive :index
+  GET   /games                             PhoenixAppWeb.GamesLive :index
   GET   /profile                           PhoenixAppWeb.ProfileLive :index
   GET   /profile/security                  PhoenixAppWeb.ProfileLive :security
   GET   /profile/orders                    PhoenixAppWeb.ProfileLive :orders
   GET   /avatar                            PhoenixAppWeb.AvatarLive :index
-  GET   /files                             PhoenixAppWeb.FilesLive :index
+
+  # Note: PhoenixAppWeb.PhoenixDesktopLive is not a route - it's a global
+  # live_component (taskbar + windows) rendered on every authenticated page
+  # from the app layout, not tied to a specific URL.
 
   GET   /auth/login_success                PhoenixAppWeb.AuthController :login_success
   GET   /auth/logout                       PhoenixAppWeb.AuthController :logout
@@ -29,9 +32,6 @@
   POST  /auth/2fa/setup                    PhoenixAppWeb.AuthController :setup_2fa
   GET   /admin                             PhoenixAppWeb.AdminLive.BlogManagement :index
   GET   /admin/user-management             PhoenixAppWeb.UserManagementLive :index
-  GET   /eqemu/admin                       PhoenixAppWeb.EqemuAdminLive :index
-  GET   /eqemu/player                      PhoenixAppWeb.EqemuPlayerLive :index
-  GET   /eqemu/server                      PhoenixAppWeb.EqemuServerLive :index
   POST  /api/auth/register                 PhoenixAppWeb.Api.ApiAuthController :register
   POST  /api/auth/login                    PhoenixAppWeb.Api.ApiAuthController :login
   POST  /api/auth/authenticate             PhoenixAppWeb.Api.ApiAuthController :authenticate
@@ -43,18 +43,16 @@
   POST  /api/auth/resend-verification      PhoenixAppWeb.Api.ApiAuthController :resend_verification
   POST  /api/auth/dev-verify               PhoenixAppWeb.Api.ApiAuthController :dev_verify
   GET   /api/auth/users                    PhoenixAppWeb.Api.ApiAuthController :list_users
-  GET   /api/game/profile                  PhoenixAppWeb.Api.GameController :get_profile
-  GET   /api/game/characters               PhoenixAppWeb.Api.GameController :list_characters
-  POST  /api/game/characters               PhoenixAppWeb.Api.GameController :create_character
-  GET   /api/game/inventory/:character_id  PhoenixAppWeb.Api.GameController :get_inventory
-  POST  /api/game/login-game               PhoenixAppWeb.Api.GameController :login_to_game
   GET   /health                            PhoenixAppWeb.HealthController :check
   GET   /api/status                        PhoenixAppWeb.Api.ApiController :status
   POST  /api/sessions                      PhoenixAppWeb.Api.ApiController :create_session
-  POST  /api/eqemu/authenticate            PhoenixAppWeb.Api.EqemuController :authenticate
-  POST  /api/eqemu/verify_account          PhoenixAppWeb.Api.EqemuController :verify_account
-  GET   /api/eqemu/characters/:user_id     PhoenixAppWeb.Api.EqemuController :list_characters
-  POST  /api/eqemu/characters              PhoenixAppWeb.Api.EqemuController :create_character
+
+  # Games Platform API (server API key or player bearer token - see README)
+  GET   /api/games/:game_slug/characters                    PhoenixAppWeb.Api.GamesController :list_characters
+  POST  /api/games/:game_slug/characters                    PhoenixAppWeb.Api.GamesController :create_character
+  GET   /api/games/:game_slug/characters/:id                PhoenixAppWeb.Api.GamesController :get_character
+  PUT   /api/games/:game_slug/characters/:id                PhoenixAppWeb.Api.GamesController :update_character
+  DELETE /api/games/:game_slug/characters/:id                PhoenixAppWeb.Api.GamesController :delete_character
 
   # Scheduler API (Authenticated)
   GET   /api/scheduler/events              PhoenixAppWeb.Api.SchedulerController :list_events
