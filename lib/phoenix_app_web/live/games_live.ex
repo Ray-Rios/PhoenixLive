@@ -1,6 +1,6 @@
-defmodule PhoenixAppWeb.DesktopLive do
+defmodule PhoenixAppWeb.WorldLive do
   @moduledoc """
-  Character creation and login hub hosted on the desktop route.
+  MMO World - character selection and live 3D zone.
   """
   use PhoenixAppWeb, :live_view
   require Logger
@@ -23,18 +23,27 @@ defmodule PhoenixAppWeb.DesktopLive do
     if connected?(socket) do
       case Game.character_login_payload(socket.assigns.current_user.id, character_id) do
         {:ok, payload} ->
-          socket = socket |> leave_zone_presence() |> join_zone_presence(payload)
+          if character_online_elsewhere?(socket, payload.character_id, payload.zone.id) do
+            Logger.warning("world_live:handle_params already_online user_id=#{socket.assigns.current_user.id} character_id=#{payload.character_id}")
+            {:noreply,
+             socket
+             |> put_flash(:error, "#{payload.name} is already logged in from another session.")
+             |> push_patch(to: ~p"/world")}
+          else
+            socket = socket |> leave_zone_presence() |> join_zone_presence(payload)
 
-          {:noreply,
-           socket
-           |> assign(
-             current_character_payload: payload,
-             current_character_runtime: payload,
-             world_mode?: true,
-             last_world_update_ms: System.monotonic_time(:millisecond)
-           )
-           |> push_event("zone_presence_state", %{online_characters: socket.assigns.zone_online_characters})
-           |> push_event("character_login_ready", payload)}
+            {:noreply,
+             socket
+             |> assign(
+               current_character_payload: payload,
+               current_character_runtime: payload,
+               world_mode?: true,
+               last_world_update_ms: System.monotonic_time(:millisecond)
+             )
+             |> push_event("zone_presence_state", %{online_characters: socket.assigns.zone_online_characters})
+             |> push_event("character_login_ready", payload)
+             |> tap(fn _ -> Process.send_after(self(), {:regen_tick, payload.character_id}, 6_000) end)}
+          end
 
         _ ->
           {:noreply, socket}
@@ -80,6 +89,9 @@ defmodule PhoenixAppWeb.DesktopLive do
       last_position_persist_ms: nil,
       last_presence_update_ms: nil,
       last_remote_broadcast_ms: nil,
+      pending_respawn_timer: nil,
+      pending_spawn_coords: nil,
+      is_dead?: false,
        scene_model_paths: Enum.map(available_models, & &1.model_path),
         available_models: available_models,
        create_form: to_form(%{"name" => "", "character_type" => "", "model_path" => ""}, as: "character")
@@ -91,12 +103,12 @@ defmodule PhoenixAppWeb.DesktopLive do
   end
 
   def handle_event("create_character", %{"character" => params}, socket) do
-    Logger.info("desktop_live:create_character user_id=#{socket.assigns.current_user.id} name=#{inspect(params["name"])} type=#{inspect(params["character_type"])} model=#{inspect(params["model_path"])}")
+    Logger.info("world_live:create_character user_id=#{socket.assigns.current_user.id} name=#{inspect(params["name"])} type=#{inspect(params["character_type"])} model=#{inspect(params["model_path"])}")
 
     case Game.create_character(socket.assigns.current_user.id, params) do
       {:ok, _character} ->
         characters = Game.list_user_characters(socket.assigns.current_user.id)
-        Logger.info("desktop_live:create_character success user_id=#{socket.assigns.current_user.id} character_count=#{length(characters)}")
+        Logger.info("world_live:create_character success user_id=#{socket.assigns.current_user.id} character_count=#{length(characters)}")
 
         {:noreply,
          socket
@@ -109,19 +121,19 @@ defmodule PhoenixAppWeb.DesktopLive do
          |> put_flash(:info, "Character created and approved.")}
 
       {:error, :character_limit_reached} ->
-        Logger.warning("desktop_live:create_character limit_reached user_id=#{socket.assigns.current_user.id}")
+        Logger.warning("world_live:create_character limit_reached user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "You already have the maximum of 16 characters.")}
 
       {:error, :invalid_model_path} ->
-        Logger.warning("desktop_live:create_character invalid_model user_id=#{socket.assigns.current_user.id} model=#{inspect(params["model_path"])}")
+        Logger.warning("world_live:create_character invalid_model user_id=#{socket.assigns.current_user.id} model=#{inspect(params["model_path"])}")
         {:noreply, put_flash(socket, :error, "Selected model is not valid.")}
 
       {:error, :default_zone_missing} ->
-        Logger.error("desktop_live:create_character missing_default_zone user_id=#{socket.assigns.current_user.id}")
+        Logger.error("world_live:create_character missing_default_zone user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "Lobby zone is missing. Please run migrations/seeds.")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        Logger.warning("desktop_live:create_character changeset_error user_id=#{socket.assigns.current_user.id} errors=#{inspect(changeset.errors)}")
+        Logger.warning("world_live:create_character changeset_error user_id=#{socket.assigns.current_user.id} errors=#{inspect(changeset.errors)}")
         {:noreply,
          socket
          |> assign(create_form: to_form(changeset, as: "character"))
@@ -133,10 +145,10 @@ defmodule PhoenixAppWeb.DesktopLive do
     character = Game.get_character_for_user(socket.assigns.current_user.id, character_id)
 
     if character do
-      Logger.info("desktop_live:select_character user_id=#{socket.assigns.current_user.id} character_id=#{character.id} name=#{character.name}")
+      Logger.info("world_live:select_character user_id=#{socket.assigns.current_user.id} character_id=#{character.id} name=#{character.name}")
       {:noreply, assign(socket, selected_character_id: character.id, scene_characters: to_scene_characters(socket.assigns.characters))}
     else
-      Logger.warning("desktop_live:select_character not_found user_id=#{socket.assigns.current_user.id} character_id=#{character_id}")
+      Logger.warning("world_live:select_character not_found user_id=#{socket.assigns.current_user.id} character_id=#{character_id}")
       {:noreply, put_flash(socket, :error, "Could not select that character.")}
     end
   end
@@ -147,12 +159,12 @@ defmodule PhoenixAppWeb.DesktopLive do
 
   def handle_event("three_ui_create_character", params, socket) do
     normalized_params = normalize_three_ui_create_params(params, socket.assigns.scene_model_paths)
-    Logger.info("desktop_live:three_ui_create_character user_id=#{socket.assigns.current_user.id} params=#{inspect(normalized_params)}")
+    Logger.info("world_live:three_ui_create_character user_id=#{socket.assigns.current_user.id} params=#{inspect(normalized_params)}")
 
     case Game.create_character(socket.assigns.current_user.id, normalized_params) do
       {:ok, _character} ->
         characters = Game.list_user_characters(socket.assigns.current_user.id)
-        Logger.info("desktop_live:three_ui_create_character success user_id=#{socket.assigns.current_user.id} character_count=#{length(characters)}")
+        Logger.info("world_live:three_ui_create_character success user_id=#{socket.assigns.current_user.id} character_count=#{length(characters)}")
 
         {:noreply,
          socket
@@ -165,46 +177,51 @@ defmodule PhoenixAppWeb.DesktopLive do
          |> put_flash(:info, "Character created from 3D interface.")}
 
       {:error, :character_limit_reached} ->
-        Logger.warning("desktop_live:three_ui_create_character limit_reached user_id=#{socket.assigns.current_user.id}")
+        Logger.warning("world_live:three_ui_create_character limit_reached user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "You already have the maximum of 16 characters.")}
 
       {:error, :invalid_model_path} ->
-        Logger.warning("desktop_live:three_ui_create_character invalid_model user_id=#{socket.assigns.current_user.id}")
+        Logger.warning("world_live:three_ui_create_character invalid_model user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "3D selection used an invalid model.")}
 
       {:error, %Ecto.Changeset{} = _changeset} ->
-        Logger.warning("desktop_live:three_ui_create_character invalid_input user_id=#{socket.assigns.current_user.id}")
+        Logger.warning("world_live:three_ui_create_character invalid_input user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "3D create input is invalid. Use name/type at least 2 characters.")}
 
       {:error, :default_zone_missing} ->
-        Logger.error("desktop_live:three_ui_create_character missing_default_zone user_id=#{socket.assigns.current_user.id}")
+        Logger.error("world_live:three_ui_create_character missing_default_zone user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "Lobby zone is missing. Please run migrations/seeds.")}
     end
   end
 
   def handle_event("login_character", _params, socket) do
     selected_character_id = socket.assigns.selected_character_id
-    Logger.info("desktop_live:login_character user_id=#{socket.assigns.current_user.id} selected_character_id=#{inspect(selected_character_id)}")
+    Logger.info("world_live:login_character user_id=#{socket.assigns.current_user.id} selected_character_id=#{inspect(selected_character_id)}")
 
     case selected_character_id && Game.character_login_payload(socket.assigns.current_user.id, selected_character_id) do
       {:ok, payload} ->
-        socket = socket |> leave_zone_presence() |> join_zone_presence(payload)
-        Logger.info("desktop_live:login_character success user_id=#{socket.assigns.current_user.id} character_id=#{payload.character_id} zone=#{payload.zone.slug}")
+        if character_online_elsewhere?(socket, payload.character_id, payload.zone.id) do
+          Logger.warning("world_live:login_character already_online user_id=#{socket.assigns.current_user.id} character_id=#{payload.character_id}")
+          {:noreply, put_flash(socket, :error, "#{payload.name} is already logged in from another session.")}
+        else
+          socket = socket |> leave_zone_presence() |> join_zone_presence(payload)
+          Logger.info("world_live:login_character success user_id=#{socket.assigns.current_user.id} character_id=#{payload.character_id} zone=#{payload.zone.slug}")
 
-        {:noreply,
-         socket
-         |> assign(
-           current_character_payload: payload,
-           current_character_runtime: payload,
-           world_mode?: true,
-           last_world_update_ms: System.monotonic_time(:millisecond)
-         )
-         |> push_event("zone_presence_state", %{online_characters: socket.assigns.zone_online_characters})
-         |> push_event("character_login_ready", payload)
-         |> push_patch(to: ~p"/desktop?ch=#{payload.character_id}")}
+          {:noreply,
+           socket
+           |> assign(
+             current_character_payload: payload,
+             current_character_runtime: payload,
+             world_mode?: true,
+             last_world_update_ms: System.monotonic_time(:millisecond)
+           )
+           |> push_event("zone_presence_state", %{online_characters: socket.assigns.zone_online_characters})
+           |> push_event("character_login_ready", payload)
+           |> push_patch(to: ~p"/world?ch=#{payload.character_id}")}
+        end
 
       _ ->
-        Logger.warning("desktop_live:login_character missing_selection user_id=#{socket.assigns.current_user.id}")
+        Logger.warning("world_live:login_character missing_selection user_id=#{socket.assigns.current_user.id}")
         {:noreply, put_flash(socket, :error, "Select a character before logging in.")}
     end
   end
@@ -215,7 +232,7 @@ defmodule PhoenixAppWeb.DesktopLive do
      |> leave_world()
      |> push_event("zone_presence_state", %{online_characters: []})
      |> push_event("world_logged_out", %{})
-     |> push_patch(to: ~p"/desktop")}
+     |> push_patch(to: ~p"/world")}
   end
 
   def handle_event("delete_character", %{"character_id" => character_id}, socket) do
@@ -226,7 +243,7 @@ defmodule PhoenixAppWeb.DesktopLive do
         characters = Game.list_user_characters(user_id)
         selected_character_id = if socket.assigns.selected_character_id == character.id, do: nil, else: socket.assigns.selected_character_id
 
-        Logger.info("desktop_live:delete_character success user_id=#{user_id} character_id=#{character.id} remaining=#{length(characters)}")
+        Logger.info("world_live:delete_character success user_id=#{user_id} character_id=#{character.id} remaining=#{length(characters)}")
 
         {:noreply,
          socket
@@ -239,11 +256,11 @@ defmodule PhoenixAppWeb.DesktopLive do
          |> put_flash(:info, "Character deleted.")}
 
       {:error, :not_found} ->
-        Logger.warning("desktop_live:delete_character not_found user_id=#{user_id} character_id=#{character_id}")
+        Logger.warning("world_live:delete_character not_found user_id=#{user_id} character_id=#{character_id}")
         {:noreply, put_flash(socket, :error, "Character not found.")}
 
       {:error, reason} ->
-        Logger.warning("desktop_live:delete_character failed user_id=#{user_id} character_id=#{character_id} reason=#{inspect(reason)}")
+        Logger.warning("world_live:delete_character failed user_id=#{user_id} character_id=#{character_id} reason=#{inspect(reason)}")
         {:noreply, put_flash(socket, :error, "Could not delete character.")}
     end
   end
@@ -294,7 +311,9 @@ defmodule PhoenixAppWeb.DesktopLive do
           x: x,
           y: y,
           z: z,
-          heading: heading
+          heading: heading,
+          hp: Map.get(current_character, :hp, 10),
+          max_hp: Map.get(current_character, :max_hp, 10)
         }})
       end
 
@@ -320,11 +339,11 @@ defmodule PhoenixAppWeb.DesktopLive do
        )}
     else
       {:error, :invalid_move} ->
-        Logger.warning("desktop_live:world_position_update_REJECTED invalid_move character_id=#{inspect(current_character(socket) && current_character(socket).character_id)}")
+        Logger.warning("world_live:world_position_update_REJECTED invalid_move character_id=#{inspect(current_character(socket) && current_character(socket).character_id)}")
         {:noreply, push_authoritative_correction(socket)}
 
       other ->
-        Logger.warning("desktop_live:world_position_update_REJECTED other=#{inspect(other)} character_id=#{inspect(current_character(socket) && current_character(socket).character_id)}")
+        Logger.warning("world_live:world_position_update_REJECTED other=#{inspect(other)} character_id=#{inspect(current_character(socket) && current_character(socket).character_id)}")
         {:noreply, socket}
     end
   end
@@ -357,6 +376,188 @@ defmodule PhoenixAppWeb.DesktopLive do
 
         PubSub.broadcast(PhoenixApp.PubSub, socket.assigns.current_zone_topic, {:zone_chat_message, payload})
         {:noreply, socket}
+    end
+  end
+
+  def handle_event("cast_spell", %{"spell" => spell_slug, "target_id" => target_id} = params, socket) do
+    current = current_character(socket)
+
+    cond do
+      is_nil(current) ->
+        {:noreply, socket}
+
+      is_nil(socket.assigns.current_zone_topic) ->
+        {:noreply, socket}
+
+      true ->
+        caster_pos = %{
+          x: parse_float(Map.get(params, "caster_x", current.position.x)),
+          z: parse_float(Map.get(params, "caster_z", current.position.z))
+        }
+        target_pos = %{
+          x: parse_float(Map.get(params, "target_x", 0)),
+          z: parse_float(Map.get(params, "target_z", 0))
+        }
+
+        case spell_slug do
+          "throw_stone" ->
+            case Game.cast_throw_stone(current.character_id, target_id, caster_pos, target_pos) do
+              {:ok, result} ->
+                PubSub.broadcast(
+                  PhoenixApp.PubSub,
+                  socket.assigns.current_zone_topic,
+                  {:zone_spell_result, result}
+                )
+                {:noreply, socket}
+
+              {:error, :insufficient_mp} ->
+                {:noreply, push_event(socket, "spell_error", %{reason: "insufficient_mp"})}
+
+              {:error, :out_of_range} ->
+                {:noreply, push_event(socket, "spell_error", %{reason: "out_of_range"})}
+
+              {:error, :pvp_not_flagged} ->
+                {:noreply, push_event(socket, "spell_error", %{reason: "pvp_not_flagged"})}
+
+              {:error, reason} ->
+                {:noreply, push_event(socket, "spell_error", %{reason: inspect(reason)})}
+            end
+
+          _ ->
+            {:noreply, socket}
+        end
+    end
+  end
+
+  def handle_event("toggle_pvp", _params, socket) do
+    current = current_character(socket)
+
+    if current do
+      case Game.get_character_for_user(socket.assigns.current_user.id, current.character_id) do
+        nil ->
+          {:noreply, socket}
+
+        character ->
+          {:ok, _} =
+            character
+            |> Ecto.Changeset.change(%{pvp_flagged: !character.pvp_flagged})
+            |> PhoenixApp.Repo.update()
+
+          new_flag = !character.pvp_flagged
+          {:noreply, push_event(socket, "pvp_flag_changed", %{pvp_flagged: new_flag})}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:zone_spell_result, result}, socket) do
+    current = current_character(socket)
+
+    socket =
+      if result.target_died && current && result.target_id == current.character_id do
+        # Only process death if not already in death state (prevent double-death while waiting for respawn)
+        if socket.assigns[:is_dead?] do
+          socket
+        else
+          coords = result.spawn_coords || %{x: 0.0, y: 0.0, z: 0.0, heading: 0.0}
+
+          # Cancel any existing pending respawn timer before scheduling a new one.
+          if existing = socket.assigns[:pending_respawn_timer] do
+            Process.cancel_timer(existing)
+          end
+
+          timer_ref = Process.send_after(self(), {:auto_respawn, current.character_id}, 30_000)
+
+          socket
+          |> assign(pending_respawn_timer: timer_ref, pending_spawn_coords: coords, is_dead?: true)
+          |> push_event("character_died", %{
+               spawn_coords: coords,
+               hp: current.max_hp,
+               max_hp: current.max_hp,
+               mp: current.max_mp,
+               max_mp: current.max_mp,
+               respawn_in_ms: 30_000
+             })
+        end
+      else
+        socket
+      end
+
+    {:noreply, push_event(socket, "zone_spell_result", result)}
+  end
+
+  def handle_event("respawn_now", _params, socket) do
+    current = current_character(socket)
+
+    if current && socket.assigns.world_mode? do
+      if timer = socket.assigns[:pending_respawn_timer] do
+        Process.cancel_timer(timer)
+      end
+
+      spawn_coords = socket.assigns[:pending_spawn_coords] || %{x: 0.0, y: 0.0, z: 0.0, heading: 0.0}
+
+      {:noreply,
+       socket
+       |> assign(pending_respawn_timer: nil, pending_spawn_coords: nil, is_dead?: false)
+       |> push_event("character_respawned", %{
+            spawn_coords: spawn_coords,
+            hp: current.max_hp,
+            max_hp: current.max_hp,
+            mp: current.max_mp,
+            max_mp: current.max_mp
+          })}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:auto_respawn, character_id}, socket) do
+    current = current_character(socket)
+
+    if socket.assigns.world_mode? && current && current.character_id == character_id do
+      spawn_coords = socket.assigns[:pending_spawn_coords] || %{x: 0.0, y: 0.0, z: 0.0, heading: 0.0}
+
+      {:noreply,
+       socket
+       |> assign(pending_respawn_timer: nil, pending_spawn_coords: nil, is_dead?: false)
+       |> push_event("character_respawned", %{
+            spawn_coords: spawn_coords,
+            hp: current.max_hp,
+            max_hp: current.max_hp,
+            mp: current.max_mp,
+            max_mp: current.max_mp
+          })}
+    else
+      {:noreply, assign(socket, pending_respawn_timer: nil, pending_spawn_coords: nil, is_dead?: false)}
+    end
+  end
+
+  def handle_info({:regen_tick, character_id}, socket) do
+    current = current_character(socket)
+
+    # Only regen if still logged in as this character
+    if socket.assigns.world_mode? && current && current.character_id == character_id do
+      case Game.get_character_stats(character_id) do
+        {:ok, %{hp: hp, max_hp: max_hp, mp: mp, max_mp: max_mp}}
+            when hp < max_hp or mp < max_mp ->
+          new_hp = min(hp + 1, max_hp)
+          new_mp = min(mp + 1, max_mp)
+          {:ok, _} = Game.update_character_hp_mp(character_id, new_hp, new_mp)
+          socket = push_event(socket, "character_stats_update", %{
+            hp: new_hp, max_hp: max_hp, mp: new_mp, max_mp: max_mp
+          })
+          Process.send_after(self(), {:regen_tick, character_id}, 6_000)
+          {:noreply, socket}
+
+        _ ->
+          # Already full — skip DB write, still reschedule
+          Process.send_after(self(), {:regen_tick, character_id}, 6_000)
+          {:noreply, socket}
+      end
+    else
+      # Left world — stop ticking
+      {:noreply, socket}
     end
   end
 
@@ -407,6 +608,15 @@ defmodule PhoenixAppWeb.DesktopLive do
     :ok
   end
 
+  # Returns true if character_id is tracked in presence for zone_id by a process
+  # other than the current socket. Used to block duplicate logins.
+  defp character_online_elsewhere?(socket, character_id, zone_id) do
+    own_key = socket.assigns[:current_presence_key]
+    own_key != character_id &&
+      Presence.list("presence:zone:#{zone_id}")
+      |> Map.has_key?(character_id)
+  end
+
   defp join_zone_presence(socket, payload) do
     zone_id = payload.zone.id
     topic = "presence:zone:#{zone_id}"
@@ -441,7 +651,7 @@ defmodule PhoenixAppWeb.DesktopLive do
         joined_at: DateTime.utc_now() |> DateTime.to_iso8601()
       })
 
-      Logger.info("desktop_live:join_zone_presence user_id=#{socket.assigns.current_user.id} character_id=#{payload.character_id} topic=#{topic}")
+      Logger.info("world_live:join_zone_presence user_id=#{socket.assigns.current_user.id} character_id=#{payload.character_id} topic=#{topic}")
 
     end
 
@@ -609,7 +819,7 @@ defmodule PhoenixAppWeb.DesktopLive do
 
         {:error, reason} ->
           Logger.warning(
-            "desktop_live:world_position_persist_failed user_id=#{user_id} character_id=#{current_character.character_id} reason=#{inspect(reason)}"
+            "world_live:world_position_persist_failed user_id=#{user_id} character_id=#{current_character.character_id} reason=#{inspect(reason)}"
           )
       end
     end)
@@ -644,6 +854,16 @@ defmodule PhoenixAppWeb.DesktopLive do
   end
 
   defp to_float(_value), do: {:error, :invalid_move}
+
+  defp parse_float(v) when is_float(v), do: v
+  defp parse_float(v) when is_integer(v), do: v * 1.0
+  defp parse_float(v) when is_binary(v) do
+    case Float.parse(v) do
+      {f, _} -> f
+      :error  -> 0.0
+    end
+  end
+  defp parse_float(_), do: 0.0
 
   defp to_scene_characters(characters) do
     Enum.map(characters, fn character ->
@@ -705,9 +925,9 @@ defmodule PhoenixAppWeb.DesktopLive do
     ~H"""
     <div class="fixed top-[30px] inset-x-0 bottom-0 z-40 overflow-hidden">
         <div
-          id="desktop-character-scene"
+          id="world-character-scene"
           class="absolute inset-0 w-full h-full"
-          phx-hook="DesktopCharacterUIScene"
+          phx-hook="WorldCharacterUIScene"
           data-ui-state={scene_state(assigns)}
           data-selected-character-id={@selected_character_id}
           data-can-login={to_string(!is_nil(@selected_character_id))}

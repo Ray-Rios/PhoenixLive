@@ -61,6 +61,12 @@ kubectl rollout restart deployment/phoenix-web -n phoenixapp
 
 kubectl scale deployment phoenix-web --replicas=0 -n phoenixapp && sleep 5 && kubectl scale deployment phoenix-web --replicas=2 -n phoenixapp
 
+
+Run Migrations
+MSYS_NO_PATHCONV=1 kubectl exec -n phoenixapp \
+  $(kubectl get pods -n phoenixapp -l app=phoenix-web -o name | head -1) \
+  -- /app/bin/phoenix_app eval "PhoenixApp.Release.migrate()"
+
 ## 🔧 Phoenix stuff 🔧 ##
 # PostgreSQL Operations Script
 ./postgres-ops.sh backup                # Backup PostgreSQL database
@@ -147,7 +153,7 @@ kubectl logs -n phoenixapp -l app=phoenix-web -f | grep -i "phx_join" --line-buf
 
 
 AI context:
-This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis. I have a GraphQL layer with an API layer trying to play nice together so I can extend this program outside this applicaiton. For Babylon.js we're using tree-shaken imports and need to make sure we're importing the correctly
+This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis. I have an API layer so I can extend this program outside this applicaiton.
 
 AI context: please do no execute migrations in the pods themselves. update the files and re-deploy the kubernetes manifest. We've been down this road before and it causes severe docker issues.
 

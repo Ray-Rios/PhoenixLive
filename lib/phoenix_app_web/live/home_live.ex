@@ -9,7 +9,7 @@ defmodule PhoenixAppWeb.HomeLive do
     if socket.assigns.current_user do
       # Check if user has a cached location (future feature)
       # For now, always redirect to desktop
-      {:ok, push_navigate(socket, to: ~p"/desktop")}
+      {:ok, push_navigate(socket, to: ~p"/world")}
     else
       # Ensure we explicitly set that user is not authenticated
       # This helps prevent race conditions with hook elements

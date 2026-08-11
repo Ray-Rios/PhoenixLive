@@ -2,7 +2,7 @@ defmodule PhoenixApp.Game do
   import Ecto.Query
 
   alias PhoenixApp.Repo
-  alias PhoenixApp.Game.{Character, Zone}
+  alias PhoenixApp.Game.{Character, Zone, Spell, CharacterSpell}
 
   @max_characters_per_user 16
   @default_zone_slug "lobby"
@@ -43,6 +43,14 @@ defmodule PhoenixApp.Game do
       |> Map.put("user_id", user_id)
       |> then(&Character.changeset(%Character{}, &1))
       |> Repo.insert()
+      |> case do
+        {:ok, character} = result ->
+          grant_starter_spells(character.id)
+          result
+
+        error ->
+          error
+      end
     end
   end
 
@@ -72,6 +80,8 @@ defmodule PhoenixApp.Game do
         {:error, :not_found}
 
       character ->
+        spells = list_character_spells(character.id)
+
         {:ok,
          %{
            user_id: character.user_id,
@@ -79,6 +89,22 @@ defmodule PhoenixApp.Game do
            name: character.name,
            character_type: character.character_type,
            model_path: character.model_path,
+           hp: character.hp,
+           max_hp: character.max_hp,
+           mp: character.mp,
+           max_mp: character.max_mp,
+           pvp_flagged: character.pvp_flagged,
+           spells: Enum.map(spells, fn s ->
+             %{
+               slug: s.slug,
+               name: s.name,
+               mp_cost: s.mp_cost,
+               base_damage: s.base_damage,
+               range: s.range,
+               recast_ms: s.recast_ms,
+               projectile_type: s.projectile_type
+             }
+           end),
            zone: %{
              id: character.last_zone_id,
              name: character.last_zone && character.last_zone.name,
@@ -261,4 +287,175 @@ defmodule PhoenixApp.Game do
         MapSet.new()
     end
   end
+
+  # ── Spell helpers ────────────────────────────────────────────────────────────
+
+  def get_spell_by_slug(slug) when is_binary(slug) do
+    Repo.get_by(Spell, slug: slug)
+  end
+
+  def list_character_spells(character_id) when is_binary(character_id) do
+    CharacterSpell
+    |> where([cs], cs.character_id == ^character_id)
+    |> preload(:spell)
+    |> Repo.all()
+    |> Enum.map(& &1.spell)
+  end
+
+  @doc """
+  Grants the starter spells to a freshly created character.
+  Called immediately after character creation.
+  """
+  def grant_starter_spells(character_id) when is_binary(character_id) do
+    case get_spell_by_slug("throw_stone") do
+      nil ->
+        :ok
+
+      spell ->
+        %CharacterSpell{}
+        |> CharacterSpell.changeset(%{
+          character_id: character_id,
+          spell_id: spell.id,
+          unlocked_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+        |> Repo.insert(on_conflict: :nothing)
+
+        :ok
+    end
+  end
+
+  # ── HP / MP helpers ──────────────────────────────────────────────────────────
+
+  def get_character_stats(character_id) when is_binary(character_id) do
+    case Repo.get(Character, character_id) do
+      nil -> {:error, :not_found}
+      ch  -> {:ok, %{hp: ch.hp, max_hp: ch.max_hp, mp: ch.mp, max_mp: ch.max_mp}}
+    end
+  end
+
+  def update_character_hp_mp(character_id, hp, mp)
+      when is_binary(character_id) and is_integer(hp) and is_integer(mp) do
+    case Repo.get(Character, character_id) do
+      nil ->
+        {:error, :not_found}
+
+      ch ->
+        ch
+        |> Ecto.Changeset.change(%{
+          hp: max(0, min(hp, ch.max_hp)),
+          mp: max(0, min(mp, ch.max_mp))
+        })
+        |> Repo.update()
+    end
+  end
+
+  def respawn_character(character_id) when is_binary(character_id) do
+    case Repo.get(Character, character_id) |> Repo.preload(:last_zone) do
+      nil ->
+        {:error, :not_found}
+
+      ch ->
+        zone = ch.last_zone
+        ch
+        |> Ecto.Changeset.change(%{
+          hp: ch.max_hp,
+          mp: ch.max_mp,
+          last_x: (zone && zone.spawn_x) || 0.0,
+          last_y: (zone && zone.spawn_y) || 0.0,
+          last_z: (zone && zone.spawn_z) || 0.0,
+          last_heading: (zone && zone.spawn_heading) || 0.0
+        })
+        |> Repo.update()
+    end
+  end
+
+  # ── Combat: Throw Stone ──────────────────────────────────────────────────────
+
+  @throw_stone_hit_chance 0.85
+
+  @doc """
+  Server-authoritative Throw Stone combat.
+
+  Returns one of:
+    {:ok, %{hit: bool, damage: 0|1, caster_mp: int, target_hp: int}}
+    {:error, atom}
+  """
+  def cast_throw_stone(caster_id, target_id, caster_pos, target_pos)
+      when is_binary(caster_id) and is_binary(target_id) do
+    with {:ok, spell}   <- fetch_spell("throw_stone"),
+         {:ok, caster}  <- fetch_character(caster_id),
+         {:ok, target}  <- fetch_character(target_id),
+         :ok            <- check_pvp(caster, target),
+         :ok            <- check_mp(caster, spell.mp_cost),
+         :ok            <- check_range(caster_pos, target_pos, spell.range) do
+
+      hit    = :rand.uniform() <= @throw_stone_hit_chance
+      damage = if hit, do: spell.base_damage, else: 0
+
+      new_caster_mp = caster.mp - spell.mp_cost
+      new_target_hp = max(0, target.hp - damage)
+
+      {:ok, _} = update_character_hp_mp(caster_id, caster.hp, new_caster_mp)
+      {:ok, _} = update_character_hp_mp(target_id, new_target_hp, target.mp)
+
+      died = new_target_hp == 0 and target.hp > 0
+
+      # Respawn DB update happens here; position correction is pushed by the
+      # target's own LiveView process when it receives :zone_spell_result.
+      spawn_coords =
+        if died do
+          case respawn_character(target_id) do
+            {:ok, ch} -> %{x: ch.last_x, y: ch.last_y, z: ch.last_z, heading: ch.last_heading}
+            _         -> nil
+          end
+        end
+
+      {:ok,
+       %{
+         hit: hit,
+         damage: damage,
+         caster_mp: new_caster_mp,
+         caster_max_mp: caster.max_mp,
+         target_hp: new_target_hp,
+         target_max_hp: target.max_hp,
+         target_died: died,
+         spawn_coords: spawn_coords,
+         target_id: target_id,
+         caster_id: caster_id
+       }}
+    end
+  end
+
+  defp fetch_spell(slug) do
+    case get_spell_by_slug(slug) do
+      nil   -> {:error, :spell_not_found}
+      spell -> {:ok, spell}
+    end
+  end
+
+  defp fetch_character(id) do
+    case Repo.get(Character, id) do
+      nil -> {:error, :character_not_found}
+      ch  -> {:ok, ch}
+    end
+  end
+
+  defp check_pvp(caster, target) do
+    if caster.pvp_flagged and target.pvp_flagged do
+      :ok
+    else
+      {:error, :pvp_not_flagged}
+    end
+  end
+
+  defp check_mp(character, cost) do
+    if character.mp >= cost, do: :ok, else: {:error, :insufficient_mp}
+  end
+
+  defp check_range(%{x: cx, z: cz}, %{x: tx, z: tz}, max_range) do
+    dist = :math.sqrt(:math.pow(tx - cx, 2) + :math.pow(tz - cz, 2))
+    if dist <= max_range, do: :ok, else: {:error, :out_of_range}
+  end
+
+  defp check_range(_, _, _), do: {:error, :invalid_position}
 end

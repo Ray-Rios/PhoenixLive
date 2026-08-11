@@ -15,6 +15,12 @@ defmodule PhoenixApp.Game.Character do
     field :last_z, :float, default: 0.0
     field :last_heading, :float, default: 0.0
 
+    field :hp,          :integer, default: 10
+    field :max_hp,      :integer, default: 10
+    field :mp,          :integer, default: 10
+    field :max_mp,      :integer, default: 10
+    field :pvp_flagged, :boolean, default: false
+
     belongs_to :user, PhoenixApp.Accounts.User
     belongs_to :last_zone, PhoenixApp.Game.Zone
 
@@ -33,7 +39,12 @@ defmodule PhoenixApp.Game.Character do
       :last_z,
       :last_heading,
       :last_zone_id,
-      :user_id
+      :user_id,
+      :hp,
+      :max_hp,
+      :mp,
+      :max_mp,
+      :pvp_flagged
     ])
     |> validate_required([:name, :character_type, :model_path, :approved_at, :last_zone_id, :user_id])
     |> validate_length(:name, min: 2)

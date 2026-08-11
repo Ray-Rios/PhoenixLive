@@ -79,7 +79,7 @@ defmodule PhoenixAppWeb.Router do
     live "/checkout", CheckoutLive, :index
     live "/forum", ForumLive, :index
     live "/forum/:channel_id", ForumLive, :channel
-    live "/desktop", DesktopLive, :index
+    live "/world", WorldLive, :index
 
     # Profile routes (with auth check in mount)
     live "/profile", ProfileLive, :index

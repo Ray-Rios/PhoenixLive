@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CharacterModelManager } from '../characters/model-manager';
 import CharacterController from '../controls/character-controller';
+import { SkySystem } from '../sky-system';
 
 type CharacterCard = {
   id: string;
@@ -25,7 +26,7 @@ type PanelData = {
   characterId?: string;
 };
 
-export const DesktopCharacterUIScene = {
+export const WorldCharacterUIScene = {
   scene: null as THREE.Scene | null,
   camera: null as THREE.PerspectiveCamera | null,
   renderer: null as THREE.WebGLRenderer | null,
@@ -55,6 +56,34 @@ export const DesktopCharacterUIScene = {
   chatOutsideClickHandler: null as ((event: MouseEvent) => void) | null,
   nameplateEls: new Map<string, HTMLDivElement>(),
   creatorOverlay: null as HTMLDivElement | null,
+  // sky & combat state
+  skySystem: null as SkySystem | null,
+  ambientLight: null as THREE.AmbientLight | null,
+  targetId: null as string | null,
+  targetRingMesh: null as THREE.Mesh | null,
+  // death state
+  isDead: false,
+  deathOverlayEl: null as HTMLDivElement | null,
+  deathCountdownInterval: null as ReturnType<typeof setInterval> | null,
+  deathSpawnCoords: null as { x: number; y: number; z: number; heading: number } | null,
+  activeProjectiles: [] as Array<{
+    mesh: THREE.Mesh;
+    startPos: THREE.Vector3;
+    endPos: THREE.Vector3;
+    progress: number; // 0→1
+    duration: number; // ms
+    startMs: number;
+    arcOffset: number; // random lateral offset for arc
+  }>,
+  floatingTexts: [] as Array<{
+    el: HTMLDivElement;
+    x: number; y: number; z: number;
+    vy: number;
+    alpha: number;
+    startMs: number;
+    duration: number;
+  }>,
+  spellCooldowns: {} as Record<string, number>,
 
   mounted(this: any) {
     if (!this.el) return;
@@ -189,6 +218,7 @@ export const DesktopCharacterUIScene = {
       }
       this.syncSceneMode();
       this.flashLoginPanel();
+      this.updateHUD();
     });
 
     this.handleEvent('world_position_corrected', (payload: any) => {
@@ -214,6 +244,161 @@ export const DesktopCharacterUIScene = {
       if (!payload || !payload.message) return;
       if (payload.character_id && payload.character_id === this.state?.currentPlayer?.character_id) return;
       this.appendChatMessage(payload.character_name || 'Player', payload.message);
+    });
+
+    this.handleEvent('zone_spell_result', (result: any) => {
+      if (!result) return;
+      const myId = this.state?.currentPlayer?.character_id;
+
+      // Update our own MP if we were the caster
+      if (result.caster_id === myId && this.state?.currentPlayer) {
+        this.state.currentPlayer.mp = result.caster_mp;
+        this.state.currentPlayer.max_mp = result.caster_max_mp;
+        this.updateHUD();
+      }
+
+      // Update target HP in local state (for our own char AND in onlineCharacters for observers)
+      if (result.target_id === myId && this.state?.currentPlayer) {
+        // Don't update HUD while dead — we show 0 HP until respawn
+        if (!this.isDead) {
+          this.state.currentPlayer.hp = result.target_hp;
+          this.state.currentPlayer.max_hp = result.target_max_hp;
+          this.updateHUD();
+        }
+        // character_died event handles the death screen
+      }
+
+      // Always update the target's HP in onlineCharacters so the target frame reflects it
+      if (this.state?.onlineCharacters) {
+        const idx = this.state.onlineCharacters.findIndex((c: any) => c.character_id === result.target_id);
+        if (idx >= 0) {
+          this.state.onlineCharacters[idx] = {
+            ...this.state.onlineCharacters[idx],
+            hp: result.target_hp,
+            max_hp: result.target_max_hp
+          };
+        }
+      }
+      // Refresh the target frame if the damaged character is our current target
+      if (result.target_id === this.targetId) {
+        this.setTarget(this.targetId);
+      }
+
+      // Play death animation on a remote character that just died
+      if (result.target_died && result.target_id !== myId) {
+        this.characterManager?.playCharacterAnimation(result.target_id, 'death', false);
+      }
+
+      // Launch projectile if WE were the caster
+      if (result.caster_id === myId) {
+        const casterChar = myId ? this.characterManager?.getAllCharacters().get(myId) : null;
+        const targetChar = result.target_id ? this.characterManager?.getAllCharacters().get(result.target_id) : null;
+        if (casterChar && targetChar) {
+          this.launchProjectile(
+            casterChar.mesh.position.clone(),
+            targetChar.mesh.position.clone(),
+            result.hit,
+            result.damage,
+            result.target_id
+          );
+        }
+      }
+
+      // Also show floating text for everyone who sees the target
+      if (result.hit && result.damage > 0) {
+        const targetChar = result.target_id ? this.characterManager?.getAllCharacters().get(result.target_id) : null;
+        if (targetChar) {
+          this.showFloatingDamage(targetChar.mesh.position.clone(), `-${result.damage}`);
+        }
+      }
+    });
+
+    this.handleEvent('character_died', (payload: any) => {
+      if (!payload) return;
+      this.deathSpawnCoords = payload.spawn_coords || { x: 0, y: 0, z: 0, heading: 0 };
+      console.log('[Death] spawn_coords received:', this.deathSpawnCoords);
+      // Update state HP to 0 for HUD display
+      if (this.state?.currentPlayer) {
+        this.state.currentPlayer.hp = 0;
+        this.updateHUD();
+      }
+      this.enterDeathState(payload.respawn_in_ms ?? 30000);
+    });
+
+    this.handleEvent('character_respawned', (payload: any) => {
+      if (!payload) return;
+      // Spawn coords come from the server payload directly (most reliable source)
+      const coords = payload.spawn_coords || this.deathSpawnCoords || { x: 0, y: 0, z: 0, heading: 0 };
+      console.log('[Respawn] teleporting to', coords);
+
+      this.exitDeathState();
+
+      if (this.controller) {
+        this.controller.teleportTo(
+          coords.x ?? 0,
+          coords.y ?? 0,
+          coords.z ?? 0,
+          coords.heading ?? 0
+        );
+      }
+      // Keep characterManager's internal position in sync too
+      const myId = this.state?.currentPlayer?.character_id;
+      if (myId && this.characterManager) {
+        this.characterManager.updateCharacterPosition(
+          myId,
+          { x: coords.x ?? 0, y: coords.y ?? 0, z: coords.z ?? 0 },
+          { x: 0, y: coords.heading ?? 0, z: 0 }
+        );
+      }
+      // Restore HP/MP
+      if (this.state?.currentPlayer) {
+        this.state.currentPlayer.hp = payload.hp;
+        this.state.currentPlayer.max_hp = payload.max_hp;
+        this.state.currentPlayer.mp = payload.mp;
+        this.state.currentPlayer.max_mp = payload.max_mp;
+        this.updateHUD();
+      }
+      this.deathSpawnCoords = null;
+      if (myId) this.characterManager?.playCharacterAnimation(myId, 'idle', true);
+    });
+
+    this.handleEvent('spell_error', (payload: any) => {
+      const reason = payload?.reason || 'unknown';
+      const msgs: Record<string, string> = {
+        insufficient_mp: 'Not enough MP!',
+        out_of_range: 'Target is out of range!',
+        pvp_not_flagged: 'Both you and your target must have PvP enabled.',
+        character_not_found: 'Invalid target.'
+      };
+      this.appendChatMessage('System', msgs[reason] || `Spell failed: ${reason}`);
+    });
+
+    this.handleEvent('pvp_flag_changed', (payload: any) => {
+      if (this.state?.currentPlayer) {
+        this.state.currentPlayer.pvp_flagged = payload.pvp_flagged;
+      }
+      this.updateHUD();
+    });
+
+    this.handleEvent('world_login_error', (payload: any) => {
+      const msg = payload?.message || 'Login failed. Please try again.';
+      // Show error in chat log if available, otherwise alert
+      if (this.chatPanel) {
+        this.appendChatMessage('System', `⛔ ${msg}`);
+      } else {
+        alert(msg);
+      }
+    });
+
+    this.handleEvent('character_stats_update', (payload: any) => {
+      if (!payload || !this.state?.currentPlayer) return;
+      // Don't update HUD stats while dead — keep showing 0 HP until respawn
+      if (this.isDead) return;
+      this.state.currentPlayer.hp = payload.hp;
+      this.state.currentPlayer.max_hp = payload.max_hp;
+      this.state.currentPlayer.mp = payload.mp;
+      this.state.currentPlayer.max_mp = payload.max_mp;
+      this.updateHUD();
     });
 
     this.animate();
@@ -273,6 +458,9 @@ export const DesktopCharacterUIScene = {
     if (!this.scene) return;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+    this.ambientLight = ambient;
+    // Key and rim lights stay fixed for the character selection screen;
+    // in world mode the SkySystem overrides the ambient and adds sun/moon.
     const key = new THREE.DirectionalLight(0x67e8f9, 0.8);
     key.position.set(6, 8, 10);
 
@@ -415,6 +603,11 @@ export const DesktopCharacterUIScene = {
     }
 
     this.worldInitialized = true;
+
+    // Start day/night sky system
+    if (!this.skySystem && this.ambientLight) {
+      this.skySystem = new SkySystem(this.scene, this.ambientLight);
+    }
 
     // Fallback heartbeat so position keeps sending even when tab is backgrounded
     // (requestAnimationFrame throttles to ~1fps in background tabs)
@@ -614,6 +807,46 @@ export const DesktopCharacterUIScene = {
     this.worldInitialized = false;
     this.remoteSyncInProgress = false;
     this.remoteSyncQueued = false;
+    this.targetId = null;
+
+    if (this.skySystem) {
+      this.skySystem.dispose();
+      this.skySystem = null;
+    }
+
+    if (this.targetRingMesh) {
+      this.scene?.remove(this.targetRingMesh);
+      this.targetRingMesh.geometry.dispose();
+      (this.targetRingMesh.material as THREE.Material).dispose();
+      this.targetRingMesh = null;
+    }
+
+    // Clear any in-flight projectiles
+    for (const proj of this.activeProjectiles) {
+      this.scene?.remove(proj.mesh);
+      proj.mesh.geometry.dispose();
+      (proj.mesh.material as THREE.Material).dispose();
+    }
+    this.activeProjectiles = [];
+
+    // Clear floating damage texts
+    for (const ft of this.floatingTexts) {
+      ft.el.parentElement?.removeChild(ft.el);
+    }
+    this.floatingTexts = [];
+    this.spellCooldowns = {};
+
+    // Clean up death state
+    this.isDead = false;
+    this.deathSpawnCoords = null;
+    if (this.deathCountdownInterval) {
+      clearInterval(this.deathCountdownInterval);
+      this.deathCountdownInterval = null;
+    }
+    if (this.deathOverlayEl) {
+      this.deathOverlayEl.parentElement?.removeChild(this.deathOverlayEl);
+      this.deathOverlayEl = null;
+    }
 
     if (this.characterManager) {
       this.characterManager.dispose();
@@ -635,8 +868,86 @@ export const DesktopCharacterUIScene = {
     const layer = document.createElement('div');
     layer.className = 'absolute inset-0 pointer-events-none';
 
+    // ── HP/MP HUD (top-left) ────────────────────────────────────────────────
+    const hud = document.createElement('div');
+    hud.className = 'absolute top-3 left-3 flex flex-col gap-1 pointer-events-auto select-none';
+    hud.setAttribute('data-hud', 'true');
+
+    const hpRow = document.createElement('div');
+    hpRow.className = 'flex items-center gap-2';
+    const hpLabel = document.createElement('span');
+    hpLabel.className = 'text-[11px] text-red-400 w-6 font-bold';
+    hpLabel.textContent = 'HP';
+    const hpBarWrap = document.createElement('div');
+    hpBarWrap.className = 'relative w-32 h-3 bg-black/60 rounded overflow-hidden border border-red-900/60';
+    const hpBar = document.createElement('div');
+    hpBar.className = 'absolute inset-y-0 left-0 bg-red-600 transition-all duration-300';
+    hpBar.style.width = '100%';
+    hpBar.setAttribute('data-hp-bar', 'true');
+    const hpText = document.createElement('span');
+    hpText.className = 'absolute inset-0 flex items-center justify-center text-[9px] text-white font-mono';
+    hpText.setAttribute('data-hp-text', 'true');
+    hpText.textContent = '10/10';
+    hpBarWrap.appendChild(hpBar);
+    hpBarWrap.appendChild(hpText);
+    hpRow.appendChild(hpLabel);
+    hpRow.appendChild(hpBarWrap);
+
+    const mpRow = document.createElement('div');
+    mpRow.className = 'flex items-center gap-2';
+    const mpLabel = document.createElement('span');
+    mpLabel.className = 'text-[11px] text-blue-400 w-6 font-bold';
+    mpLabel.textContent = 'MP';
+    const mpBarWrap = document.createElement('div');
+    mpBarWrap.className = 'relative w-32 h-3 bg-black/60 rounded overflow-hidden border border-blue-900/60';
+    const mpBar = document.createElement('div');
+    mpBar.className = 'absolute inset-y-0 left-0 bg-blue-500 transition-all duration-300';
+    mpBar.style.width = '100%';
+    mpBar.setAttribute('data-mp-bar', 'true');
+    const mpText = document.createElement('span');
+    mpText.className = 'absolute inset-0 flex items-center justify-center text-[9px] text-white font-mono';
+    mpText.setAttribute('data-mp-text', 'true');
+    mpText.textContent = '10/10';
+    mpBarWrap.appendChild(mpBar);
+    mpBarWrap.appendChild(mpText);
+    mpRow.appendChild(mpLabel);
+    mpRow.appendChild(mpBarWrap);
+
+    // PvP flag toggle
+    const pvpBtn = document.createElement('button');
+    pvpBtn.className = 'mt-1 text-[10px] rounded px-2 py-0.5 bg-slate-700/80 border border-slate-600 text-slate-300 hover:bg-slate-600 cursor-pointer pointer-events-auto';
+    pvpBtn.setAttribute('data-pvp-btn', 'true');
+    pvpBtn.textContent = 'PvP: OFF';
+    pvpBtn.addEventListener('click', () => {
+      (this.pushEvent('toggle_pvp', {}) as any)?.catch?.(() => {});
+    });
+
+    hud.appendChild(hpRow);
+    hud.appendChild(mpRow);
+    hud.appendChild(pvpBtn);
+    layer.appendChild(hud);
+
+    // ── Target Frame (top-center) ───────────────────────────────────────────
+    const targetFrame = document.createElement('div');
+    targetFrame.className = 'absolute top-3 left-1/2 -translate-x-1/2 hidden flex-col gap-1 pointer-events-none select-none min-w-[140px]';
+    targetFrame.setAttribute('data-target-frame', 'true');
+    const targetName = document.createElement('div');
+    targetName.className = 'text-[11px] text-center text-yellow-300 font-bold';
+    targetName.setAttribute('data-target-name', 'true');
+    const targetHpWrap = document.createElement('div');
+    targetHpWrap.className = 'relative w-full h-3 bg-black/60 rounded overflow-hidden border border-red-900/60';
+    const targetHpBar = document.createElement('div');
+    targetHpBar.className = 'absolute inset-y-0 left-0 bg-red-500 transition-all duration-300';
+    targetHpBar.style.width = '100%';
+    targetHpBar.setAttribute('data-target-hp-bar', 'true');
+    targetHpWrap.appendChild(targetHpBar);
+    targetFrame.appendChild(targetName);
+    targetFrame.appendChild(targetHpWrap);
+    layer.appendChild(targetFrame);
+
+    // ── Chat panel (bottom-left) ─────────────────────────────────────────────
     const chatPanel = document.createElement('div');
-    chatPanel.className = 'absolute left-3 bottom-3 w-[340px] max-w-[92%] rounded border border-cyan-900/60 bg-black/70 text-cyan-100 p-2 pointer-events-auto';
+    chatPanel.className = 'absolute left-3 bottom-16 w-[340px] max-w-[92%] rounded border border-cyan-900/60 bg-black/70 text-cyan-100 p-2 pointer-events-auto';
 
     const log = document.createElement('div');
     log.className = 'text-xs h-24 overflow-y-auto space-y-1 pr-1';
@@ -666,10 +977,10 @@ export const DesktopCharacterUIScene = {
     input.placeholder = 'Proximity chat (nearby players only)';
     input.className = 'flex-1 rounded bg-slate-900/80 border border-cyan-900/60 px-2 py-1 text-xs text-cyan-50 outline-none';
 
-    const button = document.createElement('button');
-    button.type = 'submit';
-    button.className = 'rounded bg-cyan-700 hover:bg-cyan-600 px-2 py-1 text-xs text-white';
-    button.textContent = 'Send';
+    const chatBtn = document.createElement('button');
+    chatBtn.type = 'submit';
+    chatBtn.className = 'rounded bg-cyan-700 hover:bg-cyan-600 px-2 py-1 text-xs text-white';
+    chatBtn.textContent = 'Send';
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -681,18 +992,61 @@ export const DesktopCharacterUIScene = {
     });
 
     form.appendChild(input);
-    form.appendChild(button);
+    form.appendChild(chatBtn);
     worldControls.appendChild(worldTitle);
     worldControls.appendChild(logoutButton);
     chatPanel.appendChild(worldControls);
     chatPanel.appendChild(log);
     chatPanel.appendChild(form);
     layer.appendChild(chatPanel);
+
+    // ── Spell bar (bottom-center) ─────────────────────────────────────────────
+    const spellBar = document.createElement('div');
+    spellBar.className = 'absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-auto select-none';
+    spellBar.setAttribute('data-spell-bar', 'true');
+
+    // Throw Stone slot (slot 1)
+    const throwStoneSlot = document.createElement('div');
+    throwStoneSlot.className = 'relative w-14 h-14 rounded border-2 border-stone-500 bg-stone-900/80 flex flex-col items-center justify-center cursor-pointer hover:border-stone-300 transition-colors';
+    throwStoneSlot.setAttribute('data-spell-slot', 'throw_stone');
+    throwStoneSlot.title = 'Throw Stone (1)';
+
+    const throwStoneIcon = document.createElement('div');
+    throwStoneIcon.className = 'text-xl';
+    throwStoneIcon.textContent = '🪨';
+
+    const throwStoneLabel = document.createElement('div');
+    throwStoneLabel.className = 'text-[9px] text-stone-300 mt-0.5';
+    throwStoneLabel.textContent = '1 MP';
+
+    const throwStoneKey = document.createElement('div');
+    throwStoneKey.className = 'absolute top-0.5 left-1 text-[8px] text-stone-500';
+    throwStoneKey.textContent = '1';
+
+    const throwStoneCd = document.createElement('div');
+    throwStoneCd.className = 'absolute inset-0 rounded bg-black/70 flex items-center justify-center text-white text-xs hidden';
+    throwStoneCd.setAttribute('data-cd-overlay', 'throw_stone');
+
+    throwStoneSlot.appendChild(throwStoneIcon);
+    throwStoneSlot.appendChild(throwStoneLabel);
+    throwStoneSlot.appendChild(throwStoneKey);
+    throwStoneSlot.appendChild(throwStoneCd);
+
+    throwStoneSlot.addEventListener('click', () => {
+      this.castSpell('throw_stone');
+    });
+
+    spellBar.appendChild(throwStoneSlot);
+    layer.appendChild(spellBar);
+
     this.el.appendChild(layer);
 
     this.nameplateLayer = layer;
     this.chatPanel = chatPanel;
     this.chatInput = input;
+    this.hudEl = hud;
+    this.targetFrameEl = targetFrame;
+    this.spellBarEl = spellBar;
 
     this.chatOutsideClickHandler = (event: MouseEvent) => {
       const target = event.target as Node | null;
@@ -704,6 +1058,37 @@ export const DesktopCharacterUIScene = {
     };
 
     this.renderer?.domElement.addEventListener('pointerdown', this.chatOutsideClickHandler, true);
+
+    // Sync initial stats from currentPlayer payload
+    this.updateHUD();
+  },
+
+  updateHUD(this: any) {
+    const cp = this.state?.currentPlayer;
+    if (!cp || !this.hudEl) return;
+
+    const hp = cp.hp ?? 10;
+    const maxHp = cp.max_hp ?? 10;
+    const mp = cp.mp ?? 10;
+    const maxMp = cp.max_mp ?? 10;
+    const pvp = cp.pvp_flagged ?? false;
+
+    const hpBar = this.hudEl.querySelector('[data-hp-bar]') as HTMLDivElement | null;
+    const hpText = this.hudEl.querySelector('[data-hp-text]') as HTMLSpanElement | null;
+    const mpBar = this.hudEl.querySelector('[data-mp-bar]') as HTMLDivElement | null;
+    const mpText = this.hudEl.querySelector('[data-mp-text]') as HTMLSpanElement | null;
+    const pvpBtn = this.hudEl.querySelector('[data-pvp-btn]') as HTMLButtonElement | null;
+
+    if (hpBar) hpBar.style.width = `${maxHp > 0 ? (hp / maxHp) * 100 : 0}%`;
+    if (hpText) hpText.textContent = `${hp}/${maxHp}`;
+    if (mpBar) mpBar.style.width = `${maxMp > 0 ? (mp / maxMp) * 100 : 0}%`;
+    if (mpText) mpText.textContent = `${mp}/${maxMp}`;
+    if (pvpBtn) {
+      pvpBtn.textContent = pvp ? 'PvP: ON' : 'PvP: OFF';
+      pvpBtn.className = pvp
+        ? 'mt-1 text-[10px] rounded px-2 py-0.5 bg-red-700/80 border border-red-500 text-red-100 hover:bg-red-600 cursor-pointer pointer-events-auto'
+        : 'mt-1 text-[10px] rounded px-2 py-0.5 bg-slate-700/80 border border-slate-600 text-slate-300 hover:bg-slate-600 cursor-pointer pointer-events-auto';
+    }
   },
 
   removeWorldOverlayUI(this: any) {
@@ -713,10 +1098,108 @@ export const DesktopCharacterUIScene = {
     this.nameplateLayer = null;
     this.chatPanel = null;
     this.chatInput = null;
+    this.hudEl = null;
+    this.targetFrameEl = null;
+    this.spellBarEl = null;
 
     if (this.chatOutsideClickHandler) {
       this.renderer?.domElement.removeEventListener('pointerdown', this.chatOutsideClickHandler, true);
       this.chatOutsideClickHandler = null;
+    }
+  },
+
+  // ── Death / Respawn ────────────────────────────────────────────────────────
+
+  enterDeathState(this: any, respawnInMs: number) {
+    this.isDead = true;
+
+    // Play death animation on local character
+    const myId = this.state?.currentPlayer?.character_id;
+    if (myId) this.characterManager?.playCharacterAnimation(myId, 'death', false);
+
+    // Build overlay
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-death-overlay', 'true');
+    overlay.style.cssText = [
+      'position:absolute', 'inset:0', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center',
+      'background:rgba(0,0,0,0)', 'transition:background 1.5s ease',
+      'pointer-events:auto', 'z-index:100'
+    ].join(';');
+
+    const title = document.createElement('div');
+    title.textContent = 'You Died';
+    title.style.cssText = [
+      'color:#c00', 'font-size:4rem', 'font-weight:900',
+      'text-shadow:0 0 24px #f00,0 0 8px #800',
+      'letter-spacing:0.15em', 'opacity:0', 'transition:opacity 1.5s ease',
+      'margin-bottom:1.5rem', 'font-family:serif'
+    ].join(';');
+
+    const countdownEl = document.createElement('div');
+    countdownEl.setAttribute('data-death-countdown', 'true');
+    countdownEl.style.cssText = [
+      'color:#ddd', 'font-size:1rem', 'margin-bottom:1.5rem',
+      'text-shadow:0 0 6px #000'
+    ].join(';');
+
+    const respawnBtn = document.createElement('button');
+    respawnBtn.textContent = 'Respawn Now';
+    respawnBtn.style.cssText = [
+      'background:#7f1d1d', 'color:#fff', 'border:1px solid #ef4444',
+      'padding:0.5rem 1.5rem', 'border-radius:0.375rem',
+      'font-size:0.875rem', 'cursor:pointer',
+      'transition:background 0.2s'
+    ].join(';');
+    respawnBtn.onmouseenter = () => { respawnBtn.style.background = '#991b1b'; };
+    respawnBtn.onmouseleave = () => { respawnBtn.style.background = '#7f1d1d'; };
+    respawnBtn.onclick = () => { this.pushEvent('respawn_now', {}); };
+
+    overlay.appendChild(title);
+    overlay.appendChild(countdownEl);
+    overlay.appendChild(respawnBtn);
+    this.el.appendChild(overlay);
+    this.deathOverlayEl = overlay;
+
+    // Fade in the darkening
+    requestAnimationFrame(() => {
+      overlay.style.background = 'rgba(0,0,0,0.72)';
+      title.style.opacity = '1';
+    });
+
+    // Countdown ticker
+    let remaining = Math.ceil(respawnInMs / 1000);
+    const updateCountdown = () => {
+      countdownEl.textContent = `Respawning at zone entrance in: ${remaining}s`;
+    };
+    updateCountdown();
+    this.deathCountdownInterval = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(this.deathCountdownInterval);
+        this.deathCountdownInterval = null;
+        countdownEl.textContent = 'Respawning…';
+      } else {
+        updateCountdown();
+      }
+    }, 1000);
+  },
+
+  exitDeathState(this: any) {
+    this.isDead = false;
+
+    if (this.deathCountdownInterval) {
+      clearInterval(this.deathCountdownInterval);
+      this.deathCountdownInterval = null;
+    }
+
+    if (this.deathOverlayEl) {
+      // Fade out then remove
+      this.deathOverlayEl.style.transition = 'opacity 0.8s ease';
+      this.deathOverlayEl.style.opacity = '0';
+      const el = this.deathOverlayEl;
+      setTimeout(() => el.parentElement?.removeChild(el), 850);
+      this.deathOverlayEl = null;
     }
   },
 
@@ -755,6 +1238,19 @@ export const DesktopCharacterUIScene = {
       if (movementKeys.includes(event.code)) {
         event.stopImmediatePropagation();
       }
+      return;
+    }
+
+    // Tab: cycle targets
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      this.tabCycleTarget();
+      return;
+    }
+
+    // 1: cast Throw Stone
+    if (event.key === '1') {
+      this.castSpell('throw_stone');
       return;
     }
 
@@ -1046,45 +1542,7 @@ export const DesktopCharacterUIScene = {
     this.camera.lookAt(0, 0, 0);
   },
 
-  handleClick(this: any, event: MouseEvent) {
-    if (!this.renderer || !this.camera || !this.raycaster || !this.pointer) return;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-
-    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.panelMeshes, false);
-
-    if (intersects.length === 0) return;
-
-    const first = intersects[0].object as THREE.Mesh;
-    const { panelId, characterId } = first.userData || {};
-
-    if (characterId) {
-      (this.pushEvent('select_character', { character_id: characterId }) as any)?.catch?.(() => {});
-      return;
-    }
-
-    if (panelId === 'login' && this.state?.canLogin) {
-      (this.pushEvent('login_character', {}) as any)?.catch?.(() => {});
-      return;
-    }
-
-    if (panelId === 'delete' && this.state?.selectedCharacterId) {
-      const character = this.state.characters.find((c: CharacterCard) => c.id === this.state?.selectedCharacterId);
-      const name = character?.name || 'this character';
-      const confirmed = window.confirm(`Delete ${name}? This cannot be undone.`);
-      if (confirmed) {
-        (this.pushEvent('delete_character', { character_id: this.state.selectedCharacterId }) as any)?.catch?.(() => {});
-      }
-      return;
-    }
-
-    if (panelId === 'creator') {
-      this.showCharacterCreator();
-    }
-  },
+  // handleClick is now defined later and handles both world targeting + selection mode.
 
   showCharacterCreator(this: any) {
     if (this.creatorOverlay) return;
@@ -1206,8 +1664,16 @@ export const DesktopCharacterUIScene = {
       this.ambientStars.rotation.y += 0.0008;
     }
 
+    // Day/night sky tick (only in world mode, SkySystem controls ambient+sky)
+    if (this.worldInitialized && this.skySystem) {
+      this.skySystem.tick();
+    }
+
     if (this.state?.uiState === 'world') {
-      this.controller?.update(deltaSeconds);
+      // Freeze controller while dead — character cannot move
+      if (!this.isDead) {
+        this.controller?.update(deltaSeconds);
+      }
 
       const currentId = this.state?.currentPlayer?.character_id;
       const localCharacter = currentId ? this.characterManager?.getAllCharacters().get(currentId) : null;
@@ -1227,9 +1693,353 @@ export const DesktopCharacterUIScene = {
       this.syncCharacterAnimations();
       this.characterManager?.updateAnimations(deltaSeconds);
       this.updateNameplates();
+      this.tickTargetRing();
+      this.tickProjectiles();
+      this.tickFloatingTexts();
     }
 
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(() => this.animate());
-  }
+  },
+
+  // ── Targeting ───────────────────────────────────────────────────────────────
+
+  setTarget(this: any, characterId: string | null) {
+    this.targetId = characterId;
+    const frame = this.targetFrameEl as HTMLDivElement | null;
+    if (!frame) return;
+
+    if (!characterId) {
+      frame.classList.add('hidden');
+      frame.classList.remove('flex');
+      return;
+    }
+
+    const targetState = this.state?.onlineCharacters?.find((c: any) => c.character_id === characterId);
+    const nameEl = frame.querySelector('[data-target-name]') as HTMLDivElement | null;
+    if (nameEl) nameEl.textContent = targetState?.character_name || characterId;
+
+    const hp = targetState?.hp ?? null;
+    const maxHp = targetState?.max_hp ?? null;
+    const hpBar = frame.querySelector('[data-target-hp-bar]') as HTMLDivElement | null;
+    if (hpBar && hp !== null && maxHp !== null && maxHp > 0) {
+      hpBar.style.width = `${(hp / maxHp) * 100}%`;
+    } else if (hpBar) {
+      hpBar.style.width = '100%';
+    }
+
+    frame.classList.remove('hidden');
+    frame.classList.add('flex');
+  },
+
+  handleClick(this: any, event: MouseEvent) {
+    if (!this.state?.uiState || this.state.uiState !== 'world') {
+      this._handleSelectionClick(event);
+      return;
+    }
+
+    // In world mode: ray-cast for characters first (targeting)
+    if (!this.camera || !this.renderer) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!this.pointer) return;
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster!.setFromCamera(this.pointer, this.camera);
+
+    const allMeshes: THREE.Object3D[] = [];
+    this.characterManager?.getAllCharacters().forEach((ch: any, id: string) => {
+      if (id !== this.state?.currentPlayer?.character_id) {
+        allMeshes.push(ch.mesh);
+      }
+    });
+
+    const hits = this.raycaster!.intersectObjects(allMeshes, true);
+    if (hits.length > 0) {
+      let obj: THREE.Object3D | null = hits[0].object;
+      while (obj) {
+        const foundId = this.findCharacterIdForMesh(obj);
+        if (foundId) {
+          this.setTarget(foundId);
+          return;
+        }
+        obj = obj.parent;
+      }
+    }
+
+    // Clicked empty space — deselect
+    this.setTarget(null);
+  },
+
+  _handleSelectionClick(this: any, event: MouseEvent) {
+    // Existing panel click logic (previously in handleClick for selection mode)
+    if (!this.camera || !this.renderer) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!this.pointer) return;
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster!.setFromCamera(this.pointer, this.camera);
+
+    const intersects = this.raycaster!.intersectObjects(this.panelMeshes, false);
+    if (intersects.length === 0) return;
+
+    const first = intersects[0].object as THREE.Mesh;
+    const { panelId, characterId } = first.userData || {};
+
+    if (characterId) {
+      (this.pushEvent('select_character', { character_id: characterId }) as any)?.catch?.(() => {});
+      return;
+    }
+
+    if (panelId === 'login' && this.state?.canLogin) {
+      (this.pushEvent('login_character', {}) as any)?.catch?.(() => {});
+      return;
+    }
+
+    if (panelId === 'delete' && this.state?.selectedCharacterId) {
+      const character = this.state.characters.find((c: CharacterCard) => c.id === this.state?.selectedCharacterId);
+      const name = character?.name || 'this character';
+      const confirmed = window.confirm(`Delete ${name}? This cannot be undone.`);
+      if (confirmed) {
+        (this.pushEvent('delete_character', { character_id: this.state.selectedCharacterId }) as any)?.catch?.(() => {});
+      }
+      return;
+    }
+
+    if (panelId === 'creator') {
+      this.showCharacterCreator();
+    }
+  },
+
+  findCharacterIdForMesh(this: any, mesh: THREE.Object3D): string | null {
+    let found: string | null = null;
+    this.characterManager?.getAllCharacters().forEach((ch: any, id: string) => {
+      if (!found && (ch.mesh === mesh || ch.mesh.children.includes(mesh as THREE.Mesh))) {
+        found = id;
+      }
+    });
+    return found;
+  },
+
+  tabCycleTarget(this: any) {
+    const others = (this.state?.onlineCharacters || [])
+      .filter((c: any) => c.character_id !== this.state?.currentPlayer?.character_id);
+    if (others.length === 0) { this.setTarget(null); return; }
+
+    const currentIdx = others.findIndex((c: any) => c.character_id === this.targetId);
+    const nextIdx = (currentIdx + 1) % others.length;
+    this.setTarget(others[nextIdx].character_id);
+  },
+
+  tickTargetRing(this: any) {
+    if (!this.targetId) {
+      if (this.targetRingMesh) this.targetRingMesh.visible = false;
+      return;
+    }
+
+    const targetChar = this.characterManager?.getAllCharacters().get(this.targetId);
+    if (!targetChar) {
+      if (this.targetRingMesh) this.targetRingMesh.visible = false;
+      return;
+    }
+
+    // Create ring on first use
+    if (!this.targetRingMesh) {
+      const geo = new THREE.TorusGeometry(0.55, 0.06, 8, 32);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.85 });
+      this.targetRingMesh = new THREE.Mesh(geo, mat);
+      this.targetRingMesh.rotation.x = Math.PI / 2;
+      this.scene?.add(this.targetRingMesh);
+    }
+
+    const pos = targetChar.mesh.position;
+    this.targetRingMesh.position.set(pos.x, 0.02, pos.z);
+    this.targetRingMesh.visible = true;
+    // Pulse alpha
+    const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 300);
+    (this.targetRingMesh.material as THREE.MeshBasicMaterial).opacity = pulse;
+  },
+
+  // ── Spell casting ──────────────────────────────────────────────────────────
+
+  castSpell(this: any, spellSlug: string) {
+    if (this.isDead) return;
+    const now = Date.now();
+    const lastCast = this.spellCooldowns[spellSlug] || 0;
+
+    const spellDef = this.state?.currentPlayer?.spells?.find((s: any) => s.slug === spellSlug);
+    const recastMs = spellDef?.recast_ms ?? 500;
+
+    if (now - lastCast < recastMs) {
+      // Still on cooldown — update overlay briefly
+      this.updateCooldownOverlay(spellSlug, recastMs - (now - lastCast));
+      return;
+    }
+
+    if (!this.targetId) {
+      this.appendChatMessage('System', 'No target selected. Click a character or press Tab.');
+      return;
+    }
+
+    const local = this.state?.currentPlayer;
+    if (!local) return;
+
+    const localChar = this.characterManager?.getAllCharacters().get(local.character_id);
+    const targetChar = this.characterManager?.getAllCharacters().get(this.targetId);
+    if (!localChar || !targetChar) return;
+
+    const lp = localChar.mesh.position;
+    const tp = targetChar.mesh.position;
+
+    (this.pushEvent('cast_spell', {
+      spell: spellSlug,
+      target_id: this.targetId,
+      caster_x: lp.x,
+      caster_z: lp.z,
+      target_x: tp.x,
+      target_z: tp.z
+    }) as any)?.catch?.(() => {});
+
+    this.spellCooldowns[spellSlug] = now;
+    this.updateCooldownOverlay(spellSlug, recastMs);
+  },
+
+  updateCooldownOverlay(this: any, spellSlug: string, remainingMs: number) {
+    const overlay = this.spellBarEl?.querySelector(`[data-cd-overlay="${spellSlug}"]`) as HTMLDivElement | null;
+    if (!overlay) return;
+    overlay.textContent = (remainingMs / 1000).toFixed(1) + 's';
+    overlay.classList.remove('hidden');
+    const start = Date.now();
+    const total = remainingMs;
+    const tick = () => {
+      const left = total - (Date.now() - start);
+      if (left <= 0) {
+        overlay.classList.add('hidden');
+        return;
+      }
+      overlay.textContent = (left / 1000).toFixed(1) + 's';
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+
+  // ── Projectile animation ───────────────────────────────────────────────────
+
+  launchProjectile(
+    this: any,
+    from: THREE.Vector3,
+    to: THREE.Vector3,
+    hit: boolean,
+    damage: number,
+    targetId: string
+  ) {
+    if (!this.scene) return;
+    const geo = new THREE.SphereGeometry(0.12, 6, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: hit ? 0xaaaaaa : 0x666666 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(from).add(new THREE.Vector3(0, 1.2, 0));
+    this.scene.add(mesh);
+
+    const dist = from.distanceTo(to);
+    const duration = Math.max(250, Math.min(600, dist * 25));
+    const arcOffset = (Math.random() - 0.5) * 1.8; // random left-right arc
+
+    this.activeProjectiles.push({
+      mesh,
+      startPos: mesh.position.clone(),
+      endPos: to.clone().add(new THREE.Vector3(0, 1.0, 0)),
+      progress: 0,
+      duration,
+      startMs: Date.now(),
+      arcOffset
+    });
+  },
+
+  tickProjectiles(this: any) {
+    const now = Date.now();
+    const remaining: typeof this.activeProjectiles = [];
+
+    for (const proj of this.activeProjectiles) {
+      const elapsed = now - proj.startMs;
+      const t = Math.min(1, elapsed / proj.duration);
+
+      // Parabolic arc: lerp x/z straight, add random lateral offset, arc y
+      const straight = new THREE.Vector3().lerpVectors(proj.startPos, proj.endPos, t);
+      const arcY = Math.sin(t * Math.PI) * 1.5;
+
+      // Lateral arc: perpendicular to travel direction
+      const dir = new THREE.Vector3().subVectors(proj.endPos, proj.startPos).normalize();
+      const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+      const lateralOffset = perp.multiplyScalar(proj.arcOffset * Math.sin(t * Math.PI));
+
+      proj.mesh.position.set(
+        straight.x + lateralOffset.x,
+        straight.y + arcY,
+        straight.z + lateralOffset.z
+      );
+
+      if (t >= 1) {
+        this.scene?.remove(proj.mesh);
+        proj.mesh.geometry.dispose();
+        (proj.mesh.material as THREE.Material).dispose();
+      } else {
+        remaining.push(proj);
+      }
+    }
+
+    this.activeProjectiles = remaining;
+  },
+
+  // ── Floating damage text ───────────────────────────────────────────────────
+
+  showFloatingDamage(this: any, worldPos: THREE.Vector3, text: string) {
+    if (!this.el || !this.camera || !this.renderer) return;
+
+    const el = document.createElement('div');
+    el.className = 'absolute pointer-events-none font-bold text-sm text-red-400 drop-shadow-lg select-none';
+    el.style.transform = 'translate(-50%, -50%)';
+    el.textContent = text;
+    this.el.appendChild(el);
+
+    this.floatingTexts.push({
+      el,
+      x: worldPos.x,
+      y: worldPos.y + 2.0,
+      z: worldPos.z,
+      vy: 1.5,
+      alpha: 1.0,
+      startMs: Date.now(),
+      duration: 1200
+    });
+  },
+
+  tickFloatingTexts(this: any) {
+    if (!this.camera || !this.renderer) return;
+    const dt = 0.016;
+    const remaining: typeof this.floatingTexts = [];
+    const rect = this.renderer.domElement.getBoundingClientRect();
+
+    for (const ft of this.floatingTexts) {
+      const elapsed = Date.now() - ft.startMs;
+      const progress = elapsed / ft.duration;
+
+      ft.y += ft.vy * dt;
+      ft.alpha = Math.max(0, 1 - progress);
+      ft.el.style.opacity = ft.alpha.toString();
+
+      // Project 3D → 2D screen
+      const v = new THREE.Vector3(ft.x, ft.y, ft.z).project(this.camera);
+      const sx = (v.x * 0.5 + 0.5) * rect.width;
+      const sy = (-v.y * 0.5 + 0.5) * rect.height;
+      ft.el.style.left = `${sx}px`;
+      ft.el.style.top = `${sy}px`;
+
+      if (progress >= 1) {
+        ft.el.parentElement?.removeChild(ft.el);
+      } else {
+        remaining.push(ft);
+      }
+    }
+
+    this.floatingTexts = remaining;
+  },
 };

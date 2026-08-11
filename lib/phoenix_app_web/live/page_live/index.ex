@@ -30,7 +30,7 @@ defmodule PhoenixAppWeb.PageLive.Index do
         <div class="container mx-auto px-4">
           <div class="flex justify-between items-center h-16">
             <.link navigate={~p"/"} class="text-2xl font-bold text-white hover:text-blue-400 transition-colors duration-300">Alabama</.link>
-            <.link navigate={~p"/desktop"} class="text-white hover:text-blue-400 transition-colors duration-300">Back to Desktop</.link>
+            <.link navigate={~p"/world"} class="text-white hover:text-blue-400 transition-colors duration-300">Back to World</.link>
           </div>
         </div>
       </nav>
@@ -70,8 +70,8 @@ defmodule PhoenixAppWeb.PageLive.Index do
                 </div>
               </div>
               
-              <.link navigate={~p"/desktop"} class="inline-block mt-8 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors duration-300">
-                Back to Desktop
+              <.link navigate={~p"/world"} class="inline-block mt-8 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors duration-300">
+                Back to World
               </.link>
             </div>
           </div>

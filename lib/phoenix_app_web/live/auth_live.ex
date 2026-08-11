@@ -29,7 +29,7 @@ defmodule PhoenixAppWeb.AuthLive do
          socket
          |> redirect(to: "/auth/logout?reason=suspended")}
       else
-        {:ok, redirect(socket, to: ~p"/desktop")}
+        {:ok, redirect(socket, to: ~p"/world")}
       end
     else
       form_data = %{}

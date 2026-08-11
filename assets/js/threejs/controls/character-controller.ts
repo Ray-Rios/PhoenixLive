@@ -107,6 +107,25 @@ export class CharacterController {
   }
 
   /**
+   * Instantly teleport the character and snap the camera to the new position,
+   * bypassing the smooth lerp. Call this for respawn / server corrections.
+   */
+  teleportTo(x: number, y: number, z: number, heading: number = 0): void {
+    this.character.position.set(x, y, z);
+    this.character.rotation.y = heading;
+    this.velocity.set(0, 0, 0);
+
+    // Calculate the camera target at this position and snap to it immediately
+    const charRot = heading + this.cameraAngle;
+    const offsetX = Math.sin(charRot) * this.config.cameraDistance;
+    const offsetZ = Math.cos(charRot) * this.config.cameraDistance;
+    const offsetY = this.config.cameraHeight + Math.sin(this.cameraPitch) * this.config.cameraDistance;
+    this.camera.position.set(x + offsetX, y + offsetY, z + offsetZ);
+    this.cameraTarget.set(x, y + this.config.cameraHeight / 2, z);
+    this.camera.lookAt(this.cameraTarget);
+  }
+
+  /**
    * Update character and camera every frame
    */
   update(deltaTime: number): void {

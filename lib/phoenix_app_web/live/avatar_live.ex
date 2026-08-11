@@ -41,7 +41,7 @@ defmodule PhoenixAppWeb.AvatarLive do
           {:noreply,
            socket
            |> put_flash(:info, "Avatar saved successfully!")
-           |> redirect(to: ~p"/desktop")}
+           |> redirect(to: ~p"/world")}
         
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to save avatar")}
