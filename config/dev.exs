@@ -58,3 +58,15 @@ config :phoenix_app, PhoenixApp.Mailer,
 # Password hashing (dev - PBKDF2)
 # ----------------------------
 config :pbkdf2_elixir, :rounds, 1  # Fast for development (default is 160000)
+
+# ----------------------------
+# Development-only auth shortcuts
+# ----------------------------
+# Enables POST /api/auth/dev-verify, which marks any account's email verified
+# without the code. Needed because `authenticate_user_secure/3` refuses a login
+# until `email_verified_at` is set, so an account registered from the game client
+# could never log in a second time without a working mailbox.
+#
+# Set ONLY here. In prod the endpoint 404s, which is what you want - it takes an
+# unauthenticated email and grants it exactly what verification exists to prove.
+config :phoenix_app, :allow_dev_verify, true

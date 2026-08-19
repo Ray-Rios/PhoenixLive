@@ -296,6 +296,18 @@ echo "🔨 Building production Docker image with BuildKit..."
 docker build --no-cache -f Dockerfile.multistage -t "phoenixapp:prod" --progress=plain --build-arg "MIX_ENV=prod" .
 print_status "Production image built: phoenixapp:prod"
 
+# NOTE: the RaysSpaceSim dedicated server image is NOT built here.
+#
+# It is a UE cook - tens of minutes warm, hours cold - and it changes when game
+# code or content changes, which is far less often than this script runs. It has
+# its own pipeline:
+#
+#   ./deploy-game.sh            build the current commit and roll it out
+#   ./deploy-game.sh --list     see what is built and which build is live
+#
+# The two meet only at HOLOSIM_IMAGE in k3s/overlays/prod/configmap.yaml, which
+# this script applies along with everything else.
+
 # Deploy SSL infrastructure first
 echo "🔒 Deploying SSL infrastructure..."
 

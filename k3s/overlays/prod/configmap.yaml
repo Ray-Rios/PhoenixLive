@@ -19,3 +19,27 @@ data:
   PHOENIX_SERVICE_URL: "https://phxlive.net"
   PHOENIX_HOST: "phxlive.net"
   ENABLE_REDIS: "true"
+
+  # --- Holo-sim instance orchestration (M5) --------------------------------
+  #
+  # HOLOSIM_IMAGE is written by ./deploy-game.sh and lives HERE, in the applied
+  # source, rather than being set live with `kubectl set env`. deploy-prod.sh
+  # applies this overlay with --force-conflicts, which would wipe a live-only
+  # value on the next web deploy - the game would silently revert to the manual
+  # launch path and nothing would say why.
+  #
+  # Keeping it in the file also answers "which build is running" from git
+  # history, and makes a rollback a one-line change plus a re-run.
+  #
+  # Empty is a supported state: the launcher reports itself unavailable and
+  # /launch falls back to recording intent and waiting for a hand-started
+  # server. That is the development loop, not a broken deployment.
+  HOLOSIM_IMAGE: "raysspacesim-server:d8982e0-dirty-202608190512"
+
+  # The address a GAME CLIENT connects to. This is NOT proxied by the nginx
+  # ingress - instances speak UDP directly on their assigned port via hostPort,
+  # so this must be an address that reaches the node itself with those ports
+  # open, not the web hostname if the two differ.
+  HOLOSIM_PUBLIC_HOST: "phxlive.net"
+  HOLOSIM_PORT_MIN: "7800"
+  HOLOSIM_PORT_MAX: "7899"

@@ -87,16 +87,48 @@ fi
 # ----------------------------
 # Wait for Redis
 # ----------------------------
-echo "Waiting for Redis to be ready..."
-for i in {1..3}; do
-  if redis-cli -h redis ping | grep -q PONG; then
+REDIS_HOST="${REDIS_HOST:-redis}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+
+# Speaks RESP over bash's own /dev/tcp rather than shelling out to redis-cli.
+#
+# The runtime image has no redis-tools, so the old check printed
+# "redis-cli: command not found" three times on every single boot and then
+# carried on regardless. It was not testing Redis at all - it was testing
+# whether a binary existed, always getting "no", and reporting that as a failed
+# Redis check. Three lines of noise in every log, on a container that was fine.
+#
+# This actually connects and looks for +PONG, and needs nothing installed.
+redis_ready() {
+  exec 3<>"/dev/tcp/${REDIS_HOST}/${REDIS_PORT}" 2>/dev/null || return 1
+  printf 'PING\r\n' >&3
+  local reply=""
+  read -r -t 2 reply <&3
+  exec 3<&- 2>/dev/null
+  exec 3>&- 2>/dev/null
+  [[ "$reply" == "+PONG"* ]]
+}
+
+echo "Waiting for Redis at ${REDIS_HOST}:${REDIS_PORT}..."
+redis_up=0
+for i in 1 2 3; do
+  if redis_ready; then
     echo "Redis is ready!"
+    redis_up=1
     break
-  else
-   echo "Redis check $i failed, retrying in 5 seconds..."
-   sleep 5
   fi
+  echo "Redis not answering (attempt $i/3), retrying in 5 seconds..."
+  sleep 5
 done
+
+# Deliberately NOT fatal. The app opens its own Redis connections lazily and
+# retries, so a slow-starting Redis should not stop the web tier from booting -
+# but an unreachable one should say so once, clearly, instead of scrolling three
+# identical errors past whoever is reading the log for a different reason.
+if [ "$redis_up" -ne 1 ]; then
+  echo "WARNING: Redis at ${REDIS_HOST}:${REDIS_PORT} did not answer. Starting anyway;"
+  echo "         anything backed by Redis (caching, presence) will fail until it does."
+fi
 
 # ----------------------------
 # Rebuild assets in development mode

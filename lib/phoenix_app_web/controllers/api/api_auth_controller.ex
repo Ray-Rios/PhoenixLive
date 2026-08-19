@@ -230,7 +230,28 @@ defmodule PhoenixAppWeb.Api.ApiAuthController do
   end
 
   # POST /api/auth/dev-verify - Development only: verify any email
+  # POST /api/auth/dev-verify
+  #
+  # Marks an account's email verified without the code. This is an unauthenticated
+  # endpoint that takes an email and grants it the thing email verification exists
+  # to prove, so in production it is an account-takeover primitive: register with
+  # someone's address, call this, log in. `authenticate_user_secure/3` refuses a
+  # login while `email_verified_at` is nil, and this is a way to fill that column
+  # for any address at all.
+  #
+  # Gated on config rather than `Mix.env()` because Mix is not present in a
+  # release, where `Mix.env/0` raises and this would 500 instead of 404.
   def dev_verify(conn, %{"email" => email}) do
+    if !Application.get_env(:phoenix_app, :allow_dev_verify, false) do
+      # 404, not 403. A 403 confirms the endpoint exists and is merely switched
+      # off, which is a hint worth withholding.
+      conn |> put_status(:not_found) |> json(%{success: false, error: "Not found"})
+    else
+      do_dev_verify(conn, email)
+    end
+  end
+
+  defp do_dev_verify(conn, email) do
     case Accounts.get_user_by_email(email) do
       nil ->
         conn

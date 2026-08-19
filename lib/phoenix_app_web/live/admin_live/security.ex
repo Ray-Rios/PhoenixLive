@@ -111,15 +111,6 @@ defmodule PhoenixAppWeb.AdminLive.Security do
     end
   end
 
-  defp ensure_ets_table do
-    case :ets.whereis(:blocked_ips) do
-      :undefined ->
-        :ets.new(:blocked_ips, [:set, :public, :named_table])
-      _ ->
-        :ok
-    end
-  end
-
   @impl true
   def handle_event("fetch_logs", _params, socket) do
     # Fetch actual server logs from the in-memory log buffer
@@ -140,6 +131,15 @@ defmodule PhoenixAppWeb.AdminLive.Security do
     end
     
     {:noreply, assign(socket, server_logs: logs)}
+  end
+
+  defp ensure_ets_table do
+    case :ets.whereis(:blocked_ips) do
+      :undefined ->
+        :ets.new(:blocked_ips, [:set, :public, :named_table])
+      _ ->
+        :ok
+    end
   end
 
   defp load_security_data(socket) do

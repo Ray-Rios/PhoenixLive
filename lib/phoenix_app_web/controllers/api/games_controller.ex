@@ -114,7 +114,10 @@ defmodule PhoenixAppWeb.Api.GamesController do
         |> maybe_opt(:version, params["version"])
         |> Keyword.put(:include_full, params["include_full"] == "true")
 
-      servers = Games.list_available_servers(game.id, opts)
+      # World servers only. An instance in this list would let a player pick
+      # someone else's Holo-sim pod out of the browser and sidestep the access
+      # check entirely.
+      servers = Games.list_world_servers(game.id, opts)
 
       json(conn, %{
         success: true,
@@ -147,12 +150,38 @@ defmodule PhoenixAppWeb.Api.GamesController do
         "max_players" => params["max_players"] || 64,
         "map_name" => params["map_name"],
         "version" => params["version"],
-        "metadata" => params["metadata"] || %{}
+        "metadata" => params["metadata"] || %{},
+
+        # WHO is on the server, not just how many. current_players above cannot
+        # answer "which instance is this player in", which is the question the
+        # admin section exists to answer.
+        "roster" => normalize_roster(params["roster"]),
+
+        # Set by a Holo-sim instance so the hub can match it to its sim and
+        # player. A world server omits both and stays a world server.
+        "holo_sim_id" => params["holo_sim_id"],
+        "launched_by_user_id" => params["launched_by_user_id"] || params["instance_user_id"]
       }
 
       case Games.register_server(attrs) do
-        {:ok, server} -> json(conn, %{success: true, server: server_json(server)})
-        {:error, changeset} -> error_response(conn, 422, changeset_errors(changeset))
+        {:ok, server} ->
+          # THE CONTROL CHANNEL.
+          #
+          # The heartbeat response is the only route the hub has back into a
+          # running instance - it may be behind NAT, in a pod with no ingress,
+          # or started by hand on a desktop. Rather than a second transport for
+          # admin actions, anything queued rides back on a request the server
+          # was already making.
+          commands =
+            case Games.take_pending_commands(server.id) do
+              {:ok, list} -> Enum.map(list, &command_json/1)
+              _ -> []
+            end
+
+          json(conn, %{success: true, server: server_json(server), commands: commands})
+
+        {:error, changeset} ->
+          error_response(conn, 422, changeset_errors(changeset))
       end
     else
       {:error, status, message} -> error_response(conn, status, message)
@@ -214,9 +243,52 @@ defmodule PhoenixAppWeb.Api.GamesController do
       map_name: server.map_name,
       version: server.version,
       last_heartbeat_at: server.last_heartbeat_at,
-      metadata: server.metadata
+      metadata: server.metadata,
+      holo_sim_id: server.holo_sim_id
     }
   end
+
+  defp command_json(command) do
+    %{
+      id: command.id,
+      command: command.command,
+      payload: command.payload,
+      issued_at: command.issued_at
+    }
+  end
+
+  @max_roster_entries 256
+
+  # ACCEPTS EITHER SHAPE, STORES ONE.
+  #
+  # The wire is easier to write from C++ as a bare array; the column is a plain
+  # :map so it cannot be one. Normalising here means the server does not have to
+  # care and every reader sees %{"players" => [...]}.
+  #
+  # Capped because this is written straight into a jsonb column on a request the
+  # server makes every few seconds. Heartbeats are authenticated with the server
+  # key, so this is not a hostile input - but a bug in an instance should cost
+  # one truncated roster, not an unbounded column written forever.
+  defp normalize_roster(nil), do: %{}
+
+  defp normalize_roster(players) when is_list(players) do
+    %{"players" => players |> Enum.take(@max_roster_entries) |> Enum.map(&normalize_player/1)}
+  end
+
+  defp normalize_roster(%{"players" => players}) when is_list(players),
+    do: normalize_roster(players)
+
+  # Anything else - a string, a number, a map without "players" - is a client
+  # that does not know the format. Dropped rather than stored, so a malformed
+  # roster reads as "no roster" instead of poisoning the containment query that
+  # finds players.
+  defp normalize_roster(_), do: %{}
+
+  defp normalize_player(%{} = player) do
+    Map.take(player, ["user_id", "character_id", "name", "joined_at"])
+  end
+
+  defp normalize_player(_), do: %{}
 
   defp fetch_game(slug) do
     case Games.get_game_by_slug(slug) do

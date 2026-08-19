@@ -160,3 +160,25 @@ AI context: please do no execute migrations in the pods themselves. update the f
 
 kubectl apply -k k3s/overlays/prod/
 kubectl rollout restart deployment/phoenix-web -n phoenixapp
+
+## Compact the Docker Desktop WSL virtual disk to reclaim freed space
+## PowerShell w/Admin
+$script = @"
+select vdisk file="C:\Users\error\AppData\Local\Docker\wsl\disk\docker_data.vhdx"
+attach vdisk readonly
+compact vdisk
+detach vdisk
+exit
+"@
+$scriptPath = "$env:TEMP\compact_docker_vhdx.txt"
+$script | Out-File -FilePath $scriptPath -Encoding ascii
+diskpart /s $scriptPath
+
+##Re-run diskpart capturing output/exit code and check admin status
+$scriptPath = "$env:TEMP\compact_docker_vhdx.txt"
+$p = Start-Process diskpart -ArgumentList "/s `"$scriptPath`"" -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$env:TEMP\diskpart_out.txt" -RedirectStandardError "$env:TEMP\diskpart_err.txt"
+"ExitCode: $($p.ExitCode)"
+Get-Content "$env:TEMP\diskpart_out.txt"
+"---STDERR---"
+Get-Content "$env:TEMP\diskpart_err.txt"
+([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)

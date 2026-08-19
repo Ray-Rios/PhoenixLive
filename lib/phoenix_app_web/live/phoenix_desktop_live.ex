@@ -1020,12 +1020,6 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     {:noreply, socket}
   end
 
-  defp get_preview_window_size(:image), do: %{width: 800, height: 600}
-  defp get_preview_window_size(:video), do: %{width: 854, height: 530}
-  defp get_preview_window_size(:audio), do: %{width: 400, height: 200}
-  defp get_preview_window_size(:pdf), do: %{width: 800, height: 700}
-  defp get_preview_window_size(_), do: %{width: 600, height: 400}
-
   def handle_event("fm_delete_item", %{"path" => path, "window_id" => window_id}, socket) do
     user = socket.assigns.current_user
     
@@ -1163,37 +1157,11 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     Map.get(params, "window_id") || Map.get(params, "id")
   end
 
-  defp build_breadcrumbs(path) do
-    case path do
-      "/" -> []
-      "public://" -> [%{name: "Public Drive", path: "public://"}]
-      "user://" <> _ ->
-        [%{name: "User Drive", path: "user://"}]
-      "root://" <> _ ->
-        [%{name: "System Root", path: "root://"}]
-      _ ->
-        # Build breadcrumb trail from path segments
-        segments = String.split(path, "/", trim: true)
-        Enum.with_index(segments, fn segment, idx ->
-          accumulated_path = Enum.take(segments, idx + 1) |> Enum.join("/")
-          %{name: segment, path: "/" <> accumulated_path}
-        end)
-    end
-  end
-
-  defp get_parent_path(path) do
-    case path do
-      "/" -> "/"
-      path ->
-        path
-        |> String.split("/")
-        |> Enum.drop(-1)
-        |> case do
-          [] -> "/"
-          segments -> Enum.join(segments, "/")
-        end
-    end
-  end
+  defp get_preview_window_size(:image), do: %{width: 800, height: 600}
+  defp get_preview_window_size(:video), do: %{width: 854, height: 530}
+  defp get_preview_window_size(:audio), do: %{width: 400, height: 200}
+  defp get_preview_window_size(:pdf), do: %{width: 800, height: 700}
+  defp get_preview_window_size(_), do: %{width: 600, height: 400}
 
   # ==================== PUBSUB HANDLERS ====================
 
@@ -1273,6 +1241,28 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     end
     
     {:noreply, assign(socket, unread_notification_count: unread_notification_count, mention_notifications: mention_notifications)}
+  end
+
+  # Handle refresh messages for new file explorer
+  def handle_info({:fm_refresh_window, window_id}, socket) do
+    user = socket.assigns.current_user
+    
+    windows = 
+      Enum.map(socket.assigns.windows, fn window ->
+        if window.id == window_id && window.app == "file_manager" do
+          items = get_file_explorer_items(window.current_path, user)
+          storage_used = if user, do: calculate_user_storage(user), else: 0
+          
+          %{window | 
+            current_items: sort_items(items, window.sort_by, window.sort_order),
+            storage_used: storage_used
+          }
+        else
+          window
+        end
+      end)
+    
+    {:noreply, assign(socket, :windows, windows)}
   end
 
   # ==================== RENDER ====================
@@ -1668,28 +1658,6 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
 
   # ==================== NEW FILE EXPLORER HELPERS ====================
 
-  # Handle refresh messages for new file explorer
-  def handle_info({:fm_refresh_window, window_id}, socket) do
-    user = socket.assigns.current_user
-    
-    windows = 
-      Enum.map(socket.assigns.windows, fn window ->
-        if window.id == window_id && window.app == "file_manager" do
-          items = get_file_explorer_items(window.current_path, user)
-          storage_used = if user, do: calculate_user_storage(user), else: 0
-          
-          %{window | 
-            current_items: sort_items(items, window.sort_by, window.sort_order),
-            storage_used: storage_used
-          }
-        else
-          window
-        end
-      end)
-    
-    {:noreply, assign(socket, :windows, windows)}
-  end
-
   # Get the base uploads path
   defp get_uploads_base_path do
     cond do
@@ -1797,11 +1765,6 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
           }
       end
     end)
-  end
-
-  # Legacy function - kept for compatibility but redirects to folder-aware version
-  defp get_user_database_files(user) do
-    get_user_folder_contents(user, "/")
   end
 
   # Determine media category for playback support

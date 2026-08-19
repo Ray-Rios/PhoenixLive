@@ -61,14 +61,21 @@ defmodule PhoenixApp.Forum do
   end
 
   def update_channel(%Channel{} = channel, attrs) do
-    channel
+    # Re-fetch the current row so the old-icon comparison (and the changeset
+    # base) reflect the latest DB state, not a struct the caller may be
+    # holding from before another session's concurrent update (e.g. a
+    # LiveView socket assign that hasn't been refreshed) — otherwise the
+    # previous icon file never gets deleted and orphans accumulate.
+    current = Repo.get!(Channel, channel.id)
+
+    current
     |> Channel.changeset(attrs)
     |> Repo.update()
     |> case do
       {:ok, updated_channel} ->
         # If icon_path changed, delete the old icon file
-        if channel.icon_path && channel.icon_path != updated_channel.icon_path do
-          PhoenixApp.Uploads.delete_file(channel.icon_path)
+        if current.icon_path && current.icon_path != updated_channel.icon_path do
+          PhoenixApp.Uploads.delete_file(current.icon_path)
         end
 
         pubsub_broadcast("chat:channels", {:channel_updated, updated_channel})
@@ -118,6 +125,16 @@ defmodule PhoenixApp.Forum do
             
             # 8. Queue background job to delete files and channel directories from filesystem
             Task.start(fn ->
+              # Delete the channel icon and its containing directory (only one
+              # icon should ever exist at a time, so wipe the whole dir rather
+              # than just the referenced filename in case stray files remain)
+              if deleted_channel.icon_path do
+                deleted_channel.icon_path
+                |> PhoenixApp.Uploads.url_to_path()
+                |> Path.dirname()
+                |> File.rm_rf()
+              end
+
               # Delete individual attachment files
               Enum.each(attachment_file_paths, fn url_path ->
                 PhoenixApp.Uploads.delete_file(url_path)

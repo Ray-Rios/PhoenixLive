@@ -23,3 +23,7 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   server: false
 
 config :logger, level: :warn
+
+# Tests register accounts and then log in as them; without this the login gate
+# on email_verified_at makes that a two-step dance in every fixture.
+config :phoenix_app, :allow_dev_verify, true

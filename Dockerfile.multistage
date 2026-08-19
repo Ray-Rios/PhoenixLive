@@ -153,6 +153,18 @@ RUN mix deps.compile
 COPY config ./config
 COPY lib ./lib
 COPY priv/repo ./priv/repo
+# THE GAMES REPO'S MIGRATIONS.
+#
+# priv is copied a directory at a time here, so adding a repo to :ecto_repos is
+# NOT enough on its own - without this line the release contains no migration
+# files for GamesRepo. Ecto.Migrator then finds an empty directory, runs
+# nothing, and returns SUCCESS. The deploy goes green, create_db makes an empty
+# database, and the app boots with no schema; it surfaces much later as
+# `relation "games" does not exist`, which looks nothing like a packaging bug.
+#
+# `PhoenixApp.Release.status()` prints the file count per repo precisely so this
+# is one command to spot rather than an afternoon.
+COPY priv/games_repo ./priv/games_repo
 COPY priv/gettext ./priv/gettext
 
 # Copy built assets from assets-builder stage

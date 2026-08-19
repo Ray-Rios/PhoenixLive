@@ -34,6 +34,27 @@ defmodule PhoenixApp.Games.GameServer do
     field :last_heartbeat_at, :utc_datetime
     field :metadata, :map, default: %{}
 
+    # WHO IS ON THIS SERVER, as of the last heartbeat.
+    #
+    # Shaped %{"players" => [%{"user_id" =>, "character_id" =>, "name" =>,
+    # "joined_at" =>}]}. An object at the top level rather than a bare list so
+    # this stays a plain :map, and so more per-instance detail can be added
+    # beside it without another migration.
+    #
+    # A snapshot, not a ledger: it is overwritten wholesale every heartbeat and
+    # is only as current as `last_heartbeat_at`. Read the two together or you
+    # will show a roster from a server that died ten minutes ago.
+    field :roster, :map, default: %{}
+
+    # Instance servers only. Null on a world server.
+    #
+    # An instance belongs to a SIM, not to a player: public sims are joined by
+    # many people at once. launched_by_user_id is attribution - who opened the
+    # door first - and is deliberately NOT used for access decisions. The hub's
+    # ACL check is the only thing that decides who may enter.
+    field :holo_sim_id, :binary_id
+    field :launched_by_user_id, :binary_id
+
     belongs_to :game, PhoenixApp.Games.Game
 
     timestamps(type: :utc_datetime)
@@ -53,7 +74,10 @@ defmodule PhoenixApp.Games.GameServer do
       :map_name,
       :version,
       :last_heartbeat_at,
-      :metadata
+      :metadata,
+      :roster,
+      :holo_sim_id,
+      :launched_by_user_id
     ])
     |> validate_required([:game_id, :host, :port, :name, :last_heartbeat_at])
     |> validate_inclusion(:status, @statuses)

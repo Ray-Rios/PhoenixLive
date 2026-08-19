@@ -92,6 +92,75 @@ games_database_url =
   System.get_env("GAMES_DATABASE_URL") ||
     "postgresql://#{db_username}:#{db_password}@#{db_host}:#{db_port}/#{games_db_name}"
 
+# -------------------------------------------------
+# Holo-sim instance orchestration (M5)
+#
+# Everything here is optional. With HOLOSIM_IMAGE unset the launcher reports
+# itself unavailable and /launch falls back to the M4 behaviour - record the
+# intent, answer `pending`, and let a hand-started server heartbeat in. That is
+# the development loop and it must keep working, so "not configured" is a
+# supported state rather than a broken one.
+#
+# Values are computed into variables FIRST, matching how games_database_url is
+# handled above. That is not only style: a multi-line `case ... end` used
+# directly as a keyword value does not parse - Elixir cannot tell that the
+# keyword list resumes after `end,` - and the resulting SyntaxError is raised by
+# the release's config provider at boot, long after any compile step could have
+# caught it. The pod crash-loops with no application log at all.
+# -------------------------------------------------
+
+# Entrypoint override, for proving the orchestration before a server image
+# exists. Comma-separated, e.g. HOLOSIM_COMMAND="sleep,3600" alongside
+# HOLOSIM_IMAGE=busybox. Unset in production - the real image runs the server
+# and takes the launcher's arguments as they are.
+#
+# STDLIB ONLY, DELIBERATELY. This was Jason.decode! on a JSON array, which reads
+# better and was the one thing in this entire file reaching for a dependency.
+# runtime.exs is evaluated before the applications start, on a restricted code
+# path where dependency modules are not reliably loadable.
+holosim_command =
+  case System.get_env("HOLOSIM_COMMAND") do
+    nil ->
+      nil
+
+    "" ->
+      nil
+
+    csv ->
+      csv
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+  end
+
+holosim_port_min = String.to_integer(System.get_env("HOLOSIM_PORT_MIN", "7800"))
+holosim_port_max = String.to_integer(System.get_env("HOLOSIM_PORT_MAX", "7899"))
+
+config :phoenix_app, PhoenixApp.Games.InstanceLauncher,
+  # The packaged Linux dedicated server image. Until this exists, leave it unset.
+  image: System.get_env("HOLOSIM_IMAGE"),
+  image_pull_policy: System.get_env("HOLOSIM_IMAGE_PULL_POLICY", "IfNotPresent"),
+  command: holosim_command,
+
+  # The address a GAME CLIENT can reach, which is not necessarily the address
+  # the cluster knows itself by. Getting this wrong produces an instance that
+  # appears in the browser and times out on connect.
+  public_host: System.get_env("HOLOSIM_PUBLIC_HOST", "127.0.0.1"),
+  port_range: {holosim_port_min, holosim_port_max},
+
+  # Removed this long after the Job finishes, which is also when its port frees.
+  ttl_seconds: String.to_integer(System.get_env("HOLOSIM_TTL_SECONDS", "600")),
+
+  # A backstop for a wedged instance. Normal retirement is the empty-instance
+  # countdown inside the server itself.
+  max_lifetime_seconds:
+    String.to_integer(System.get_env("HOLOSIM_MAX_LIFETIME_SECONDS", "14400")),
+  secret_name: System.get_env("HOLOSIM_SECRET_NAME", "phoenix-secrets"),
+  hub_url:
+    System.get_env(
+      "HOLOSIM_HUB_URL",
+      "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
+    )
+
 config :phoenix_app, PhoenixApp.GamesRepo,
   adapter: Ecto.Adapters.Postgres,
   url: games_database_url,

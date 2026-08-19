@@ -187,17 +187,22 @@ defmodule PhoenixApp.Uploads do
             Logger.info("File uploaded successfully: #{url}")
 
             # Best-effort background processing (thumbnail generation, transcode)
-            Task.start(fn ->
-              case get_file_type(entry.client_type) do
-                "image" ->
-                  thumb = Path.join(dest_dir, "thumb_#{filename}.png")
-                  PhoenixApp.MediaProcessor.generate_thumbnail(Path.join(dest_dir, filename), thumb)
-                "video" ->
-                  out = Path.join(dest_dir, "transcoded_#{filename}")
-                  PhoenixApp.MediaProcessor.transcode_video(Path.join(dest_dir, filename), out)
-                _ -> :ok
-              end
-            end)
+            # Skip for single-image contexts like channel icons, where only the
+            # original file is ever referenced and a leftover thumbnail would
+            # never get cleaned up.
+            unless String.starts_with?(context, "channel_icons") do
+              Task.start(fn ->
+                case get_file_type(entry.client_type) do
+                  "image" ->
+                    thumb = Path.join(dest_dir, "thumb_#{filename}.png")
+                    PhoenixApp.MediaProcessor.generate_thumbnail(Path.join(dest_dir, filename), thumb)
+                  "video" ->
+                    out = Path.join(dest_dir, "transcoded_#{filename}")
+                    PhoenixApp.MediaProcessor.transcode_video(Path.join(dest_dir, filename), out)
+                  _ -> :ok
+                end
+              end)
+            end
               # Best-effort moderation scan
               Task.start(fn -> PhoenixApp.Moderation.scan_file(Path.join(dest_dir, filename)) end)
 

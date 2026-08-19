@@ -15,10 +15,10 @@ defmodule PhoenixAppWeb.GamesLive do
   @min_dt_seconds 0.04
   @position_persist_interval_ms 1000
   @presence_broadcast_interval_ms 100
-  @remote_position_broadcast_interval_ms 100
 
   on_mount {PhoenixAppWeb.UserAuth, :require_authenticated_user}
 
+  @impl true
   def handle_params(%{"ch" => character_id}, _uri, socket) do
     if connected?(socket) do
       case Game.character_login_payload(socket.assigns.current_user.id, character_id) do
@@ -68,6 +68,7 @@ defmodule PhoenixAppWeb.GamesLive do
     end
   end
 
+  @impl true
   def mount(_params, _session, socket) do
     current_user = socket.assigns.current_user
     characters = Game.list_user_characters(current_user.id)
@@ -106,6 +107,7 @@ defmodule PhoenixAppWeb.GamesLive do
      )}
   end
 
+  @impl true
   def handle_event("select_game", %{"slug" => "lobby"}, socket) do
     {:noreply, assign(socket, library_mode?: false, page_title: "Character Hub")}
   end
@@ -491,42 +493,6 @@ defmodule PhoenixAppWeb.GamesLive do
     end
   end
 
-  def handle_info({:zone_spell_result, result}, socket) do
-    current = current_character(socket)
-
-    socket =
-      if result.target_died && current && result.target_id == current.character_id do
-        # Only process death if not already in death state (prevent double-death while waiting for respawn)
-        if socket.assigns[:is_dead?] do
-          socket
-        else
-          coords = result.spawn_coords || %{x: 0.0, y: 0.0, z: 0.0, heading: 0.0}
-
-          # Cancel any existing pending respawn timer before scheduling a new one.
-          if existing = socket.assigns[:pending_respawn_timer] do
-            Process.cancel_timer(existing)
-          end
-
-          timer_ref = Process.send_after(self(), {:auto_respawn, current.character_id}, 30_000)
-
-          socket
-          |> assign(pending_respawn_timer: timer_ref, pending_spawn_coords: coords, is_dead?: true)
-          |> push_event("character_died", %{
-               spawn_coords: coords,
-               hp: current.max_hp,
-               max_hp: current.max_hp,
-               mp: current.max_mp,
-               max_mp: current.max_mp,
-               respawn_in_ms: 30_000
-             })
-        end
-      else
-        socket
-      end
-
-    {:noreply, push_event(socket, "zone_spell_result", result)}
-  end
-
   def handle_event("respawn_now", _params, socket) do
     current = current_character(socket)
 
@@ -572,6 +538,43 @@ defmodule PhoenixAppWeb.GamesLive do
     else
       {:noreply, socket}
     end
+  end
+
+  @impl true
+  def handle_info({:zone_spell_result, result}, socket) do
+    current = current_character(socket)
+
+    socket =
+      if result.target_died && current && result.target_id == current.character_id do
+        # Only process death if not already in death state (prevent double-death while waiting for respawn)
+        if socket.assigns[:is_dead?] do
+          socket
+        else
+          coords = result.spawn_coords || %{x: 0.0, y: 0.0, z: 0.0, heading: 0.0}
+
+          # Cancel any existing pending respawn timer before scheduling a new one.
+          if existing = socket.assigns[:pending_respawn_timer] do
+            Process.cancel_timer(existing)
+          end
+
+          timer_ref = Process.send_after(self(), {:auto_respawn, current.character_id}, 30_000)
+
+          socket
+          |> assign(pending_respawn_timer: timer_ref, pending_spawn_coords: coords, is_dead?: true)
+          |> push_event("character_died", %{
+               spawn_coords: coords,
+               hp: current.max_hp,
+               max_hp: current.max_hp,
+               mp: current.max_mp,
+               max_mp: current.max_mp,
+               respawn_in_ms: 30_000
+             })
+        end
+      else
+        socket
+      end
+
+    {:noreply, push_event(socket, "zone_spell_result", result)}
   end
 
   def handle_info({:auto_respawn, character_id}, socket) do
@@ -890,16 +893,6 @@ defmodule PhoenixAppWeb.GamesLive do
     end)
   end
 
-  defp within_interest_radius?(current_character_payload, position_payload) do
-    cx = current_character_payload.position.x || 0.0
-    cz = current_character_payload.position.z || 0.0
-
-    dx = (position_payload.x || 0.0) - cx
-    dz = (position_payload.z || 0.0) - cz
-
-    :math.sqrt(dx * dx + dz * dz) <= @interest_radius
-  end
-
   defp validate_ground_bounds(y) do
     if y < -1.0 or y > 25.0, do: {:error, :invalid_move}, else: :ok
   end
@@ -1062,6 +1055,7 @@ defmodule PhoenixAppWeb.GamesLive do
     }
   end
   
+  @impl true
   def render(%{library_mode?: true} = assigns) do
     ~H"""
     <div class="fixed top-[30px] inset-x-0 bottom-0 z-40 overflow-y-auto bg-black">

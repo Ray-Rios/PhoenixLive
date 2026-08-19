@@ -106,6 +106,7 @@ defmodule PhoenixAppWeb.Router do
     live "/admin/emails", AdminLive.Emails, :index
     live "/admin/api-toolbox", AdminLive.ApiToolbox, :index
     live "/admin/custom-emojis", AdminLive.CustomEmojis, :index
+    live "/admin/raysspacesim", AdminLive.RaysSpaceSim, :index
 
   end
   end
@@ -185,6 +186,27 @@ defmodule PhoenixAppWeb.Router do
     get "/:game_slug/servers", Api.GamesController, :list_servers
     post "/:game_slug/servers/heartbeat", Api.GamesController, :heartbeat_server
     post "/:game_slug/servers/offline", Api.GamesController, :deregister_server
+
+    # Holo-sims. Player CRUD and invites use the player token; the access check
+    # and state save are server-API-key only, enforced in the controller.
+    #
+    # Ordering matters: the /access/ and /members/ routes must come before the
+    # bare /:id routes, or Phoenix matches "access" as an :id.
+    get "/:game_slug/holosims", Api.HoloSimController, :index
+    post "/:game_slug/holosims", Api.HoloSimController, :create
+
+    get "/:game_slug/holosims/:id/access/:target_user_id", Api.HoloSimController, :check_access
+    put "/:game_slug/holosims/:id/state", Api.HoloSimController, :save_state
+
+    post "/:game_slug/holosims/:id/members", Api.HoloSimController, :add_member
+    delete "/:game_slug/holosims/:id/members/:member_user_id", Api.HoloSimController, :remove_member
+    post "/:game_slug/holosims/:id/accept", Api.HoloSimController, :accept
+    post "/:game_slug/holosims/:id/launch", Api.HoloSimController, :launch
+    get "/:game_slug/holosims/:id/status", Api.HoloSimController, :status
+
+    get "/:game_slug/holosims/:id", Api.HoloSimController, :show
+    put "/:game_slug/holosims/:id", Api.HoloSimController, :update
+    delete "/:game_slug/holosims/:id", Api.HoloSimController, :delete
 
     get "/:game_slug/characters", Api.GamesController, :list_characters
     post "/:game_slug/characters", Api.GamesController, :create_character

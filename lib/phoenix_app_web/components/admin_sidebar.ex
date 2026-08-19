@@ -115,6 +115,19 @@ defmodule PhoenixAppWeb.Components.AdminSidebar do
           />
         </div>
         
+        <!-- Games Section -->
+        <div class="mb-6">
+          <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 sidebar-section-header">
+            Games
+          </h2>
+          <.sidebar_link
+            href="/admin/raysspacesim"
+            icon="🚀"
+            label="RaysSpaceSim"
+            active={String.starts_with?(@current_path, "/admin/raysspacesim")}
+          />
+        </div>
+
         <!-- Tools Section -->
         <div class="mb-6">
           <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 sidebar-section-header">

@@ -67,9 +67,18 @@
         # -------------------------------
             COPY assets ./assets
             # Create priv directory structure but DON'T copy old static assets
-            RUN mkdir -p priv/static/assets priv/static/fonts priv/repo priv/gettext
+            RUN mkdir -p priv/static/assets priv/static/fonts priv/repo priv/games_repo priv/gettext
             # Copy only non-static priv files
             COPY priv/repo ./priv/repo
+            # THE GAMES REPO'S MIGRATIONS. Adding a repo to :ecto_repos is not
+            # enough on its own when priv is copied SELECTIVELY: without this
+            # line the image contains no migration files for GamesRepo, so
+            # Ecto.Migrator finds an empty directory, runs nothing, and returns
+            # success. The deploy goes green, the database is created, and the
+            # app boots with no schema - which surfaces much later as
+            # `relation "games" does not exist` and looks nothing like a
+            # packaging problem.
+            COPY priv/games_repo ./priv/games_repo
             COPY priv/gettext ./priv/gettext
             # Copy static files that don't get regenerated (tri.gif, favicon.ico, robots.txt, etc.)
             COPY priv/static/tri.gif ./priv/static/
