@@ -32,6 +32,17 @@ defmodule PhoenixApp.Games.HoloSim do
 
   schema "holo_sims" do
     field :owner_user_id, :binary_id
+
+    # THE FORUM CHANNEL THIS SIM BELONGS TO. Lives in the OTHER database
+    # (phoenixapp_prod), so this is a bare uuid with no foreign key and no
+    # association - see the migration for what that costs.
+    #
+    # Nil is a legitimate, permanent state, not a migration artefact: every
+    # channel created on the website has no sim until its owner builds one in
+    # game, and sims that predate the link have no channel. Code that reads this
+    # must handle nil rather than treating it as "not set up yet".
+    field :channel_id, :binary_id
+
     field :name, :string
     field :description, :string
     field :visibility, :string, default: "private"
@@ -63,6 +74,7 @@ defmodule PhoenixApp.Games.HoloSim do
     |> cast(attrs, [
       :game_id,
       :owner_user_id,
+      :channel_id,
       :name,
       :description,
       :visibility,
@@ -83,6 +95,7 @@ defmodule PhoenixApp.Games.HoloSim do
     |> validate_spec()
     |> foreign_key_constraint(:game_id)
     |> unique_constraint([:game_id, :owner_user_id, :name], name: :holo_sims_owner_name_index)
+    |> unique_constraint(:channel_id, name: :holo_sims_channel_id_index)
   end
 
   @doc """
@@ -91,6 +104,12 @@ defmodule PhoenixApp.Games.HoloSim do
   Deliberately narrower than `changeset/2`: ownership, moderation flags and
   launch counters are not player-editable. Without this split, a hand-built
   params map from a controller could let a player unlock their own sim.
+
+  `channel_id` is absent for a sharper reason than the rest. It is the sim's
+  entire access control list now, so an owner who could edit it could re-point
+  their sim at a channel with a thousand members - or at somebody else's private
+  channel - and inherit that membership wholesale. The link is set once, at
+  creation, by the code that just verified the caller owns the channel.
   """
   def owner_changeset(sim, attrs) do
     sim

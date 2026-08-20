@@ -34,6 +34,15 @@ defmodule PhoenixApp.Accounts.User do
     field :background_preference, :string, default: "galaxy"
     field :background_custom_data, :map, default: %{}
 
+    # How many channels this user may create. Was a 5 hardcoded in
+    # Forum.Channel; now per-user so /shop can sell more. Not settable by the
+    # user - it is granted by a purchase or by an admin, so it is cast only in
+    # the admin changeset, never in registration or profile updates.
+    #
+    # This is also the Holo-sim limit, since a sim requires a channel. See
+    # Games.HoloSims for why the older holo_sim_slots counter no longer binds.
+    field :channel_allowance, :integer, default: 5
+
     # Invite & notification preferences
     field :allow_channel_invites, :boolean, default: true
     field :blocked_user_ids, {:array, :binary_id}, default: []
@@ -152,9 +161,12 @@ defmodule PhoenixApp.Accounts.User do
   # Admin changeset: allow updating status and correct roles
   def admin_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_opacity, :avatar_url, :role, :status, :email_verified_at, :background_preference, :background_custom_data])
+    |> cast(attrs, [:name, :email, :avatar_shape, :avatar_color, :avatar_opacity, :avatar_url, :role, :status, :email_verified_at, :background_preference, :background_custom_data, :channel_allowance])
     |> validate_required([:name, :email])
     |> validate_format(:email, ~r/@/)
+    # Zero is allowed - it is how you stop someone creating more without
+    # deleting what they have. The upper bound is a typo guard, not a policy.
+    |> validate_number(:channel_allowance, greater_than_or_equal_to: 0, less_than_or_equal_to: 1000)
     |> validate_inclusion(:role, ["admin", "gm", "editor", "moderator", "member", "guest", "banned"])
     |> validate_inclusion(:status, ["active", "disabled", "unverified"], message: "Invalid status")
     |> validate_number(:avatar_opacity, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)

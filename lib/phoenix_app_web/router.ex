@@ -29,6 +29,26 @@ defmodule PhoenixAppWeb.Router do
     plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "auth_login"
   end
 
+  # Gameplay traffic (character list/create, server list, holo-sim CRUD,
+  # server heartbeats). Needs the SAME Guardian behaviour as :api_auth -
+  # allow_blank: true, because a dedicated-server call authenticates with the
+  # server API key instead of a player bearer token and must not be rejected
+  # by Guardian before the controller ever sees it (that rules out
+  # :api_authenticated, whose EnsureAuthenticated plug would 401 those calls).
+  # What it must NOT share is :api_auth's rate limit bucket: that bucket is
+  # "auth_login" at 5 attempts / 5 minutes, sized for login POSTs, and every
+  # character refresh, server list poll and heartbeat from a single player or
+  # server was quietly spending it - a session that logs in and then opens the
+  # character screen a couple of times exhausts it before doing anything else.
+  pipeline :games_api do
+    plug :accepts, ["json"]
+    plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
+                                  error_handler: PhoenixAppWeb.AuthErrorHandler
+    plug Guardian.Plug.VerifyHeader, scheme: "Bearer"
+    plug Guardian.Plug.LoadResource, allow_blank: true
+    plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "api_general"
+  end
+
   pipeline :api_authenticated do
     plug :accepts, ["json"]
     plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
@@ -178,7 +198,7 @@ defmodule PhoenixAppWeb.Router do
   # Auth enforced per-request by GamesApiKeyOrAuth (player JWT or server API key)
   # --------------------
   scope "/api/games", PhoenixAppWeb do
-    pipe_through :api_auth
+    pipe_through :games_api
 
     # Shard registry. `servers` is readable by any authenticated player;
     # `heartbeat` and `offline` are refused unless the caller presented the

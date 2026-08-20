@@ -27,12 +27,28 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
   def index(conn, %{"game_slug" => slug} = params) do
     with {:ok, game} <- fetch_game(slug),
          {:ok, user_id} <- resolve_user_id(conn, params) do
+      owned_channels = PhoenixApp.Forum.list_owned_channels_with_sims(user_id)
+      allowance = PhoenixApp.Forum.channel_allowance(user_id)
+
       json(conn, %{
         success: true,
         owned: Enum.map(HoloSims.list_owned(game.id, user_id), &sim_json(&1, user_id)),
         shared: Enum.map(HoloSims.list_shared(game.id, user_id), &sim_json(&1, user_id)),
         public: Enum.map(HoloSims.list_public(game.id), &sim_json(&1, user_id)),
-        slots: HoloSims.slot_usage(game.id, user_id)
+
+        # Channels the player owns that have no world yet. This is what the door
+        # offers on "build a new one" - every channel made on the website starts
+        # here, and picking one costs nothing against the allowance because the
+        # channel was already paid for when it was created.
+        buildable_channels:
+          owned_channels
+          |> Enum.reject(& &1.has_sim)
+          |> Enum.map(fn %{channel: c} ->
+            %{id: c.id, name: c.name, is_public: c.is_public, icon_path: c.icon_path}
+          end),
+
+        # Used/total drives whether the client shows "new channel" or the shop.
+        channels: %{used: length(owned_channels), total: allowance}
       })
     else
       {:error, status, message} -> error(conn, status, message)
@@ -40,27 +56,87 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
   end
 
   # POST /holosims
+  #
+  # TWO SHAPES, ONE ENDPOINT.
+  #
+  #   channel_id present — build a world in a channel that already exists. This
+  #                        is every channel on the website: they were all made
+  #                        before Holo-sims existed and have none.
+  #   channel_id absent  — make a new channel and its world together, which is
+  #                        the in-game "new sim" button.
+  #
+  # Both end with a sim that has a channel. There is no path to a sim without
+  # one, because a sim without one has no access control list.
   def create(conn, %{"game_slug" => slug} = params) do
     with {:ok, game} <- fetch_game(slug),
          {:ok, user_id} <- resolve_user_id(conn, params) do
       attrs =
-        params
-        |> Map.take(["name", "description", "visibility", "kind", "spec", "template_id", "visitors_can_build"])
+        Map.take(params, [
+          "name",
+          "description",
+          "visibility",
+          "kind",
+          "spec",
+          "template_id",
+          "visitors_can_build"
+        ])
 
-      case HoloSims.create_sim(game.id, user_id, attrs) do
+      result =
+        case params["channel_id"] do
+          nil ->
+            case PhoenixApp.Accounts.get_user(user_id) do
+              nil -> {:error, :forbidden, "Unknown account."}
+              user -> HoloSims.create_for_channel(game.id, user, attrs)
+            end
+
+          channel_id ->
+            HoloSims.create_for_existing_channel(game.id, user_id, channel_id, attrs)
+        end
+
+      case result do
+        {:ok, sim, _channel} ->
+          conn |> put_status(:created) |> json(%{success: true, sim: sim_json(sim, user_id)})
+
         {:ok, sim} ->
           conn |> put_status(:created) |> json(%{success: true, sim: sim_json(sim, user_id)})
 
-        {:error, :slot_limit, message} ->
+        {:error, :already_exists, message} ->
           error(conn, 409, message)
 
-        {:error, changeset} ->
-          error(conn, 422, changeset_errors(changeset))
+        {:error, :forbidden, message} ->
+          error(conn, 403, message)
+
+        {:error, :no_channel, message} ->
+          error(conn, 422, message)
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          # The allowance failure arrives here, as an error on the channel's
+          # owner_id. Surfaced as 409 rather than 422 because it is not a
+          # malformed request - it is a correct request the account cannot
+          # afford, and the client should offer the shop rather than a
+          # validation message.
+          if allowance_error?(changeset) do
+            error(conn, 409, changeset_errors(changeset))
+          else
+            error(conn, 422, changeset_errors(changeset))
+          end
+
+        {:error, other} ->
+          error(conn, 422, inspect(other))
       end
     else
       {:error, status, message} -> error(conn, status, message)
     end
   end
+
+  defp allowance_error?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn
+      {:owner_id, {msg, _}} -> String.contains?(msg, "channels")
+      _ -> false
+    end)
+  end
+
+  defp allowance_error?(_), do: false
 
   # GET /holosims/:id — includes the spec, so it is gated on access
   def show(conn, %{"id" => id} = params) do
@@ -141,6 +217,9 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
         {:error, :already_owner, message} ->
           error(conn, 409, message)
 
+        {:error, :no_channel, message} ->
+          error(conn, 409, message)
+
         {:error, changeset} ->
           error(conn, 422, changeset_errors(changeset))
       end
@@ -162,8 +241,20 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
          {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id) do
       if sim.owner_user_id == user_id or target == user_id do
         case HoloSims.remove_member(sim.id, target) do
-          {:ok, _} -> json(conn, %{success: true})
-          {:error, :not_found} -> error(conn, 404, "That player is not a member")
+          {:ok, _} ->
+            json(conn, %{success: true})
+
+          {:error, :not_found} ->
+            error(conn, 404, "That player is not a member")
+
+          # The owner's access does not come from a membership row, so there is
+          # nothing to remove and removing it would lock them out of their own
+          # world. Deleting the sim is the action they actually want.
+          {:error, :cannot_remove_owner} ->
+            error(conn, 409, "The owner cannot be removed. Delete the Holo-sim instead.")
+
+          {:error, changeset} ->
+            error(conn, 422, changeset_errors(changeset))
         end
       else
         error(conn, 403, "Only the owner can remove other members")
@@ -180,9 +271,20 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
     with {:ok, _game} <- fetch_game(params["game_slug"]),
          {:ok, user_id} <- resolve_user_id(conn, params) do
       case HoloSims.accept_invite(id, user_id) do
-        {:ok, member} -> json(conn, %{success: true, member: member_json(member)})
-        {:error, :not_found} -> error(conn, 404, "No invitation found")
-        {:error, changeset} -> error(conn, 422, changeset_errors(changeset))
+        # Channel-backed sims have no acceptance step - being in the channel IS
+        # the access. Answered as success so an older client's accept call does
+        # not present a failure for something that already worked.
+        {:ok, :already_active} ->
+          json(conn, %{success: true, member: nil})
+
+        {:ok, member} ->
+          json(conn, %{success: true, member: member_json(member)})
+
+        {:error, :not_found} ->
+          error(conn, 404, "No invitation found")
+
+        {:error, changeset} ->
+          error(conn, 422, changeset_errors(changeset))
       end
     else
       {:error, status, message} -> error(conn, status, message)
@@ -459,6 +561,10 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
       id: sim.id,
       name: sim.name,
       description: sim.description,
+      # The channel is the sim's access control list and its chat. Sent so the
+      # client can deep-link to the forum, and so "who can enter this" has an
+      # answer the player can act on rather than a list they cannot change here.
+      channel_id: sim.channel_id,
       visibility: sim.visibility,
       kind: sim.kind,
       template_id: sim.template_id,
@@ -478,13 +584,18 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
     Enum.map(HoloSims.list_members(sim_id), &member_json/1)
   end
 
+  # TWO SHAPES ARRIVE HERE. A channel-backed sim returns ChannelMember structs;
+  # a sim that predates the link returns HoloSimMember structs. They share
+  # user_id and role and nothing else, so the rest is read defensively rather
+  # than by assuming a field exists - getting that wrong is a 500 on the door.
   defp member_json(member) do
     %{
       user_id: member.user_id,
       role: member.role,
-      invited_by_user_id: member.invited_by_user_id,
-      invited_at: member.invited_at,
-      accepted_at: member.accepted_at
+      joined_at: Map.get(member, :joined_at) || Map.get(member, :invited_at),
+      is_banned: Map.get(member, :is_banned, false),
+      # Legacy only; a channel member has no separate acceptance step.
+      accepted_at: Map.get(member, :accepted_at)
     }
   end
 

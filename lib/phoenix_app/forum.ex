@@ -7,6 +7,50 @@ defmodule PhoenixApp.Forum do
   alias PhoenixApp.Repo
   alias PhoenixApp.Forum.{Channel, Message, Reaction, Thread, ChannelMember, ChannelInvite}
 
+  @default_channel_allowance 5
+
+  @doc """
+  How many channels this user may create.
+
+  Falls back to the default when the user cannot be read, rather than to zero or
+  to unlimited. Zero would lock everyone out of channel creation on a transient
+  database hiccup; unlimited would turn the same hiccup into a way past a paid
+  limit. The default is wrong in the least damaging direction.
+  """
+  def channel_allowance(user_id) when is_binary(user_id) do
+    case Repo.get(PhoenixApp.Accounts.User, user_id) do
+      %{channel_allowance: n} when is_integer(n) -> n
+      _ -> @default_channel_allowance
+    end
+  end
+
+  def channel_allowance(_), do: @default_channel_allowance
+
+  def default_channel_allowance, do: @default_channel_allowance
+
+  @doc """
+  Channels this user owns, with whether each already has a Holo-sim.
+
+  Feeds the in-game door: the owner picks a channel to build in, and the ones
+  that already have a world are shown as such rather than offered and then
+  refused.
+  """
+  def list_owned_channels_with_sims(user_id) do
+    channels =
+      from(c in Channel, where: c.owner_id == ^user_id, order_by: [asc: c.position, asc: c.name])
+      |> Repo.all()
+
+    # One query for all of them, not one per channel.
+    sim_ids =
+      channels
+      |> Enum.map(& &1.id)
+      |> PhoenixApp.Games.SimAccess.channels_with_sims()
+
+    Enum.map(channels, fn channel ->
+      %{channel: channel, has_sim: MapSet.member?(sim_ids, channel.id)}
+    end)
+  end
+
   # Channels
   def list_channels do
     from(c in Channel, order_by: [asc: c.position, asc: c.name])
@@ -89,6 +133,19 @@ defmodule PhoenixApp.Forum do
     if String.downcase(channel.name) == "general" do
       {:error, :protected_channel}
     else
+      # THE HOLO-SIM GOES FIRST, AND OUTSIDE THE TRANSACTION.
+      #
+      # It lives in the other database, so it cannot join the transaction below
+      # - and if it could, it still would not belong there: a rolled-back
+      # channel delete would need the sim resurrected, which is not something a
+      # second database can be asked to do.
+      #
+      # Doing it first means the bad case is a sim deleted while its channel
+      # survives, leaving a channel with no world - recoverable, and the same
+      # state as a channel nobody has built in yet. The other order leaves a sim
+      # whose channel is gone, which has no access control list at all.
+      PhoenixApp.Games.SimAccess.channel_deleted(channel.id)
+
       # Start transaction to ensure all-or-nothing deletion
       Repo.transaction(fn ->
         # 1. Get all messages in this channel with their attachments
@@ -875,10 +932,15 @@ defmodule PhoenixApp.Forum do
     |> Repo.update()
     |> case do
       {:ok, updated_member} ->
-        # Broadcast ban event if user was just banned
-        if Map.get(attrs, :is_banned) == true or Map.get(attrs, "is_banned") == true do
+        # A ban and a removal have to do the same thing to a running world.
+        # Reading the RESULT rather than the attrs catches both spellings of
+        # is_banned and the role being set to "banned", which is the other way
+        # this happens and which the old attrs check missed entirely.
+        if updated_member.is_banned or updated_member.role == "banned" do
           pubsub_broadcast("channel:#{member.channel_id}", {:user_banned, member.user_id, member.channel_id})
+          PhoenixApp.Games.SimAccess.revoke_access(member.channel_id, member.user_id)
         end
+
         {:ok, updated_member}
       error -> error
     end
@@ -910,10 +972,21 @@ defmodule PhoenixApp.Forum do
   def remove_channel_member(channel_id, user_id) do
     case get_channel_member(channel_id, user_id) do
       nil -> {:error, :not_found}
-      member -> 
+      member ->
         case Repo.delete(member) do
           {:ok, deleted_member} ->
             pubsub_broadcast("channel:#{channel_id}", {:user_kicked, user_id, channel_id})
+
+            # AND OUT OF THE HOLO-SIM. Removing the membership stops the next
+            # join; someone already standing in the world is unaffected by it,
+            # because access is checked when they enter and never again.
+            #
+            # Deliberately not in a Task: this is the security half of the
+            # action, and a caller that got {:ok, _} should be able to believe
+            # the kick was queued. It is one indexed query and one insert
+            # against a database that is already open.
+            PhoenixApp.Games.SimAccess.revoke_access(channel_id, user_id)
+
             {:ok, deleted_member}
           error -> error
         end

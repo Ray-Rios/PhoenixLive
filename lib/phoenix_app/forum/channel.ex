@@ -46,22 +46,48 @@ defmodule PhoenixApp.Forum.Channel do
     |> maybe_generate_invite_code()
   end
 
+  # THE LIMIT IS PER USER AND LIVES ON THE USER ROW.
+  #
+  # Was a literal 5. /shop will sell channel slots, so the number has to be
+  # something a purchase can increment - see users.channel_allowance.
+  #
+  # This is now also the HOLO-SIM limit. A sim requires a channel (one channel,
+  # at most one sim), so this check is the only one that can bind, and the older
+  # holo_sim_slots counter no longer does. Two limits on one thing would mean
+  # the error message names whichever happened to trip first, which is not
+  # necessarily the one the player has to do something about.
+  #
+  # NOT A RACE-FREE CHECK, DELIBERATELY. Two simultaneous creates can both read
+  # the count before either inserts, so a determined user can exceed their
+  # allowance by one. The consequence is one extra channel; the fix is a
+  # transaction with a row lock, and it is not worth taking a lock on every
+  # channel create to prevent that. HoloSims.create_sim does hold a lock,
+  # because there the same race would hand out an unpaid-for game resource.
   defp validate_channel_limit(changeset) do
     case get_change(changeset, :owner_id) do
-      nil -> 
+      nil ->
         changeset
+
       owner_id ->
-        # Only validate limit for user-created channels
-        if get_field(changeset, :is_user_created) do
+        # Existing channels are being edited, not created - an owner at their
+        # limit must still be able to rename what they already have.
+        if get_field(changeset, :is_user_created) and is_nil(get_field(changeset, :id)) do
           import Ecto.Query
-          
-          count = PhoenixApp.Repo.aggregate(
-            from(c in __MODULE__, where: c.owner_id == ^owner_id and c.is_user_created == true),
-            :count
-          )
-          
-          if count >= 5 && is_nil(get_field(changeset, :id)) do
-            add_error(changeset, :owner_id, "You can only create up to 5 channels")
+
+          allowance = PhoenixApp.Forum.channel_allowance(owner_id)
+
+          count =
+            PhoenixApp.Repo.aggregate(
+              from(c in __MODULE__, where: c.owner_id == ^owner_id and c.is_user_created == true),
+              :count
+            )
+
+          if count >= allowance do
+            add_error(
+              changeset,
+              :owner_id,
+              "You are using #{count} of #{allowance} channels. Delete one, or buy more slots."
+            )
           else
             changeset
           end

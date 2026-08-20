@@ -241,9 +241,10 @@ if kubectl get pv phoenix-models-local-pv &> /dev/null; then
     PV_STATUS=$(kubectl get pv phoenix-models-local-pv -o jsonpath='{.status.phase}')
 
     if [ "$PV_STATUS" = "Released" ]; then
-        # Remove claimRef to make it Available again for phoenix-models-pvc
-        kubectl patch pv phoenix-models-local-pv --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]' 2>/dev/null || true
-        print_status "Phoenix models PV reclaimed"
+        # For manual storage class, delete and recreate (same as uploads)
+        kubectl delete pv phoenix-models-local-pv
+        # PV will be recreated by kustomize
+        print_status "Phoenix models PV will be recreated"
     fi
 fi
 echo "🐦‍🔥 Deploying Production"
@@ -258,13 +259,6 @@ if ! command -v kubectl &> /dev/null; then
     exit 1
 fi
 print_status "kubectl is available"
-
-# Check if Node.js is available
-if ! command -v node &> /dev/null; then
-    print_error "Node.js is not installed or not in PATH"
-    exit 1
-fi
-print_status "Node.js is available"
 
 # Note: Linting is handled by GitHub Actions CI
 # Docker build will catch any real compilation errors
