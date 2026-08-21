@@ -33,8 +33,21 @@ defmodule PhoenixApp.Games.GameCharacter do
   def changeset(character, attrs) do
     character
     |> cast(attrs, [:user_id, :game_id, :name, :stats, :settings, :last_played_at])
+    |> update_change(:name, &(&1 |> to_string() |> String.trim()))
     |> validate_required([:user_id, :game_id, :name])
+    |> validate_length(:name, min: 1, max: 24)
+    # Letters (any script), digits, spaces, apostrophes and hyphens. Nothing
+    # about this is a security boundary - `name` never reaches a shell, a
+    # query template, or another player's client unescaped - it is here so a
+    # character sheet is a name a player would recognise as their own instead
+    # of a swearword-shaped string a client with no validation happened to let
+    # through.
+    |> validate_format(:name, ~r/^[\p{L}\p{N} '\-]+$/u,
+      message: "can only contain letters, numbers, spaces, apostrophes and hyphens")
     |> foreign_key_constraint(:game_id)
-    |> unique_constraint([:game_id, :user_id, :name], name: :game_characters_game_id_user_id_name_index)
+    # Unique per game, not per (game, user) - a character name is what other
+    # players see, so two different accounts cannot both be "Wesley" in the
+    # same game. Matches the games_repo migration's game_characters_game_id_name_index.
+    |> unique_constraint([:game_id, :name], name: :game_characters_game_id_name_index)
   end
 end

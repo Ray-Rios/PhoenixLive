@@ -1,5 +1,5 @@
 #epicgames github pat
-epic.md
+epic_gameserver.md
 # Sensitive configuration files
 k3s/overlays/prod/ingress.yaml
 k3s/overlays/prod/mailhog-auth-secret.yaml
