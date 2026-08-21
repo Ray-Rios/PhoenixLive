@@ -153,9 +153,12 @@ kubectl logs -n phoenixapp -l app=phoenix-web -f | grep -i "phx_join" --line-buf
 
 
 AI context:
-This project is a kubernetes k3s build. please run commands through kubectl as neccessary. This is a phoenix application with postgres and redis. I have an API layer so I can extend this program outside this applicaiton.
-
-AI context: please do no execute migrations in the pods themselves. update the files and re-deploy the kubernetes manifest. We've been down this road before and it causes severe docker issues.
+Starting a new chat on this massive project we have cooking. PhxLive.net is my website/api server. RaysSpaceSim is an Unreal Engine 5.8.2 build that is utilizing a source compiled engine at C:\UnrealEngine. We've just integrated api authentication end-to-end. There is a world server we have to have running prior to logging on. Logged in players can see each other moving, but movement itself i horribly broken. We've gone through several rounds to ensure orbiting planets are fully synced between server and client via divergence logs ran on both.
+The first time a player to logs in (currently using PIE with two characters), they cannot move away from the starting point and other players see this first player as frozen. Subsequent loggings will allow the character to move, but horribly jittery. No players can jump (animation plays, but no height is ever gained and other players do not see the jump animation).
+Initiating flight changes to the carrot ship for the player, but others do not see it. The ship cannot travel vertically. They can only move on the ground as if they truly are still the Aurora character everyone else sees moving around.
+There are a lot of parallel efforts documented that we've been working on, but the character movement and flight is by far the most critical so we can get back to how the game was before we got character logins to work.
+Another thing I noticed: The same character can be logged in multiple times (no IsOnline check).
+Please ask questions if you need clairity.
 
 
 kubectl apply -k k3s/overlays/prod/
