@@ -178,6 +178,66 @@ defmodule PhoenixApp.Kubernetes do
     end
   end
 
+  # -------------------------------------------------------------------------
+  # Services
+  #
+  # WHY A SERVICE AT ALL, WHEN THE POD ALREADY DECLARES A hostPort.
+  #
+  # `hostPort` binds on the NODE. On a real cluster the node is the machine
+  # whose address players connect to, so that is enough. Under Docker Desktop
+  # the node is a Linux VM, and a pod hostPort inside it is NOT published to the
+  # Windows host - `netstat -an | findstr 7777` on the host shows nothing, the
+  # router forwards to a port with no listener, and the client sits there
+  # sending UDP into a hole with no error anywhere to explain it.
+  #
+  # Docker Desktop DOES publish Services of type LoadBalancer to the host. So
+  # the world server gets one, and that is what actually makes it reachable.
+  # -------------------------------------------------------------------------
+
+  @doc "Fetch a Service. `{:error, :not_found}` when it does not exist."
+  def get_service(namespace, name) do
+    case request(:get, "/api/v1/namespaces/#{namespace}/services/#{name}", nil) do
+      {:ok, 200, body} -> {:ok, body}
+      {:ok, 404, _} -> {:error, :not_found}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Create a Service. 409 is reported as `{:error, :already_exists}`."
+  def create_service(namespace, manifest) do
+    case request(:post, "/api/v1/namespaces/#{namespace}/services", manifest) do
+      {:ok, 201, body} -> {:ok, get_in(body, ["metadata", "name"])}
+      {:ok, 409, _} -> {:error, :already_exists}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Update an existing Service with a strategic merge patch."
+  def patch_service(namespace, name, patch) do
+    path = "/api/v1/namespaces/#{namespace}/services/#{name}"
+
+    case request(:patch, path, patch, content_type: "application/strategic-merge-patch+json") do
+      {:ok, 200, body} -> {:ok, body}
+      {:ok, 404, _} -> {:error, :not_found}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Delete a Service. Missing counts as success."
+  def delete_service(namespace, name) do
+    case request(:delete, "/api/v1/namespaces/#{namespace}/services/#{name}", nil) do
+      {:ok, status, _} when status in [200, 202] -> :ok
+      {:ok, 404, _} -> :ok
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # -------------------------------------------------------------------------
+
   @doc "Pods matching a label selector."
   def list_pods(namespace, label_selector) do
     path =

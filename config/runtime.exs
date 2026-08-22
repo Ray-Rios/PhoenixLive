@@ -155,10 +155,16 @@ config :phoenix_app, PhoenixApp.Games.InstanceLauncher,
   max_lifetime_seconds:
     String.to_integer(System.get_env("HOLOSIM_MAX_LIFETIME_SECONDS", "14400")),
   secret_name: System.get_env("HOLOSIM_SECRET_NAME", "phoenix-secrets"),
+
+  # NO :4000. That is the CONTAINER port; the phoenix-web Service publishes
+  # `port: 80, targetPort: 4000`, so the Service has no port 4000 to connect to.
+  # Naming it does not fail fast - there is no endpoint behind it, so the packets
+  # are dropped and the caller waits out its own timeout instead of being
+  # refused. See the matching comment in InstanceLauncher.
   hub_url:
     System.get_env(
       "HOLOSIM_HUB_URL",
-      "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
+      "http://phoenix-web.phoenixapp.svc.cluster.local"
     )
 
 # -------------------------------------------------
@@ -224,10 +230,16 @@ config :phoenix_app, PhoenixApp.Games.WorldServerLauncher,
   public_host: System.get_env("WORLD_PUBLIC_HOST", "127.0.0.1"),
   public_port: world_public_port,
   secret_name: System.get_env("WORLD_SECRET_NAME", "raysspacesim-secrets"),
+
+  # NO :4000, and the namespace is spelled out. Both matter here: this pod lives
+  # in `raysspacesim`, so a bare `phoenix-web` would not resolve at all, and the
+  # Service publishes port 80 (targetPort 4000) - so :4000 resolves, connects to
+  # nothing, and produces "HTTP request timed out after 15.00 seconds" rather
+  # than a refusal.
   hub_url:
     System.get_env(
       "WORLD_HUB_URL",
-      "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
+      "http://phoenix-web.phoenixapp.svc.cluster.local"
     )
 
 config :phoenix_app, PhoenixApp.GamesRepo,
@@ -259,8 +271,18 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
     host: System.get_env("PHOENIX_HOST") || "localhost", 
     port: if(config_env() == :prod, do: 443, else: http_port),
     scheme: if(config_env() == :prod, do: "https", else: "http")
-  ],
-  force_ssl: [rewrite_on: [:x_forwarded_proto]]
+  ]
+
+  # NO force_ssl HERE. IT WOULD BE SILENTLY IGNORED.
+  #
+  # `:force_ssl` is a COMPILE-TIME endpoint option - Phoenix injects
+  # `plug Plug.SSL, <opts>` in __before_compile__, so the options are baked into
+  # the compiled endpoint and runtime.exs is far too late to change them. This
+  # block used to carry a force_ssl line; it did nothing, and looked like it did
+  # something, which is worse than not being here at all.
+  #
+  # The real one is in config/prod.exs. Changing it needs a REBUILD, not just a
+  # restart.
 
 # -------------------------------------------------
 # Guardian runtime config

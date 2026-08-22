@@ -480,6 +480,33 @@ for i in {1..10}; do
 done
 echo ""
 
+# FORCE A ROLLOUT. THE APPLY ABOVE DOES NOT CAUSE ONE.
+#
+# `phoenixapp:prod` is a MUTABLE tag. Every run rebuilds the image under the
+# same name, so the Deployment spec kubectl apply produces is byte-identical to
+# the one already in the cluster - and an apply that changes nothing restarts
+# nothing. The freshly built image sits in the image store, unused, while the
+# old pods keep serving the old code.
+#
+# Everything about the deploy LOOKS successful when this happens: the build
+# says it succeeded, the apply says configured, the health check passes. The
+# only symptom is that the change you just deployed is not there, which sends
+# you looking at the change instead of at the deploy. That cost most of a night
+# chasing a `force_ssl` fix that had been built four times and never once run.
+#
+# deploy-game.sh has always done this (see set_live_image); this is the same
+# guard for the web image. `rollout restart` stamps a timestamp annotation on
+# the pod template, which is a real spec change, so Kubernetes cycles the pods
+# and they pull the current `phoenixapp:prod`.
+#
+# The `rollout status` is not decoration: without it the wait below can pass
+# against the OUTGOING pods, which are still available, and the script would
+# report success before the new code was serving anything.
+echo "🔄 Restarting Phoenix pods to pick up the new image..."
+kubectl rollout restart deployment/phoenix-web -n phoenixapp
+kubectl rollout status deployment/phoenix-web -n phoenixapp --timeout=300s
+print_status "Phoenix pods are running the freshly built image"
+
 # Wait for deployment to be ready
 echo "⏳ Waiting for deployment to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/phoenix-web -n phoenixapp

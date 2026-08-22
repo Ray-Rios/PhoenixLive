@@ -91,6 +91,12 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
       ns = namespace()
       manifest = manifest(opts)
 
+      # Before the Deployment, and deliberately not fatal - see ensure_service/1.
+      # A world server with no Service is unreachable; a world server whose
+      # Service failed to create is ALSO worth starting, because the pod logs
+      # are then the fastest way to find out why.
+      ensure_service(ns)
+
       case Kubernetes.create_deployment(ns, manifest) do
         {:ok, name} ->
           Logger.info("Created world server deployment #{name} in #{ns}")
@@ -135,6 +141,11 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
   @doc "Delete the Deployment outright. The one destructive operation here."
   def remove do
     with :ok <- ensure_available() do
+      # The Service goes with it. Leaving one behind would hold the host port
+      # bound with no pod behind it, so the next Start would look successful
+      # and connect to nothing.
+      _ = Kubernetes.delete_service(namespace(), service_name())
+
       case Kubernetes.delete_deployment(namespace(), deployment_name()) do
         :ok -> {:ok, :removed}
         error -> log_error("remove", error)
@@ -303,6 +314,86 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
   defp describe(other), do: inspect(other)
 
   # -------------------------------------------------------------------------
+  # The Service, and why the pod's hostPort is not enough
+  #
+  # `hostPort: 7777/UDP` binds on the NODE. On a cluster whose node is the
+  # machine players reach, that is the whole story. Under Docker Desktop the
+  # node is a Linux VM and the pod's hostPort is NOT published to the Windows
+  # host: `netstat -an | findstr 7777` on the host shows nothing at all, so a
+  # router forward to 7777 points at a port nobody is listening on. The client
+  # then sends UDP for ten seconds and reports "no packets received yet", which
+  # names neither the VM nor the missing binding.
+  #
+  # Docker Desktop DOES publish type: LoadBalancer Services on the host, which
+  # is why this exists. NodePort would not do: its default range is
+  # 30000-32767, so it cannot offer 7777 without reconfiguring the apiserver.
+  #
+  # The hostPort stays on the pod as well. It costs nothing on a single-node
+  # cluster (its only real cost is pinning the pod to one node) and it is the
+  # path that works on a normal cluster where the LoadBalancer type has no
+  # controller behind it.
+  # -------------------------------------------------------------------------
+
+  defp ensure_service(ns) do
+    manifest = service_manifest()
+
+    result =
+      case Kubernetes.create_service(ns, manifest) do
+        {:ok, name} ->
+          Logger.info("Created world server service #{name} in #{ns}")
+          :ok
+
+        # PATCH RATHER THAN LEAVE ALONE: an existing Service may be from an
+        # older spec with a different port, and a stale port here is invisible -
+        # the Service exists, the pod runs, and packets go nowhere.
+        {:error, :already_exists} ->
+          case Kubernetes.patch_service(ns, service_name(), manifest) do
+            {:ok, _} -> :ok
+            error -> error
+          end
+
+        error ->
+          error
+      end
+
+    # NOT FATAL, ON PURPOSE. If the Service cannot be created - most likely the
+    # RBAC in k3s/raysspacesim has not been re-applied since `services` was
+    # added to the Role - starting the Deployment anyway means the admin screen
+    # shows a running pod and this line in the log, which is a far better
+    # position to debug from than a Start button that refuses with one error.
+    case result do
+      :ok -> :ok
+      other -> log_error("service", other)
+    end
+  end
+
+  defp service_manifest do
+    port = config(:port)
+
+    %{
+      "apiVersion" => "v1",
+      "kind" => "Service",
+      "metadata" => %{
+        "name" => service_name(),
+        "namespace" => namespace(),
+        "labels" => %{"app" => @label}
+      },
+      "spec" => %{
+        "type" => "LoadBalancer",
+        "selector" => %{"app" => @label},
+        "ports" => [
+          %{
+            "name" => "game",
+            "protocol" => "UDP",
+            "port" => port,
+            "targetPort" => port
+          }
+        ]
+      }
+    }
+  end
+
+  defp service_name, do: deployment_name()
 
   defp manifest(opts) do
     port = config(:port)
@@ -434,7 +525,15 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
   defp default(:public_host), do: "127.0.0.1"
   defp default(:public_port), do: nil
   defp default(:secret_name), do: "raysspacesim-secrets"
-  defp default(:hub_url), do: "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
+  # PORT 80, NOT 4000. 4000 is what the CONTAINER listens on; the Service in
+  # front of it publishes `port: 80, targetPort: 4000` (k3s/base/phoenix-deployment.yaml,
+  # and overlays/prod/service-patch.yaml keeps it that way). A Service has no
+  # port 4000 at all, so :4000 here does not get refused - kube-proxy has no
+  # endpoint to send it to, the packets go nowhere, and the server sits there
+  # until UE gives up: "HTTP request timed out after 15.00 seconds". A timeout
+  # rather than a refusal is the tell that the name resolved and the port did
+  # not exist.
+  defp default(:hub_url), do: "http://phoenix-web.phoenixapp.svc.cluster.local"
 
   defp default(:resources),
     do: %{

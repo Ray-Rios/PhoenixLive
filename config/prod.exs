@@ -14,7 +14,56 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   #   "//localhost",
   #   "//127.0.0.1"
   # ],
-  force_ssl: [rewrite_on: [:x_forwarded_proto], log: false, exclude: ["health"]],
+  # THIS IS THE ONLY force_ssl THAT DOES ANYTHING. IT MUST LIVE HERE.
+  #
+  # `:force_ssl` is a COMPILE-TIME endpoint option: Phoenix injects `plug
+  # Plug.SSL, <these opts>` into the endpoint's pipeline in __before_compile__,
+  # so the options are frozen into the compiled module. Setting `force_ssl` in
+  # runtime.exs looks reasonable, is accepted without complaint, and is inert -
+  # see the note left at that spot. Changing it here requires a rebuild, not
+  # just a restart.
+  #
+  # WHY THE EXCLUDE LIST. Public traffic arrives through the nginx ingress,
+  # which terminates TLS and sets X-Forwarded-Proto: https, so `rewrite_on` lets
+  # it through. A pod calling the Service directly sets no such header, so
+  # Plug.SSL answers 301 to https://phxlive.net (the redirect target is the
+  # endpoint's :url host, which is why it is not the request host).
+  #
+  # For a browser that is invisible. For the game server's heartbeat POST it is
+  # fatal, and the failure names neither TLS nor a redirect:
+  #
+  #   Connected to phoenix-web.phoenixapp.svc.cluster.local (10.96.162.255) port 80
+  #   upload completely sent off: 194 bytes
+  #   Clear auth, redirects to port from 80 to 443
+  #   necessary data rewind was not possible
+  #   libcurl error: 65 (Send failed since rewinding of the data stream failed)
+  #
+  # libcurl has already streamed the body and cannot rewind it to replay at the
+  # new URL. Note "Clear auth" too: a cross-host redirect STRIPS the
+  # Authorization header, so even a request that survived the rewind would
+  # arrive with no server API key and be refused. Two failures, one redirect.
+  #
+  # Excluding these names is not a hole. The redirect protects a client that
+  # would otherwise send credentials in plaintext across the internet; these
+  # names resolve only inside the cluster, where the traffic never leaves the
+  # node. "health" is pre-existing and inert (Plug.SSL matches on HOST, and no
+  # request arrives with a Host of "health") - kept only so removing it is a
+  # separate, deliberate decision.
+  force_ssl: [
+    rewrite_on: [:x_forwarded_proto],
+    log: false,
+    exclude: [
+      "localhost",
+      "health",
+      "phoenix-web",
+      "phoenix-web.phoenixapp",
+      "phoenix-web.phoenixapp.svc",
+      "phoenix-web.phoenixapp.svc.cluster.local",
+      "phoenix-web.phoenixapp-dev",
+      "phoenix-web.phoenixapp-dev.svc",
+      "phoenix-web.phoenixapp-dev.svc.cluster.local"
+    ]
+  ],
   server: true,
   secret_key_base: (System.get_env("SECRET_KEY_BASE") ||
     raise("SECRET_KEY_BASE is missing. Generate with `mix phx.gen.secret`")),

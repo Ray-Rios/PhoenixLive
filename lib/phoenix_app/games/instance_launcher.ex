@@ -274,7 +274,10 @@ defmodule PhoenixApp.Games.InstanceLauncher do
   defp default(:ttl_seconds), do: 600
   defp default(:max_lifetime_seconds), do: 14_400
   defp default(:secret_name), do: "phoenix-secrets"
-  defp default(:hub_url), do: "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
+  # PORT 80, NOT 4000 - see the same default in WorldServerLauncher. 4000 is the
+  # container port; the Service publishes 80 and targets 4000, so :4000 has no
+  # Service port to land on and times out rather than being refused.
+  defp default(:hub_url), do: "http://phoenix-web.phoenixapp.svc.cluster.local"
 
   defp default(:resources),
     do: %{
