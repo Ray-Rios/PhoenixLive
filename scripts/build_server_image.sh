@@ -118,7 +118,7 @@ if [ -f "$UE_ROOT/Engine/Build/InstalledBuild.txt" ]; then
   echo
   echo "  1. Build UE 5.8 from source (github.com/EpicGames/UnrealEngine)"
   echo "     into C:\\UnrealEngine, or point UE_ROOT at where it already is:"
-  echo "       UE_ROOT=/c/path/to/UnrealEngine ./deploy-game.sh --build-only"
+  echo "       UE_ROOT=/c/path/to/UnrealEngine ./deploy-game.sh --+-only"
   echo
   echo "  2. Cook inside Epic's engine container, which IS a source engine."
   echo "     That is what the earlier Dockerfile did, and this is the real"
