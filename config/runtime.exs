@@ -161,6 +161,75 @@ config :phoenix_app, PhoenixApp.Games.InstanceLauncher,
       "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
     )
 
+# -------------------------------------------------
+# World server orchestration
+#
+# The admin section's start/stop/logs controls for the persistent world, which
+# until now was `Scripts\run_world_server.bat` on a desktop.
+#
+# Same optionality as the Holo-sim block above: with WORLD_IMAGE unset the
+# launcher reports itself unavailable and the admin screen says so, rather than
+# offering buttons that cannot work. A hand-started world server still
+# heartbeats in exactly as before - this adds a way to start one in the
+# cluster, it does not become the only way.
+#
+# The same command-as-CSV trick, for the same reason: WORLD_COMMAND="sleep,3600"
+# with WORLD_IMAGE=busybox exercises create, scale, status and log paths without
+# needing a server image.
+# -------------------------------------------------
+world_command =
+  case System.get_env("WORLD_COMMAND") do
+    nil ->
+      nil
+
+    "" ->
+      nil
+
+    csv ->
+      csv
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+  end
+
+world_public_port =
+  case System.get_env("WORLD_PUBLIC_PORT") do
+    nil -> nil
+    "" -> nil
+    value -> String.to_integer(value)
+  end
+
+config :phoenix_app, PhoenixApp.Games.WorldServerLauncher,
+  # The same packaged image the Holo-sims use. A world server is that image
+  # WITHOUT -HoloSimId=, so there is no second thing to build or keep in step.
+  image: System.get_env("WORLD_IMAGE") || System.get_env("HOLOSIM_IMAGE"),
+  image_pull_policy: System.get_env("WORLD_IMAGE_PULL_POLICY", "IfNotPresent"),
+  command: world_command,
+
+  # Its own namespace, so a workload that parses untrusted network input for a
+  # living is not sharing one with the web app and the database. Needs the Role
+  # and RoleBinding in k3s/base/raysspacesim.yaml, and its own copy of the API
+  # key Secret - a Secret cannot be read across namespaces.
+  namespace: System.get_env("WORLD_NAMESPACE", "raysspacesim"),
+  deployment_name: System.get_env("WORLD_DEPLOYMENT_NAME", "rss-world-server"),
+
+  # The map the world runs. Cosmos is the world map; FrontEnd is the menu and
+  # its game mode does not heartbeat, so a server started on it registers
+  # nothing and looks broken.
+  map: System.get_env("WORLD_MAP", "Cosmos"),
+  port: String.to_integer(System.get_env("WORLD_PORT", "7777")),
+
+  # The address a GAME CLIENT can reach, which is not the address the cluster
+  # knows itself by. Wrong here means a shard that appears in the browser and
+  # times out on connect - the plugin refuses to guess it for that reason.
+  public_host: System.get_env("WORLD_PUBLIC_HOST", "127.0.0.1"),
+  public_port: world_public_port,
+  secret_name: System.get_env("WORLD_SECRET_NAME", "raysspacesim-secrets"),
+  hub_url:
+    System.get_env(
+      "WORLD_HUB_URL",
+      "http://phoenix-web.phoenixapp.svc.cluster.local:4000"
+    )
+
 config :phoenix_app, PhoenixApp.GamesRepo,
   adapter: Ecto.Adapters.Postgres,
   url: games_database_url,

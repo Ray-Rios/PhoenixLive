@@ -196,7 +196,17 @@ defmodule PhoenixApp.Games.InstanceLauncher do
                   "-HoloSimUserId=#{user_id}",
                   "-PhxHost=#{config(:public_host)}",
                   "-PhxPort=#{port}",
-                  "-Port=#{port}"
+                  "-Port=#{port}",
+                  # UPhxAccountSettings::GetNormalizedBaseUrl only ever reads
+                  # -PhxBaseUrl= off the command line (or the ini baked in at cook
+                  # time) - there is no environment-variable path for it. Without
+                  # this the instance talks to whatever hub was baked into the
+                  # image, which is wrong the moment that image gets deployed
+                  # anywhere else. Left UNQUOTED: this list is handed straight to
+                  # the container's ENTRYPOINT as argv, no shell in between, so
+                  # literal `"` characters would become part of the value instead
+                  # of being stripped the way they are in run_world_server.bat.
+                  "-PhxBaseUrl=#{config(:hub_url)}"
                 ],
                 "ports" => [
                   %{
@@ -214,6 +224,11 @@ defmodule PhoenixApp.Games.InstanceLauncher do
                   # what lets the instance validate joins at all - without it
                   # every player is refused and the instance looks broken rather
                   # than unconfigured.
+                  #
+                  # No env var for the hub URL: FPlatformMisc::GetEnvironmentVariable
+                  # is only ever called for ServerApiKeyEnvVar. The hub address goes
+                  # in as -PhxBaseUrl= above instead, which is what the plugin
+                  # actually reads.
                   %{
                     "name" => "PHX_GAMES_SERVER_API_KEY",
                     "valueFrom" => %{
@@ -222,8 +237,7 @@ defmodule PhoenixApp.Games.InstanceLauncher do
                         "key" => "GAMES_SERVER_API_KEY"
                       }
                     }
-                  },
-                  %{"name" => "PHX_API_BASE_URL", "value" => config(:hub_url)}
+                  }
                 ],
                 "resources" => config(:resources)
               })

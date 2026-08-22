@@ -107,15 +107,139 @@ defmodule PhoenixApp.Kubernetes do
   end
 
   # -------------------------------------------------------------------------
+  # Deployments
+  #
+  # A SECOND WORKLOAD KIND, AND THE REASON IT IS NOT A JOB.
+  #
+  # Holo-sim instances are Jobs because they are ephemeral: they retire when
+  # empty, must not restart by themselves, and want a TTL that cleans them up.
+  # The world server is the opposite of every one of those. It is meant to stay
+  # up for days, a crash is something you want recovered rather than
+  # remembered, and "start" and "stop" are operations an admin performs rather
+  # than a lifecycle it manages itself.
+  #
+  # That is exactly a Deployment: replicas 1 is running, replicas 0 is stopped,
+  # and the object survives being stopped - so the admin screen can show a
+  # world server that is deliberately down, rather than one that is merely
+  # absent, which is a distinction a Job cannot express.
+  # -------------------------------------------------------------------------
 
-  defp request(method, path, body) do
+  @doc "Fetch a Deployment. `{:error, :not_found}` when it does not exist."
+  def get_deployment(namespace, name) do
+    case request(:get, "/apis/apps/v1/namespaces/#{namespace}/deployments/#{name}", nil) do
+      {:ok, 200, body} -> {:ok, body}
+      {:ok, 404, _} -> {:error, :not_found}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Create a Deployment. 409 is reported as `{:error, :already_exists}`."
+  def create_deployment(namespace, manifest) do
+    case request(:post, "/apis/apps/v1/namespaces/#{namespace}/deployments", manifest) do
+      {:ok, 201, body} -> {:ok, get_in(body, ["metadata", "name"])}
+      {:ok, 409, _} -> {:error, :already_exists}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Update an existing Deployment with a strategic merge patch.
+
+  A PATCH rather than a PUT, and the difference matters: a replace has to carry
+  a matching `resourceVersion` or the API rejects it, which turns every update
+  into a read-modify-write with a retry loop. A strategic merge patch says only
+  what changed and lets the API server merge it, so changing the image or the
+  replica count is one call that cannot lose a concurrent edit to some other
+  field.
+  """
+  def patch_deployment(namespace, name, patch) do
+    path = "/apis/apps/v1/namespaces/#{namespace}/deployments/#{name}"
+
+    case request(:patch, path, patch, content_type: "application/strategic-merge-patch+json") do
+      {:ok, 200, body} -> {:ok, body}
+      {:ok, 404, _} -> {:error, :not_found}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Delete a Deployment and the pods it owns. Missing counts as success."
+  def delete_deployment(namespace, name) do
+    path =
+      "/apis/apps/v1/namespaces/#{namespace}/deployments/#{name}?propagationPolicy=Background"
+
+    case request(:delete, path, nil) do
+      {:ok, status, _} when status in [200, 202] -> :ok
+      {:ok, 404, _} -> :ok
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Pods matching a label selector."
+  def list_pods(namespace, label_selector) do
+    path =
+      "/api/v1/namespaces/#{namespace}/pods?labelSelector=" <>
+        URI.encode_www_form(label_selector)
+
+    case request(:get, path, nil) do
+      {:ok, 200, body} -> {:ok, Map.get(body, "items", [])}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Tail a pod's logs.
+
+  Options: `:tail_lines`, `:container`, `:previous`, `:timestamps`.
+
+  `:previous` reads the logs of the last TERMINATED container rather than the
+  running one, which is the only way to see why something crash-looped - by the
+  time an admin looks, the container that failed has already been replaced.
+
+  Returns raw text. This endpoint does not answer JSON, and decoding it as
+  though it did would either mangle the output or, on the day a log line
+  happens to be a valid JSON object, silently turn it into a map.
+  """
+  def pod_logs(namespace, pod_name, opts \\ []) do
+    query =
+      [
+        {"tailLines", Keyword.get(opts, :tail_lines, 200)},
+        {"timestamps", Keyword.get(opts, :timestamps, true)},
+        {"container", Keyword.get(opts, :container)},
+        {"previous", Keyword.get(opts, :previous)}
+      ]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Enum.map_join("&", fn {k, v} -> "#{k}=#{URI.encode_www_form(to_string(v))}" end)
+
+    path = "/api/v1/namespaces/#{namespace}/pods/#{pod_name}/log?" <> query
+
+    case request(:get, path, nil, raw: true) do
+      {:ok, 200, text} -> {:ok, text}
+      {:ok, 404, _} -> {:error, :not_found}
+      # A pod that has not started yet has no log to give, and the API says so
+      # in a message worth passing through ("container is in waiting state").
+      {:ok, status, text} -> {:error, {:http, status, text}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # -------------------------------------------------------------------------
+
+  defp request(method, path, body, opts \\ []) do
     with {:ok, token} <- File.read(Path.join(@sa_dir, "token")) do
       url = api_url() <> path
 
       headers = [
         {"Authorization", "Bearer " <> String.trim(token)},
         {"Accept", "application/json"},
-        {"Content-Type", "application/json"}
+        # PATCH is the exception: Kubernetes decides which KIND of patch it has
+        # been sent from the content type alone, so a strategic merge patch
+        # posted as plain application/json is rejected as unsupported.
+        {"Content-Type", Keyword.get(opts, :content_type, "application/json")}
       ]
 
       payload = if is_nil(body), do: "", else: Jason.encode!(body)
@@ -126,9 +250,11 @@ defmodule PhoenixApp.Kubernetes do
         ssl: [
           verify: :verify_peer,
           cacertfile: Path.join(@sa_dir, "ca.crt"),
-          # Without this hackney checks the hostname against the cert, and the
-          # in-cluster address is an IP while the cert is issued for
-          # kubernetes.default.svc - so verification fails on a correct setup.
+          # SNI, and the reason the connection is made by DNS name at all - see
+          # api_host/0. Without this hackney has no host to put in the
+          # ClientHello, which some API server fronts (anything TLS-terminated
+          # by a name-based proxy) need to pick the right certificate.
+          server_name_indication: String.to_charlist(api_host()),
           customize_hostname_check: [
             match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
           ]
@@ -137,7 +263,12 @@ defmodule PhoenixApp.Kubernetes do
 
       case HTTPoison.request(method, url, payload, headers, options) do
         {:ok, %{status_code: status, body: raw}} ->
-          {:ok, status, decode(raw)}
+          # Log output is text/plain; everything else is JSON. See pod_logs/3.
+          if Keyword.get(opts, :raw, false) do
+            {:ok, status, raw}
+          else
+            {:ok, status, decode(raw)}
+          end
 
         {:error, %{reason: reason}} ->
           Logger.error("Kubernetes API #{method} #{path} failed: #{inspect(reason)}")
@@ -148,15 +279,23 @@ defmodule PhoenixApp.Kubernetes do
     end
   end
 
-  defp api_url do
-    host = System.get_env("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
-    port = System.get_env("KUBERNETES_SERVICE_PORT", "443")
+  # Deliberately NOT `System.get_env("KUBERNETES_SERVICE_HOST")`.
+  #
+  # That env var is the API server's ClusterIP - every pod gets it - and
+  # connecting by IP is exactly what produced `bad_cert,unable_to_match_altnames`.
+  # The serving certificate's SANs are DNS names (`kubernetes`,
+  # `kubernetes.default`, `kubernetes.default.svc`, ...); whether an IP SAN is
+  # also present depends on how the cluster's CA was built, and Erlang's
+  # hostname verification does not treat "the reference ID looked like an IP"
+  # as license to also try the cert's DNS SANs. Connect by the DNS name
+  # instead: it is the SAN every Kubernetes API server certificate carries,
+  # in-cluster CoreDNS resolves it to that same ClusterIP, and hostname
+  # verification then has something to actually match against.
+  defp api_host, do: "kubernetes.default.svc"
 
-    # Bracketed for IPv6 clusters, where a bare host:port is not a valid URL.
-    host = if String.contains?(host, ":"), do: "[#{host}]", else: host
+  defp api_port, do: System.get_env("KUBERNETES_SERVICE_PORT", "443")
 
-    "https://#{host}:#{port}"
-  end
+  defp api_url, do: "https://#{api_host()}:#{api_port()}"
 
   defp decode(""), do: %{}
 

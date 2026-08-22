@@ -89,6 +89,279 @@ defmodule PhoenixApp.Games do
   end
 
   # ---------------------------------------------------------------------
+  # Single-session enforcement
+  #
+  # A character may be in at most one live world or instance at a time.
+  #
+  # THE PROBLEM THIS SOLVES IS DATA LOSS, NOT CHEATING. `PreLoginAsync`
+  # approved a join on the Holo-sim ACL and nothing else, so one character
+  # could be signed in from several clients at once - observed five times in a
+  # single run. `ARSSGameModeBase::Logout` writes a position checkpoint back
+  # here on the way out, so two sessions racing one character means whichever
+  # leaves last silently overwrites the other's progress.
+  #
+  # THREE THINGS RELEASE A CLAIM, and the redundancy is deliberate because each
+  # one covers a failure the others cannot:
+  #
+  #   1. The server calls release when the player logs out. Immediate, and the
+  #      normal case - a dedicated server sees a dropped connection right away.
+  #   2. Heartbeat roster reconciliation. Every heartbeat carries who is on the
+  #      server; anyone holding a claim there who is NOT in that roster is
+  #      released. This covers a server that forgot to release, or lost the
+  #      player without running its logout path, and self-heals within one
+  #      heartbeat interval (~20 s).
+  #   3. Server staleness. A claim held by a server whose heartbeat has gone
+  #      quiet is simply not honoured, so a crashed shard cannot lock its
+  #      players out of their own characters. Reuses `server_stale?/1`, so
+  #      there is still exactly ONE definition of "alive" in this context.
+  #
+  # Without (2) and (3), the first crash of anything anywhere would leave a
+  # character permanently unplayable with no way for the player to clear it.
+  # ---------------------------------------------------------------------
+
+  @doc """
+  Claim a character for a server session. The join gate.
+
+  Atomic by construction: the claimable test lives in the WHERE clause of a
+  single UPDATE rather than in a read-then-write, so two clients racing the
+  same character cannot both pass it. Exactly one row is affected or none is.
+
+  Deliberately NOT relaxed for "the same server asking again". That looks like
+  a harmless convenience - a reconnect to the shard you just dropped from -
+  but every PIE client connects to the same world server on 127.0.0.1:7777, so
+  a same-server exemption would make this a no-op in exactly the setup it most
+  needs to work in. A genuine reconnect is covered by release-on-logout, and a
+  hard drop by roster reconciliation, both of which free the claim properly
+  rather than looking the other way.
+
+  Returns:
+    * `{:ok, %{character: character, session_id: id}}`
+    * `{:error, :not_found}`     - no such character, or not this user's
+    * `{:error, {:in_use, server_or_nil}}` - live session elsewhere
+  """
+  def claim_character_session(game_id, user_id, character_id, %GameServer{} = server) do
+    with {:ok, id} <- cast_uuid(character_id) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      session_id = Ecto.UUID.generate()
+
+      # The live-server set is read FIRST and passed in as a plain list, rather
+      # than embedded as a subquery, and the atomicity that matters survives
+      # that. The race this function has to win is two clients claiming one
+      # character at the same instant, and that is decided entirely inside the
+      # single UPDATE below - Postgres evaluates its WHERE against the row
+      # under lock, so exactly one of them can see it as claimable.
+      #
+      # What the two-step does expose is a much smaller race: a server could go
+      # stale in the microseconds between the read and the update. The cost is
+      # refusing one claim we could have granted, on a request the player will
+      # retry - which is the harmless direction to be wrong in.
+      live = live_server_ids(game_id)
+
+      query =
+        from(c in GameCharacter,
+          where: c.id == ^id and c.game_id == ^game_id and c.user_id == ^user_id,
+          # Claimable when nobody holds it, or when whoever does is not a
+          # server we still believe in.
+          where: is_nil(c.active_server_id) or c.active_server_id not in ^live
+        )
+
+      case GamesRepo.update_all(query,
+             set: [
+               active_server_id: server.id,
+               active_session_id: session_id,
+               session_started_at: now,
+               session_last_seen_at: now,
+               updated_at: now
+             ]
+           ) do
+        {1, _} ->
+          {:ok, %{character: get_character(id), session_id: session_id}}
+
+        {0, _} ->
+          # Nothing matched. Two very different reasons, and the caller needs
+          # to tell them apart to say anything useful to the player.
+          case get_owned_character(game_id, user_id, id) do
+            nil ->
+              {:error, :not_found}
+
+            held ->
+              holder = held.active_server_id && GamesRepo.get(GameServer, held.active_server_id)
+              {:error, {:in_use, holder}}
+          end
+      end
+    end
+  end
+
+  @doc """
+  Release a claim. Called on logout, and by the graceful-shutdown path.
+
+  A server may release either by presenting the `session_id` it was given, or
+  by being the server that currently holds the claim. The second form is what
+  lets a restarted server clean up sessions whose tokens died with its previous
+  process; the first is what stops any OTHER server dropping a claim it does
+  not hold just because it knows the character id.
+
+  ALWAYS returns `{:ok, released_count}`, including for an id that is not even
+  a UUID. Zero is not an error: a release that finds nothing has got what it
+  wanted. Logout paths overlap by nature - a disconnect during a level travel,
+  a shutdown while players are still leaving - and a caller that has to
+  distinguish "already released" from "failed" will either log noise about a
+  state that is already correct or, worse, retry.
+  """
+  def release_character_session(game_id, character_id, %GameServer{} = server, session_id \\ nil) do
+    case cast_uuid(character_id) do
+      {:error, _} ->
+        {:ok, 0}
+
+      {:ok, id} ->
+        do_release_character_session(game_id, id, server, session_id)
+    end
+  end
+
+  defp do_release_character_session(game_id, id, %GameServer{} = server, session_id) do
+    base = from(c in GameCharacter, where: c.id == ^id and c.game_id == ^game_id)
+
+    query =
+      case cast_uuid(session_id) do
+        {:ok, sid} ->
+          from(c in base,
+            where: c.active_session_id == ^sid or c.active_server_id == ^server.id
+          )
+
+        _ ->
+          from(c in base, where: c.active_server_id == ^server.id)
+      end
+
+    {count, _} = GamesRepo.update_all(query, set: clear_session_fields())
+    {:ok, count}
+  end
+
+  @doc """
+  Reconcile one server's claims against the roster it just reported.
+
+  Anyone holding a claim on this server who is not in the roster has left
+  without the release landing, so the claim goes. Anyone still there has their
+  `session_last_seen_at` refreshed, which is what makes that column mean
+  something on an admin screen.
+
+  A SERVER THAT REPORTS NO ROSTER AT ALL IS LEFT ALONE. That distinction is the
+  whole safety of this function: `%{}` means "this build does not send a
+  roster" and `%{"players" => []}` means "nobody is here". Treating the first
+  as the second would release every claim on the server on every heartbeat and
+  quietly turn the feature off - the same trap `server_players/1` sidesteps.
+  """
+  def reconcile_server_sessions(%GameServer{} = server, %{"players" => players})
+      when is_list(players) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    present =
+      players
+      |> Enum.map(fn
+        %{"character_id" => cid} -> cid
+        _ -> nil
+      end)
+      |> Enum.map(&cast_uuid/1)
+      |> Enum.flat_map(fn
+        {:ok, id} -> [id]
+        _ -> []
+      end)
+
+    held = from(c in GameCharacter, where: c.active_server_id == ^server.id)
+
+    {dropped, _} =
+      case present do
+        [] ->
+          GamesRepo.update_all(held, set: clear_session_fields())
+
+        ids ->
+          held
+          |> where([c], c.id not in ^ids)
+          |> GamesRepo.update_all(set: clear_session_fields())
+      end
+
+    if present != [] do
+      held
+      |> where([c], c.id in ^present)
+      |> GamesRepo.update_all(set: [session_last_seen_at: now, updated_at: now])
+    end
+
+    {:ok, dropped}
+  end
+
+  def reconcile_server_sessions(%GameServer{}, _no_roster), do: {:ok, 0}
+
+  @doc """
+  Release every claim held by a server. Used on graceful shutdown.
+
+  A crashed server does not reach this, which is what rule (3) above is for.
+  """
+  def release_server_sessions(%GameServer{} = server) do
+    {count, _} =
+      GameCharacter
+      |> where([c], c.active_server_id == ^server.id)
+      |> GamesRepo.update_all(set: clear_session_fields())
+
+    {:ok, count}
+  end
+
+  @doc """
+  The live session on a character, or nil.
+
+  Nil for an unclaimed character AND for one whose claim is held by a server we
+  no longer believe in - callers should not have to know the difference, and
+  every one of them wants the same answer: is anybody actually playing this
+  right now.
+  """
+  def character_session(%GameCharacter{active_server_id: nil}), do: nil
+
+  def character_session(%GameCharacter{} = character) do
+    case GamesRepo.get(GameServer, character.active_server_id) do
+      nil -> nil
+      server -> if server_stale?(server), do: nil, else: server
+    end
+  end
+
+  # Servers whose heartbeat is fresh enough that a claim of theirs still counts.
+  #
+  # Ids of every registered server for the game are bounded by how many shards
+  # exist, which is a handful - this is not a list that can grow with players.
+  defp live_server_ids(game_id) do
+    cutoff =
+      DateTime.utc_now()
+      |> DateTime.add(-server_stale_after_seconds(), :second)
+      |> DateTime.truncate(:second)
+
+    GameServer
+    |> where([s], s.game_id == ^game_id and s.last_heartbeat_at >= ^cutoff)
+    |> select([s], s.id)
+    |> GamesRepo.all()
+  end
+
+  # The timestamps are deliberately NOT cleared - see the schema comment. What
+  # makes a session dead is active_server_id going null; the times left behind
+  # are the trace of the session that just ended.
+  defp clear_session_fields do
+    [
+      active_server_id: nil,
+      active_session_id: nil,
+      updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    ]
+  end
+
+  # A character or session id arriving from an API request is just a string.
+  # Ecto raises Ecto.Query.CastError on a malformed binary_id in a where
+  # clause, which would surface as a 500 on what is really a 404, so every id
+  # is checked before it reaches a query.
+  defp cast_uuid(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, id} -> {:ok, id}
+      :error -> {:error, :not_found}
+    end
+  end
+
+  defp cast_uuid(_), do: {:error, :not_found}
+
+  # ---------------------------------------------------------------------
   # Game Servers (shard registry)
   # ---------------------------------------------------------------------
 
@@ -234,6 +507,13 @@ defmodule PhoenixApp.Games do
         {:error, :not_found}
 
       server ->
+        # A server going down takes its character claims with it. Without this
+        # a clean shutdown would leave everyone who was on it locked out of
+        # their own characters until the staleness window expired - which is
+        # the worst of both worlds, since the one case where we KNOW the
+        # session ended is the one where we could react instantly.
+        {:ok, _released} = release_server_sessions(server)
+
         server
         |> GameServer.changeset(%{
           "status" => "offline",

@@ -424,8 +424,10 @@ fi
 
 # Deploy with server-side apply to handle existing PVC gracefully
 kubectl apply --server-side=true --force-conflicts -k k3s/overlays/prod/
-print_status "Application deployed"
-
+print_status "PhxLive deployed"
+kubectl apply -k k3s/raysspacesim
+kubectl apply -f k3s/raysspacesim/raysspacesim-secrets.yaml
+print_status "RaysSpaceSim deployed"
 # Check if phoenix-uploads-pvc is bound (manual storage class can be finicky)
 echo "⏳ Checking phoenix-uploads-pvc binding..."
 for i in {1..10}; do

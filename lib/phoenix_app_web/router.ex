@@ -230,6 +230,13 @@ defmodule PhoenixAppWeb.Router do
 
     get "/:game_slug/characters", Api.GamesController, :list_characters
     post "/:game_slug/characters", Api.GamesController, :create_character
+
+    # Single-session claim. Server API key only, enforced in the controller.
+    # Above the bare /:id routes for the same reason /access/ and /members/ are
+    # above theirs - Phoenix would otherwise be free to read "claim" as an :id.
+    post "/:game_slug/characters/:id/claim", Api.GamesController, :claim_character
+    post "/:game_slug/characters/:id/release", Api.GamesController, :release_character
+
     get "/:game_slug/characters/:id", Api.GamesController, :get_character
     put "/:game_slug/characters/:id", Api.GamesController, :update_character
     delete "/:game_slug/characters/:id", Api.GamesController, :delete_character

@@ -42,7 +42,28 @@ PROJECT_DIR="$REPO_ROOT/RaysSpaceSim"
 PROJECT="$PROJECT_DIR/RaysSpaceSim.uproject"
 ARCHIVE_DIR="$PROJECT_DIR/Saved/ServerBuild"
 
-UE_ROOT="${UE_ROOT:-/c/Program Files/Epic Games/UE_5.8}"
+# THE DEFAULT IS THE SOURCE ENGINE, NOT THE LAUNCHER ONE.
+#
+# C:\UnrealEngine is the source-built UE 5.8 this project requires. Defaulting
+# to the Launcher install at C:\Program Files\Epic Games\UE_5.8 meant defaulting
+# to an engine that CANNOT build this target under any configuration - the
+# InstalledBuild.txt check below exists specifically to reject it. A default
+# that is guaranteed to fail is not a default; it is a trap that costs a full
+# `./deploy-game.sh` run to discover, every time, on a machine that has had the
+# right engine all along.
+#
+# An explicit UE_ROOT still wins, so pointing this at a different source tree
+# needs no edit here. The Launcher path stays as the LAST candidate purely so
+# the diagnostic below has a concrete path to name when neither exists.
+if [ -z "${UE_ROOT:-}" ]; then
+  for ue_candidate in "/c/UnrealEngine" "/c/Program Files/Epic Games/UE_5.8"; do
+    if [ -f "$ue_candidate/Engine/Build/BatchFiles/RunUAT.bat" ]; then
+      UE_ROOT="$ue_candidate"
+      break
+    fi
+  done
+  UE_ROOT="${UE_ROOT:-/c/Program Files/Epic Games/UE_5.8}"
+fi
 
 # ACCEPT EITHER PATH STYLE.
 #
@@ -89,10 +110,14 @@ if [ -f "$UE_ROOT/Engine/Build/InstalledBuild.txt" ]; then
   echo "  RSSServer regardless of toolchain or platform components. Only a"
   echo "  source-built engine can."
   echo
+  echo "  This script looks for a source engine at C:\\UnrealEngine first and"
+  echo "  only falls back to the Launcher install, so reaching this message"
+  echo "  means C:\\UnrealEngine is absent, moved, or not built yet."
+  echo
   echo "  Two ways forward:"
   echo
-  echo "  1. Build UE 5.8 from source (github.com/EpicGames/UnrealEngine),"
-  echo "     then point UE_ROOT at it:"
+  echo "  1. Build UE 5.8 from source (github.com/EpicGames/UnrealEngine)"
+  echo "     into C:\\UnrealEngine, or point UE_ROOT at where it already is:"
   echo "       UE_ROOT=/c/path/to/UnrealEngine ./deploy-game.sh --build-only"
   echo
   echo "  2. Cook inside Epic's engine container, which IS a source engine."

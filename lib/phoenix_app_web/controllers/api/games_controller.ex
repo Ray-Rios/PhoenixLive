@@ -98,6 +98,78 @@ defmodule PhoenixAppWeb.Api.GamesController do
   end
 
   # ---------------------------------------------------------------------
+  # Single-session enforcement
+  #
+  # Both server-API-key only. A player token must never reach these: claiming
+  # on someone else's behalf is a denial of service against their character,
+  # and releasing your own claim is how you would sign in twice, which is the
+  # entire thing this prevents.
+  #
+  # POST rather than folded into `GET /characters/:id`, which the world server
+  # already calls at exactly the right moment during PreLoginAsync. It was
+  # tempting - one fewer round trip - but a GET that takes an exclusive lock as
+  # a side effect is a trap for the next person to call it, and that fetch is
+  # not only used by the join path.
+  # ---------------------------------------------------------------------
+
+  # POST /api/games/:game_slug/characters/:id/claim
+  #
+  # Called from PreLoginAsync AFTER the token has been verified and BEFORE the
+  # join is approved. A 409 here is a refusal to admit the player, and its
+  # message is written to be shown to them as-is.
+  def claim_character(conn, %{"game_slug" => slug, "id" => id} = params) do
+    with :ok <- require_server_auth(conn),
+         {:ok, game} <- fetch_game(slug),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, server} <- fetch_calling_server(game.id, params) do
+      case Games.claim_character_session(game.id, user_id, id, server) do
+        {:ok, %{character: character, session_id: session_id}} ->
+          json(conn, %{
+            success: true,
+            session_id: session_id,
+            character: character_json(character)
+          })
+
+        {:error, :not_found} ->
+          error_response(conn, 404, "Character not found")
+
+        {:error, {:in_use, holder}} ->
+          # 409 Conflict, not 403. Nothing is wrong with the credentials or the
+          # request - the character is simply busy, and it will not be shortly.
+          conn
+          |> put_status(:conflict)
+          |> json(%{
+            success: false,
+            message: in_use_message(holder),
+            server: server_json(holder)
+          })
+      end
+    else
+      {:error, status, message} -> error_response(conn, status, message)
+    end
+  end
+
+  # POST /api/games/:game_slug/characters/:id/release
+  #
+  # Called from Logout. Idempotent, and a release that finds nothing still
+  # answers 200: the caller wanted the claim gone and it is gone. Logout runs
+  # on paths that can overlap (a disconnect during a travel, a shutdown while
+  # players are still leaving), and making those log failures would be noise
+  # about a state that is already correct.
+  def release_character(conn, %{"game_slug" => slug, "id" => id} = params) do
+    with :ok <- require_server_auth(conn),
+         {:ok, game} <- fetch_game(slug),
+         {:ok, server} <- fetch_calling_server(game.id, params) do
+      {:ok, released} =
+        Games.release_character_session(game.id, id, server, params["session_id"])
+
+      json(conn, %{success: true, released: released})
+    else
+      {:error, status, message} -> error_response(conn, status, message)
+    end
+  end
+
+  # ---------------------------------------------------------------------
   # Server registry
   # ---------------------------------------------------------------------
 
@@ -165,6 +237,22 @@ defmodule PhoenixAppWeb.Api.GamesController do
 
       case Games.register_server(attrs) do
         {:ok, server} ->
+          # SELF-HEALING FOR THE SESSION CLAIMS.
+          #
+          # The roster this heartbeat just reported is the authoritative answer
+          # to "who is actually on this server", so anyone holding a claim here
+          # who is not in it has left without the release landing - a crashed
+          # logout path, a connection the server dropped without noticing, a
+          # server restarted between the two calls. Reconciling on the request
+          # they were already making means those free themselves within one
+          # heartbeat instead of waiting out the 90 s staleness window.
+          #
+          # Deliberately passed `attrs["roster"]` (already normalised) rather
+          # than the raw param: reconcile distinguishes "reported an empty
+          # roster" from "reported no roster at all", and only the normaliser
+          # knows which of those a malformed payload was.
+          Games.reconcile_server_sessions(server, attrs["roster"])
+
           # THE CONTROL CHANNEL.
           #
           # The heartbeat response is the only route the hub has back into a
@@ -213,6 +301,48 @@ defmodule PhoenixAppWeb.Api.GamesController do
       :server_api_key -> :ok
       _ -> {:error, 403, "This endpoint requires a server API key"}
     end
+  end
+
+  # WHICH SERVER IS ASKING.
+  #
+  # Identified by host+port, the same pair the heartbeat upserts on, so there is
+  # one notion of server identity across the whole API rather than a second id
+  # the caller has to remember. A server that has not heartbeat yet has no row
+  # and therefore no identity to claim with - that is a 409 rather than a 404
+  # because it is a sequencing mistake on the caller's part, and the fix is to
+  # heartbeat first, not to look for a different server.
+  defp fetch_calling_server(game_id, params) do
+    with {:ok, host} <- fetch_required(params, "host"),
+         {:ok, port} <- fetch_required(params, "port") do
+      case Games.get_server(game_id, host, normalize_port(port)) do
+        nil ->
+          {:error, 409, "Server #{host}:#{port} is not registered. Send a heartbeat first."}
+
+        server ->
+          {:ok, server}
+      end
+    end
+  end
+
+  # JSON gives us either; the column is an integer.
+  defp normalize_port(port) when is_integer(port), do: port
+
+  defp normalize_port(port) when is_binary(port) do
+    case Integer.parse(port) do
+      {value, _} -> value
+      :error -> -1
+    end
+  end
+
+  defp normalize_port(_), do: -1
+
+  defp in_use_message(nil) do
+    "This character is already signed in. Wait a moment and try again."
+  end
+
+  defp in_use_message(server) do
+    "This character is already signed in on #{server.name}. " <>
+      "Log out there first, or wait a moment and try again."
   end
 
   defp fetch_required(params, key) do

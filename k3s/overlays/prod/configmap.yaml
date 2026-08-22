@@ -34,7 +34,7 @@ data:
   # Empty is a supported state: the launcher reports itself unavailable and
   # /launch falls back to recording intent and waiting for a hand-started
   # server. That is the development loop, not a broken deployment.
-  HOLOSIM_IMAGE: "raysspacesim-server:d8982e0-dirty-202608190512"
+  HOLOSIM_IMAGE: "raysspacesim-server:0ada6ac-dirty-202608220554"
 
   # The address a GAME CLIENT connects to. This is NOT proxied by the nginx
   # ingress - instances speak UDP directly on their assigned port via hostPort,
@@ -43,3 +43,20 @@ data:
   HOLOSIM_PUBLIC_HOST: "phxlive.net"
   HOLOSIM_PORT_MIN: "7800"
   HOLOSIM_PORT_MAX: "7899"
+
+  # --- World server (see PROJECT.md 5b) -------------------------------------
+  #
+  # WORLD_IMAGE is deliberately absent: runtime.exs falls back to HOLOSIM_IMAGE,
+  # because a world server IS the Holo-sim image without -HoloSimId=. Set it here
+  # only to pin the world to a different build than the instances - which is a
+  # thing worth being able to do, and not a thing to do by accident.
+  #
+  # WORLD_PUBLIC_HOST IS NOT OPTIONAL IN A CLUSTER, despite having a default.
+  # That default is 127.0.0.1, which is correct on a desktop and catastrophic
+  # here: it is what -PhxHost= advertises, so the server would register itself
+  # to the hub at 127.0.0.1:7777 and every client would resolve that to its own
+  # machine and time out. The failure looks like a networking problem and is
+  # actually this line being missing - same value and same reason as
+  # HOLOSIM_PUBLIC_HOST above.
+  WORLD_PUBLIC_HOST: "phxlive.net"
+  WORLD_PORT: "7777"
