@@ -18,6 +18,7 @@
 #   ./deploy-game.sh --set <tag>     roll out a tag that is already built
 #   ./deploy-game.sh --list          show built tags and which one is live
 #   ./deploy-game.sh --smoke [tag]   boot the image locally and show its log
+#   ./deploy-game.sh --codemap       regenerate the code map only (no cook)
 #   ./deploy-game.sh --disable       revert to the manual launch path
 
 # RUNNING THIS FROM GIT BASH: DO NOT PASS ABSOLUTE POSIX PATHS TO docker OR
@@ -240,6 +241,79 @@ cmd_smoke() {
   fi
 }
 
+
+# ---------------------------------------------------------------------------
+# The code map
+#
+# priv/codemap/codemap.json is the data behind /admin/raysspacesim/codebase: a
+# parse of every header in the game repo - modules, classes, signatures, what
+# replicates and under which condition.
+#
+# WHY IT IS REGENERATED HERE AND NOT BY THE WEB APP.
+#
+# The Phoenix pod has no game repo. RaysSpaceSim/ is a separate repository, is
+# gitignored by PhxLive, and is not in the web image - so nothing running in the
+# cluster can parse a header. The map has to travel as data, which means
+# something outside the cluster has to produce it, which means here: this is the
+# one script that runs when the C++ changes.
+#
+# WHY IT RUNS AFTER THE BUILD AND NOT BEFORE.
+#
+# So the map describes source that actually compiles. A map generated from a
+# tree that then failed to build is a map of code that does not exist, and the
+# page has no way to know that.
+#
+# WHY A FAILURE HERE DOES NOT FAIL THE DEPLOY.
+#
+# A stale code map is a documentation problem. A blocked rollout is an outage.
+# If Python is missing or the parse breaks, this warns and the cook still ships
+# - the page states the commit its snapshot came from, so a skipped run shows up
+# as an old commit rather than as silence.
+#
+# The map only reaches the pod on the next ./deploy-prod.sh, because that is
+# what rebuilds the web image that carries priv/. Until then the page serves the
+# previous snapshot and says so.
+# ---------------------------------------------------------------------------
+CODEMAP_DIR="$REPO_ROOT/priv/codemap"
+
+find_python() {
+  # Git Bash on Windows usually has `python`; `py -3` is the launcher; some
+  # setups only have `python3`. Try each and take the first that is real - note
+  # that Windows ships a `python` stub that opens the Store and exits 9009, so
+  # this checks the interpreter actually answers rather than that it exists.
+  local candidate
+  for candidate in python python3 py; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      if [ "$candidate" = "py" ]; then
+        py -3 -c "import sys" >/dev/null 2>&1 && { echo "py -3"; return 0; }
+      else
+        "$candidate" -c "import sys" >/dev/null 2>&1 && { echo "$candidate"; return 0; }
+      fi
+    fi
+  done
+  return 1
+}
+
+cmd_codemap() {
+  local py
+  if ! py="$(find_python)"; then
+    warn "Code map skipped: no working Python on PATH."
+    echo "  /admin/raysspacesim/codebase will keep serving its previous snapshot."
+    return 0
+  fi
+
+  green "Regenerating the code map"
+  if $py "$CODEMAP_DIR/extract.py" "$GAME_ROOT" "$CODEMAP_DIR/codemap.json"; then
+    echo
+    echo "  Written to priv/codemap/codemap.json. It reaches the site on the next"
+    echo "  ./deploy-prod.sh - that is what rebuilds the image carrying priv/."
+  else
+    warn "Code map generation failed. The build is fine; the map is now stale."
+    echo "  Run it by hand to see why:"
+    echo "    $py priv/codemap/extract.py RaysSpaceSim priv/codemap/codemap.json"
+  fi
+}
+
 cmd_rollout() {
   local image="$1"
 
@@ -276,6 +350,13 @@ case "${1:-}" in
     cmd_smoke "$IMAGE_NAME:$SMOKE_TAG"
     ;;
 
+  --codemap)
+    # Standalone because the map goes stale from editing headers, which happens
+    # constantly, while a cook happens rarely. Waiting for the next 40-minute
+    # build to refresh a two-second parse is how a map ends up three weeks old.
+    cmd_codemap
+    ;;
+
   --disable)
     warn "Reverting to the manual launch path."
     set_live_image ""
@@ -288,6 +369,7 @@ case "${1:-}" in
     # again after a build that took a minute prints a tag that does not exist.
     TAG="$(current_tag)"
     cmd_build "$TAG"
+    cmd_codemap
     echo
     echo "Not rolled out. When you want it live:"
     echo "  ./deploy-game.sh --set $TAG"
@@ -302,6 +384,7 @@ case "${1:-}" in
         ;;
     esac
     cmd_build "$TAG"
+    cmd_codemap
     cmd_rollout "$IMAGE_NAME:$TAG"
     ;;
 

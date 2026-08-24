@@ -127,6 +127,7 @@ defmodule PhoenixAppWeb.Router do
     live "/admin/api-toolbox", AdminLive.ApiToolbox, :index
     live "/admin/custom-emojis", AdminLive.CustomEmojis, :index
     live "/admin/raysspacesim", AdminLive.RaysSpaceSim, :index
+    live "/admin/raysspacesim/codebase", AdminLive.RaysSpaceSimCodebase, :index
 
   end
   end

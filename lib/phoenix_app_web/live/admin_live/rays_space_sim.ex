@@ -19,6 +19,9 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
 
   use PhoenixAppWeb, :live_view
 
+  require Logger
+
+  alias PhoenixApp.CodeMap
   alias PhoenixApp.Games
   alias PhoenixApp.Games.HoloSims
   alias PhoenixApp.Games.WorldServerLauncher
@@ -46,7 +49,17 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
       :timer.send_interval(@refresh_ms, self(), :refresh)
     end
 
-    {:ok, load(socket)}
+    {:ok,
+     socket
+     |> allow_upload(:codemap,
+       accept: ~w(.json),
+       max_entries: 1,
+       # Matches PhoenixApp.CodeMap's own ceiling. Enforced in both places on
+       # purpose: this one gives the browser a reason before the bytes move,
+       # the other one is the check that is actually load-bearing.
+       max_file_size: 8_000_000
+     )
+     |> load()}
   end
 
   @impl true
@@ -101,6 +114,68 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
   # does not mean a container is running, which is why the panel shows desired
   # against ready and surfaces the pod's own message rather than declaring
   # victory on the button press.
+
+  # ---------------------------------------------------------------------------
+  # Code map
+  #
+  # THESE BUTTONS DO NOT REGENERATE ANYTHING, AND THE PAGE SAYS SO.
+  #
+  # Regenerating means parsing the game's headers, and this pod has no game
+  # repo - RaysSpaceSim is a separate repository that is not in the web image.
+  # `./deploy-game.sh --codemap` is what runs the parser, on a machine that has
+  # the source. Wiring a "Regenerate" button here that could only ever fail
+  # would be worse than having none.
+  #
+  # What is genuinely useful from inside the cluster is the other half: saying
+  # how stale the snapshot is against the build that is actually running, and
+  # taking delivery of a newer one without waiting for a full Phoenix deploy.
+  # ---------------------------------------------------------------------------
+  def handle_event("codemap_validate", _params, socket), do: {:noreply, socket}
+
+  def handle_event("codemap_cancel", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :codemap, ref)}
+  end
+
+  def handle_event("codemap_install", _params, socket) do
+    results =
+      consume_uploaded_entries(socket, :codemap, fn %{path: path}, _entry ->
+        {:ok, CodeMap.install(path)}
+      end)
+
+    socket =
+      case results do
+        [{:ok, from}] ->
+          audit(socket, "codemap.install", %{"generated_from" => from})
+
+          put_flash(
+            socket,
+            :info,
+            "Code map replaced with the snapshot of #{from || "an unnamed commit"}."
+          )
+
+        [{:error, reason}] ->
+          put_flash(socket, :error, reason)
+
+        [] ->
+          put_flash(socket, :error, "Choose a codemap.json first.")
+      end
+
+    {:noreply, load(socket)}
+  end
+
+  def handle_event("codemap_discard", _params, socket) do
+    socket =
+      case CodeMap.discard() do
+        :ok ->
+          audit(socket, "codemap.discard", %{})
+          put_flash(socket, :info, "Uploaded snapshot removed. Back to the one in the release.")
+
+        {:error, reason} ->
+          put_flash(socket, :error, "Could not remove it: #{reason}")
+      end
+
+    {:noreply, load(socket)}
+  end
 
   def handle_event("world_start", _params, socket) do
     {:noreply, world_op(socket, :start, "world.start", "Start requested.")}
@@ -191,6 +266,33 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
     |> assign_new(:world_logs_previous, fn -> false end)
   end
 
+  # The badge answers "can I trust this page", not "does a file exist". A map
+  # that parses fine but describes a different commit than the one running is
+  # the dangerous state - it is confidently wrong - so it reads Stale, not OK.
+  defp codemap_label(%{active: nil}), do: {"Missing", "bg-red-900/40 text-red-300"}
+
+  defp codemap_label(%{active: %{readable?: false}}),
+    do: {"Unreadable", "bg-red-900/40 text-red-300"}
+
+  defp codemap_label(%{matches_live?: false}), do: {"Stale", "bg-amber-900/40 text-amber-300"}
+
+  defp codemap_label(%{matches_live?: nil}), do: {"Loaded", "bg-gray-800 text-gray-400"}
+
+  defp codemap_label(%{active: %{source: :override}}),
+    do: {"Current (uploaded)", "bg-green-900/40 text-green-300"}
+
+  defp codemap_label(_), do: {"Current", "bg-green-900/40 text-green-300"}
+
+  # LiveView's upload errors are atoms. Rendering them raw puts
+  # ":too_large" on the screen, which is a symbol, not a sentence.
+  defp upload_error_text(:too_large), do: "That file is over the 8 MB limit."
+
+  defp upload_error_text(:not_accepted),
+    do: "Only .json is accepted - this wants the codemap.json extract.py wrote."
+
+  defp upload_error_text(:too_many_files), do: "One file at a time."
+  defp upload_error_text(other), do: "Upload failed: #{inspect(other)}"
+
   defp world_label(%{state: :running}), do: {"Running", "bg-green-900/40 text-green-300"}
   defp world_label(%{state: :starting}), do: {"Starting", "bg-blue-900/40 text-blue-300"}
   defp world_label(%{state: :stopped}), do: {"Stopped", "bg-gray-800 text-gray-400"}
@@ -217,6 +319,19 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
         |> put_flash(:error, "Could not queue #{command}: #{inspect(changeset.errors)}")
         |> load()
     end
+  end
+
+  # The code map has nothing to do with the games database, so a games database
+  # that is down must not be able to block an upload. Everything else on this
+  # page is already inside that database's blast radius; this is not, and
+  # letting the audit write drag it back in would be a self-inflicted coupling.
+  defp audit(socket, action, details) do
+    log_action(socket, action, "codemap", nil, details)
+    socket
+  rescue
+    e ->
+      Logger.warning("codemap: audit write failed: #{Exception.message(e)}")
+      socket
   end
 
   defp log_action(socket, action, subject_type, subject_id, details) do
@@ -247,7 +362,14 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
     socket
     |> load_games()
     |> assign_world()
+    |> assign_codemap()
   end
+
+  # Called on the 5-second tick like everything else here, which it can afford
+  # to be: CodeMap.status/0 stats two files and reuses its last parse unless one
+  # of them moved. Parsing a megabyte of JSON five times a minute to render a
+  # commit hash would be the obvious way to write this and the wrong one.
+  defp assign_codemap(socket), do: assign(socket, codemap: CodeMap.status())
 
   defp load_games(socket) do
     do_load(socket)
@@ -362,6 +484,12 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
           </p>
         </div>
         <div class="flex gap-2">
+          <a
+            href="/admin/raysspacesim/codebase"
+            class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          >
+            Codebase
+          </a>
           <button
             phx-click="reap"
             class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
@@ -536,6 +664,166 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
               this panel only controls one running in the cluster.
             </p>
           <% end %>
+        </div>
+      </div>
+
+
+      <!-- Code map -->
+      <% cm = @codemap %>
+      <% active = cm.active %>
+      <div class="dark-glass shadow rounded-lg overflow-hidden mb-8">
+        <div class="px-4 py-5 sm:p-6">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h3 class="text-lg font-medium text-white">Code map</h3>
+              <p class="mt-1 text-xs text-gray-500">
+                The snapshot behind
+                <a href="/admin/raysspacesim/codebase" class="text-gray-400 hover:text-white underline">
+                  /admin/raysspacesim/codebase
+                </a>
+              </p>
+            </div>
+            <% {cm_text, cm_classes} = codemap_label(cm) %>
+            <span class={"px-2 py-1 rounded text-xs font-medium #{cm_classes}"}>
+              <%= cm_text %>
+            </span>
+          </div>
+
+          <%= if active do %>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Snapshot of</div>
+                <div class="mt-1 text-sm font-mono text-white break-all">
+                  <%= active.generated_from || "unknown" %>
+                </div>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Generated</div>
+                <div class="mt-1 text-sm text-gray-300"><%= active.generated_at || "-" %></div>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Live build</div>
+                <div class="mt-1 text-sm font-mono text-gray-300"><%= cm.live_tag || "-" %></div>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Source</div>
+                <div class="mt-1 text-sm text-gray-300">
+                  <%= if active.source == :override, do: "uploaded", else: "in the release" %>
+                </div>
+              </div>
+            </div>
+
+            <p class="text-xs text-gray-500 mb-5">
+              <%= active.modules %> modules &middot; <%= active.classes %> classes &middot;
+              <%= active.functions %> functions &middot; <%= active.properties %> properties &middot;
+              <%= active.replicated %> replicated
+            </p>
+
+            <%= case cm.matches_live? do %>
+              <% false -> %>
+                <p class="text-sm text-amber-300 mb-4">
+                  This map was parsed from <span class="font-mono"><%= active.game_commit %></span>,
+                  but the live image was built from <span class="font-mono"><%= cm.live_tag %></span>.
+                  It is describing code that is not what is running.
+                </p>
+              <% nil -> %>
+                <p class="text-sm text-gray-500 mb-4">
+                  No live image tag to compare against, so staleness cannot be checked here -
+                  read the commit above against the game repo's HEAD.
+                </p>
+              <% true -> %>
+                <p class="text-sm text-gray-400 mb-4">
+                  Same commit as the live image. The map matches what is running.
+                </p>
+            <% end %>
+
+            <%= if active.game_dirty do %>
+              <p class="text-sm text-amber-300 mb-4">
+                Parsed from a dirty tree, so the commit above does not fully identify it.
+              </p>
+            <% end %>
+          <% else %>
+            <p class="text-sm text-amber-300 mb-4">
+              No snapshot on disk. <span class="font-mono">/admin/raysspacesim/codebase</span>
+              has nothing to render until one arrives.
+            </p>
+          <% end %>
+
+          <!-- WHY THERE IS NO "REGENERATE" BUTTON -->
+          <div class="border-t border-gray-800 pt-4 mt-2">
+            <p class="text-xs text-gray-500 mb-3">
+              Regenerating parses the game's headers, and this pod has no game repo -
+              RaysSpaceSim is a separate repository and is not in the web image. The parser
+              runs where the source is:
+              <span class="font-mono text-gray-400">./deploy-game.sh --codemap</span>
+              (or automatically after every <span class="font-mono text-gray-400">./deploy-game.sh</span> cook).
+              That writes <span class="font-mono text-gray-400">priv/codemap/codemap.json</span>,
+              which reaches this site on the next <span class="font-mono text-gray-400">./deploy-prod.sh</span>.
+              Upload it here instead to skip that wait.
+            </p>
+
+            <form phx-submit="codemap_install" phx-change="codemap_validate" class="flex flex-wrap items-center gap-3">
+              <.live_file_input
+                upload={@uploads.codemap}
+                class="text-xs text-gray-400 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-gray-700 file:text-white hover:file:bg-gray-600"
+              />
+              <button
+                type="submit"
+                disabled={@uploads.codemap.entries == []}
+                class="bg-blue-700 hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Install snapshot
+              </button>
+              <%= if active && active.source == :override do %>
+                <button
+                  type="button"
+                  phx-click="codemap_discard"
+                  class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Revert to the release copy
+                </button>
+              <% end %>
+            </form>
+
+            <%= for entry <- @uploads.codemap.entries do %>
+              <div class="mt-3 flex items-center gap-3 text-xs text-gray-400">
+                <span class="font-mono"><%= entry.client_name %></span>
+                <span><%= entry.progress %>%</span>
+                <button
+                  type="button"
+                  phx-click="codemap_cancel"
+                  phx-value-ref={entry.ref}
+                  class="text-gray-500 hover:text-red-300"
+                >
+                  cancel
+                </button>
+              </div>
+              <%= for err <- upload_errors(@uploads.codemap, entry) do %>
+                <p class="mt-1 text-xs text-red-300"><%= upload_error_text(err) %></p>
+              <% end %>
+            <% end %>
+
+            <%= for err <- upload_errors(@uploads.codemap) do %>
+              <p class="mt-2 text-xs text-red-300"><%= upload_error_text(err) %></p>
+            <% end %>
+
+            <%= if cm.override && not cm.override.readable? do %>
+            <p class="mt-4 text-xs text-red-300">
+              There is an uploaded snapshot at
+              <span class="font-mono"><%= cm.override.path %></span> and it cannot be read
+              (<%= cm.override.error %>). The release copy is being served instead.
+            </p>
+          <% end %>
+
+          <p class="mt-4 text-xs text-gray-600">
+            An uploaded snapshot lives in this pod only
+            (<span class="font-mono"><%= cm.override_dir %></span>) and the next restart or
+            rollout puts the release copy back. That is deliberate: the durable path is
+            <span class="font-mono">--codemap</span> then a deploy, and the one persistent
+            volume this pod has is served publicly at /uploads, so a code map cannot go
+            on it without publishing the codebase.
+          </p>
+          </div>
         </div>
       </div>
 
