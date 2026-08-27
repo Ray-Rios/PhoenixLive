@@ -1,0 +1,18 @@
+# Applied on its own, NOT referenced from base/kustomization.yaml.
+#
+#     kubectl apply -k k3s/raysspacesim
+#
+# Note the absence of a `namespace:` field, which is the entire point of this
+# being a separate kustomization - see the comment at the top of
+# namespace-rbac.yaml. The resources here carry their own namespaces and must
+# keep them.
+#
+# secrets.example.yaml is deliberately NOT listed. Copy it to secrets.yaml,
+# fill it in, and apply that by hand - GAMES_SERVER_API_KEY authorises acting
+# as any user, so it should not be one `kubectl apply -k` away from being
+# committed with a placeholder in it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- namespace-rbac.yaml

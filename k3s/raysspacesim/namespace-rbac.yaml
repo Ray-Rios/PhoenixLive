@@ -1,0 +1,112 @@
+# RaysSpaceSim game-server namespace, and the permission for the hub to drive it.
+#
+# APPLIED ON ITS OWN, NOT FROM base/:
+#
+#     kubectl apply -k k3s/raysspacesim
+#
+# This deliberately sits outside the kustomize base. Both overlays set a
+# `namespace:` transformer (phoenixapp, phoenixapp-dev) and kustomize applies
+# that to every namespaced resource in the build - so adding this to
+# base/kustomization.yaml would rewrite the Role and RoleBinding below into the
+# web app's namespace. That would silently grant exactly the permissions this
+# file exists to scope, in exactly the namespace it exists to keep them out of.
+#
+# WHY A SEPARATE NAMESPACE
+#
+# A dedicated game server parses untrusted network input for a living, which
+# makes it the workload here most likely to be exploited. Putting it in its own
+# namespace means the blast radius of that is a namespace containing only game
+# servers - not one that also holds Postgres, Redis and the web application's
+# service account.
+#
+# The cost is that nothing crosses a namespace boundary for free: the hub's
+# service account needs to be granted access here explicitly (below), and the
+# pods need their own copy of the API key Secret, because a Secret cannot be
+# read from another namespace. Both of those are visible, one-line-to-diagnose
+# failures - a 403 naming the exact verb, or a pod stuck in
+# CreateContainerConfigError naming the missing Secret - which is the right
+# trade against a namespace that silently shares everything.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: raysspacesim
+  labels:
+    app.kubernetes.io/part-of: raysspacesim
+---
+# What the hub may do in here.
+#
+# Scoped the same way base/rbac.yaml scopes the Holo-sim permissions, and for
+# the same reason: this service account fronts a public web application, so it
+# gets exactly the verbs the launcher calls and nothing else.
+#
+# Note what is NOT here. No "create" on pods - the Deployment controller makes
+# those, the hub never does. No "exec" and no "portforward", either of which
+# would turn an admin button into arbitrary code execution inside the
+# namespace. No secrets: the hub names a Secret in the pod spec, it never needs
+# to read one. And nothing cluster-scoped at all.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: raysspacesim-operator
+  namespace: raysspacesim
+rules:
+# Start, stop, inspect and replace the world server.
+#
+# "patch" is what both scaling and re-specifying go through - the launcher
+# sends a strategic merge patch rather than a replace so it does not have to
+# carry a resourceVersion and retry on conflict.
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["create", "get", "list", "watch", "patch", "delete"]
+
+# Read-only. This is how the admin screen answers "did it actually start", and
+# how an ImagePullBackOff becomes a sentence on the page instead of a world
+# server stuck on "starting" with no explanation.
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+
+# The world server's Service - what actually makes the game port reachable.
+#
+# A pod hostPort binds on the NODE. Under Docker Desktop the node is a Linux VM
+# whose ports are not published to the Windows host, so a hostPort alone leaves
+# the game port listening somewhere the router cannot forward to: `netstat -an`
+# on the host shows nothing on 7777. Docker Desktop does publish
+# type: LoadBalancer Services, so the launcher creates one.
+#
+# Still no verbs on endpoints or endpointslices: those are written by the
+# Service controller, never by the hub.
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["create", "get", "list", "watch", "patch", "delete"]
+---
+# The hub's service account lives in phoenixapp (or phoenixapp-dev); the Role
+# it is being granted lives here. A RoleBinding may name a subject from another
+# namespace, which is what makes this work without a ClusterRole - the grant
+# stays confined to this one namespace rather than becoming cluster-wide.
+#
+# BOTH ENVIRONMENTS ARE LISTED because this file is applied once, outside the
+# overlays, so there is nothing to substitute the right one in. A subject naming
+# a service account that does not exist is simply inert - RBAC matches on the
+# name a request actually arrives with - so listing both costs nothing and
+# removes a way for dev to be quietly broken while prod works.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: raysspacesim-operator-binding
+  namespace: raysspacesim
+subjects:
+- kind: ServiceAccount
+  name: phoenix-sa
+  namespace: phoenixapp
+- kind: ServiceAccount
+  name: phoenix-sa
+  namespace: phoenixapp-dev
+roleRef:
+  kind: Role
+  name: raysspacesim-operator
+  apiGroup: rbac.authorization.k8s.io

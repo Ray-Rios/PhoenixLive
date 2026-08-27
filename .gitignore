@@ -78,6 +78,28 @@ uploads/
 # ignored here: without this rule, `git add -A` records it as a gitlink — a
 # submodule pointer with no .gitmodules — which looks committed but clones as
 # an empty directory.
+#
+# THE LEADING SLASH IS LOAD-BEARING. Unanchored, `RaysSpaceSim/` matches at ANY
+# depth, and core.ignorecase is true on Windows — so it also swallowed
+# `k3s/raysspacesim/`, whole. That directory holds the Namespace, Role and
+# RoleBinding §5b traced a 403 to, plus the kustomization `deploy-prod.sh`
+# applies on every run, and NOT ONE of its files was tracked. They exist on one
+# machine; a fresh clone gets no `k3s/raysspacesim/` at all. Anchored, this
+# matches only the repo root, which is the one place it ever meant.
 # ============================================================
-RaysSpaceSim/
-k3s/overlays/rayspacesim/raysspacesim-secrets.yaml
+/RaysSpaceSim/
+
+# ============================================================
+# The world-server namespace's API key.
+#
+# Secrets do not cross namespaces (§5b), so `raysspacesim` needs its own copy of
+# GAMES_SERVER_API_KEY holding the SAME value as the hub's. Its committable twin
+# is `k3s/raysspacesim/secrets.example.yaml`, which IS tracked.
+#
+# This line used to read `k3s/overlays/rayspacesim/raysspacesim-secrets.yaml` —
+# wrong directory, and `rayspacesim` for `raysspacesim` — so it matched nothing
+# and had never ignored a thing. The file was covered only by the accident
+# above, which is why anchoring that rule and repairing this line had to be one
+# change: either alone makes a master credential committable.
+# ============================================================
+k3s/raysspacesim/raysspacesim-secrets.yaml
