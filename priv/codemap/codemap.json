@@ -13783,7 +13783,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 235,
+       "calls": 234,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -13900,7 +13900,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 235,
+       "calls": 234,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -17192,7 +17192,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 235,
+       "calls": 234,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -19695,7 +19695,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 235,
+       "calls": 234,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -21647,7 +21647,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 235,
+       "calls": 234,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -34223,8 +34223,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ aee7f9e-dirty",
- "generated_at": "2026-08-24T02:46:53Z",
- "game_commit": "aee7f9e",
+ "generated_from": "RaysSpaceSim @ 4334020-dirty",
+ "generated_at": "2026-08-24T18:20:35Z",
+ "game_commit": "4334020",
  "game_dirty": true
 }
