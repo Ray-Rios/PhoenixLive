@@ -92,6 +92,51 @@ echo
 [ -f "$PROJECT" ] || { echo "ERROR: no project at $PROJECT"; exit 1; }
 [ -f "$RUNUAT" ]  || { echo "ERROR: no RunUAT.bat at $RUNUAT — set UE_ROOT."; exit 1; }
 
+# THE EDITOR MUST NOT BE RUNNING. IT COSTS 2.5 HOURS TO FIND OUT LATE.
+#
+# The cook is UnrealEditor-Cmd.exe, and it reads the SAME
+# Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini the editor does.
+# With ModelContextProtocol enabled that file says bAutoStartServer=True and
+# ServerPortNumber=8000, so the commandlet tries to bind a port the running
+# editor already holds:
+#
+#   LogHttpListener: Error: HttpListener unable to bind to 127.0.0.1:8000
+#
+# UE ends a commandlet with ExitCode=1 if the warning/error summary contains
+# ANY error. So the build succeeds, the cook completes all 1071 packages and
+# prints "Done!", and UAT then reports Error_UnknownCookFailure - after two and
+# a half hours. The failure is real, the diagnosis is one line, and that line
+# is a hundred lines above the end of the output.
+#
+# -additionalcookeroptions below stops the commandlet binding at all, so this
+# check is belt rather than braces. It stays because the ini override travels
+# through bash, a .bat and a commandlet command line before it means anything,
+# and this file already has one bug (the joined -noclient-build switch) from
+# exactly that journey. A refusal that costs a second beats a cook that costs
+# an afternoon.
+MCP_PORT="$(sed -n 's/^ServerPortNumber=\([0-9]\+\).*/\1/p' \
+  "$PROJECT_DIR/Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini" 2>/dev/null | tail -1)"
+MCP_PORT="${MCP_PORT:-8000}"
+
+# grep -E, not findstr: ":8000" also matches 18000 and 8000x. Anchor the whole
+# column instead - the same substring trap the world server hit on :7777.
+#
+# [^ ]+ for the address, not [0-9.]+, so an IPv6 bind ([::1]:8000) is caught
+# too. The error message names 127.0.0.1, but which family HttpListener picks
+# is not this script's business to predict.
+if netstat -ano 2>/dev/null | tr -d '\r' \
+     | grep -Eq "^ +TCP +[^ ]+:${MCP_PORT} +.*LISTENING"; then
+  echo "ERROR: something is listening on 127.0.0.1:${MCP_PORT}."
+  echo
+  echo "  That is almost certainly the Unreal Editor with the"
+  echo "  ModelContextProtocol plugin auto-started. The cook commandlet reads"
+  echo "  the same settings and will try to bind the same port, log an Error,"
+  echo "  and fail the whole run with ExitCode=1 AFTER the cook has finished."
+  echo
+  echo "  Close the editor and run this again."
+  exit 1
+fi
+
 # AN INSTALLED ENGINE CANNOT BUILD SERVER TARGETS. AT ALL.
 #
 # UnrealBuildTool refuses outright:
@@ -209,14 +254,22 @@ mkdir -p "$ARCHIVE_DIR"
 #
 # AN ARRAY, NOT BACKSLASH CONTINUATIONS.
 #
-# This file has CRLF line endings, and `-noclient \<CR><LF>` does not reliably
-# continue a line — the first version of this joined two switches into
+# When this was written the file had CRLF line endings, and `-noclient \<CR><LF>`
+# does not reliably continue a line — the first version joined two switches into
 # "-noclient-build", so UAT saw one unknown argument and silently honoured
 # NEITHER. A dropped -noclient means it also builds a Linux client nobody wants;
 # a dropped -build means it may cook against stale binaries. Both fail quietly.
 #
-# Newlines inside an array literal need no escaping at all, so line endings
-# cannot break the argument list.
+# THE FILE IS LF TODAY (checked 2026-08-27: 344 bare LF, zero CRLF), AND THAT IS
+# THE ARGUMENT FOR KEEPING THE ARRAY, NOT AGAINST IT. Nobody set out to
+# renormalise it and no commit announces having done so; PhxLive has no
+# .gitattributes, so what lands on disk is whatever the last tool to write the
+# file decided. The hazard did not get fixed, it went dormant — and it can come
+# back on any checkout, on any machine, without a line of this file changing.
+#
+# Newlines inside an array literal need no escaping at all, so the argument list
+# cannot break whichever way the endings go. That is the point: the design does
+# not depend on a property of the file that nothing is maintaining.
 UAT_ARGS=(
   BuildCookRun
   -project="$(win_path "$PROJECT")"
@@ -231,6 +284,13 @@ UAT_ARGS=(
   -stage
   -pak
   -nocompileeditor
+
+  # Belt AND braces with the port check above. The cook commandlet inherits
+  # EditorPerProjectUserSettings.ini, which auto-starts the MCP HTTP server;
+  # a cook has no use for it and binding it is how this run fails. No spaces
+  # in the value, so it survives bash -> RunUAT.bat -> commandlet unquoted.
+  -additionalcookeroptions=-ini:EditorPerProjectUserSettings:[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]:bAutoStartServer=False
+
   -archive
   -archivedirectory="$(win_path "$ARCHIVE_DIR")"
 )
