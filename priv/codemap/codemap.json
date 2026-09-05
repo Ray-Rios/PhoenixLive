@@ -234,6 +234,13 @@
        "doc": "Drives the Upper Body Layer blend. True = play the montage on the whole body; false = upper body only over the locomotion pose. The Blend Poses by bool node in the Upper Body Layer reads this."
       },
       {
+       "type": "bool",
+       "name": "MirrorAttack",
+       "spec": "BlueprintReadOnly, Category = \"Combat\"",
+       "replicated": null,
+       "doc": "Bind this to the Mirror node's `bMirror` pin in the Anim Graph. NAMED WITHOUT THE b PREFIX like everything else here - see the header comment. The graph binds by FName and will not find bMirrorAttack. True for the duration of an off-hand swing. FAnimNode_Mirror::bMirror is PinShownByDefault, so binding it costs one wire and no graph logic; the node's MirrorDataTable is NOT pin-exposed and has to be set on the node itself, per Anim Blueprint, to that skeleton's table. NOTE the node's bMirror DEFAULTS TO TRUE. Drop a Mirror node in without binding this and every animation mirrors, always - which reads as the character being left-handed rather than as an unbound pin."
+      },
+      {
        "type": "TObjectPtr<ACharacter>",
        "name": "Character",
        "spec": "BlueprintReadOnly, Category = \"Owner\"",
@@ -359,6 +366,23 @@
        "called_in": []
       },
       {
+       "name": "GetMirrorAttack",
+       "ret": "bool",
+       "sig": "bool GetMirrorAttack() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintNativeEvent, BlueprintCallable, Category = \"Anim State\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "True while the swing in progress belongs to the OFF hand. Drives FAnimNode_Mirror's `bMirror` pin, which is PinShownByDefault and so binds to this without any graph logic. One clip per weapon type therefore serves both hands: the main hand plays it, the off hand plays the same clip mirrored. Authoring a second, hand-flipped clip for every weapon on every skeleton was the alternative.",
+       "calls": 0,
+       "called_in": []
+      },
+      {
        "name": "GetIsInAir",
        "ret": "bool",
        "sig": "bool GetIsInAir() const;",
@@ -442,6 +466,23 @@
        "name": "GetFullBody_Implementation",
        "ret": "bool",
        "sig": "virtual bool GetFullBody_Implementation() const override { return bFullBodyAttack; }",
+       "params": [],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": true,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "GetMirrorAttack_Implementation",
+       "ret": "bool",
+       "sig": "virtual bool GetMirrorAttack_Implementation() const override { return bOffHandAttack; }",
        "params": [],
        "const": true,
        "virtual": true,
@@ -765,6 +806,13 @@
        "spec": "BlueprintReadWrite, Category = \"Combat\"",
        "replicated": null,
        "doc": "True = montage on the whole body; false = upper body over locomotion."
+      },
+      {
+       "type": "bool",
+       "name": "bOffHandAttack",
+       "spec": "BlueprintReadOnly, Category = \"Combat\", meta = (AllowPrivateAccess = \"true\"",
+       "replicated": null,
+       "doc": "True while the current swing is the OFF hand's. Mirrors the animation rather than needing a second, hand-flipped clip per weapon per skeleton."
       },
       {
        "type": "USpringArmComponent*",
@@ -1344,108 +1392,6 @@
        "spec": "VisibleAnywhere, Category = \"Mannequin\"",
        "replicated": null,
        "doc": ""
-      }
-     ],
-     "replication": {}
-    },
-    {
-     "name": "AAsteroid",
-     "base": "ACelestialBody",
-     "kind": "class",
-     "uspec": "",
-     "file": "Plugins/Cosmos/Source/Cosmos/Public/Asteroid.h",
-     "doc": "Destructible asteroid. Orbits like any celestial body, can be shot (lasers/torpedoes) and shatters, damages shields on impact. Planets and stars are NOT damageable - only these.",
-     "functions": [
-      {
-       "name": "TakeHit",
-       "ret": "bool",
-       "sig": "bool TakeHit(float Damage);",
-       "params": [
-        {
-         "type": "float",
-         "name": "Damage",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Apply weapon damage. Returns true if this hit destroyed it.",
-       "calls": 8,
-       "called_in": [
-        "Asteroid.cpp",
-        "CosmicWeaponsComponent.cpp",
-        "EnemyFighter.cpp",
-        "ShieldQuadrantComponent.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "Nudge",
-       "ret": "void",
-       "sig": "void Nudge(const FVector& Impulse);",
-       "params": [
-        {
-         "type": "const FVector&",
-         "name": "Impulse",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Impulse response: kick the orbital velocity (cm/s). Small rocks move more than big ones (scaled by inverse of Radius^3-ish mass proxy).",
-       "calls": 5,
-       "called_in": [
-        "Asteroid.cpp",
-        "CosmicWeaponsComponent.cpp",
-        "EnemyFighter.cpp"
-       ]
-      },
-      {
-       "name": "Shatter",
-       "ret": "void",
-       "sig": "void Shatter();",
-       "params": [],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": 2,
-       "called_in": [
-        "Asteroid.cpp"
-       ]
-      }
-     ],
-     "properties": [
-      {
-       "type": "float",
-       "name": "Health",
-       "spec": "EditAnywhere, Category = \"Asteroid\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "float",
-       "name": "ImpactDamage",
-       "spec": "EditAnywhere, Category = \"Asteroid\"",
-       "replicated": null,
-       "doc": "Shield damage dealt when the player flies into it."
       }
      ],
      "replication": {}
@@ -3194,9 +3140,8 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 11,
+       "calls": 8,
        "called_in": [
-        "Asteroid.cpp",
         "CelestialBody.cpp",
         "CelestialSubsystem.cpp",
         "CosmicDemoManager.cpp",
@@ -3306,9 +3251,8 @@
        "machine": null,
        "machine_note": null,
        "doc": "Does THIS machine simulate this body? Net mode, not IsRunningDedicatedServer() and not bPinned. We have been bitten by the process-level check before (the shard heartbeat silently never fired under PIE because IsRunningDedicatedServer() is per-PROCESS and PIE runs client and server in one). NM_Client is the only mode that must not simulate: standalone, listen server and dedicated all own it.",
-       "calls": 6,
+       "calls": 5,
        "called_in": [
-        "Asteroid.cpp",
         "CelestialBody.cpp",
         "PoolPlanet.cpp"
        ]
@@ -3559,6 +3503,13 @@
        "doc": "Atmosphere tint (RGB). Drives BOTH the from-orbit shell glow and the from-ground SkyAtmosphere sky color, so the sky matches the planet's look from space. Default is Earth sky blue."
       },
       {
+       "type": "FName",
+       "name": "AtmosphereName",
+       "spec": "VisibleAnywhere, BlueprintReadOnly, Category = \"Atmosphere\"",
+       "replicated": null,
+       "doc": "Which named tint this body was given (\"Red\", \"Blue\", ...), or NAME_None. Gameplay asks for planets by this, never by comparing AtmosphereColor to a literal - a float compare against a colour breaks the first time a channel moves by 0.01, and it fails SILENTLY: whatever was filtering on it simply finds nothing, which looks identical to the feature not being written yet. Set from FCosmicAtmosphereTint by the world builder, from the same entry that set the colour, so the two cannot disagree."
+      },
+      {
        "type": "TObjectPtr<UAtmosphereComponent>",
        "name": "AtmosphereComponent",
        "spec": "VisibleAnywhere, BlueprintReadOnly, Category = \"Atmosphere\"",
@@ -3566,95 +3517,18 @@
        "doc": "Optional atmosphere component (automatically created if bHasAtmosphere is true)"
       },
       {
-       "type": "bool",
-       "name": "bHasRing",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "--- Saturn-style ring (visual): ice/rock chunks in an annulus ---"
-      },
-      {
-       "type": "bool",
-       "name": "bUseSmartRingSystem",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Use smart ring system (performant, interactive) instead of simple ISM. DISABLED by default: the SmartRing pooling/build path was hanging PIE on startup. The legacy ISM ring below is the proven path; shoot-to-destroy will be re-added on top of it. Flip to true only once that's stable."
-      },
-      {
-       "type": "float",
-       "name": "RingInner",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring bounds as multiples of Radius."
-      },
-      {
-       "type": "float",
-       "name": "RingOuter",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "int32",
-       "name": "RingChunks",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "float",
-       "name": "RingTiltDeg",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "float",
-       "name": "RingSpinDegPerSec",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "TObjectPtr<UMaterialInterface>",
-       "name": "RingMaterial",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "TObjectPtr<UStaticMesh>",
-       "name": "RingMesh",
-       "spec": "EditAnywhere, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Optional chunk mesh (e.g. a faceted shard). Falls back to the body mesh."
-      },
-      {
        "type": "TObjectPtr<UStaticMesh>",
        "name": "SurfaceMesh",
        "spec": "EditAnywhere, Category = \"Rendering\"",
        "replicated": null,
-       "doc": "ConfigureVisuals applies it before anything reads Mesh->GetStaticMesh(), which matters because the shell, the ring and the collision swap all gate on that being non-null. THE SUN WAS INVISIBLE BECAUSE NOTHING EVER SET THIS. FCosmicFixedBody had no mesh field, the C++ builder had nothing to assign, and ACelestialBody only ever COPIED Mesh's mesh onto the shell - so a body spawned by the builder had a null mesh, a null shell, and rendered nothing at all while still lighting the scene and colliding. The old Python demo scripts set the mesh by hand, which is why this only appeared once the builder took over. Left null it falls back to the engine sphere rather than staying invisible. A grey ball is a bug you can see; nothing is a bug you go looking for."
-      },
-      {
-       "type": "TObjectPtr<UInstancedStaticMeshComponent>",
-       "name": "RingISM",
-       "spec": "VisibleAnywhere, Category = \"Rendering\"",
-       "replicated": null,
-       "doc": "Legacy simple ring system (non-interactive, for backwards compatibility)"
-      },
-      {
-       "type": "TObjectPtr<class USmartRingSystem>",
-       "name": "SmartRing",
-       "spec": "VisibleAnywhere, Category = \"Rendering\"",
-       "replicated": null,
-       "doc": "Smart ring system (interactive, performant)"
+       "doc": "ConfigureVisuals applies it before anything reads Mesh->GetStaticMesh(), which matters because the shell and the collision swap both gate on that being non-null. THE SUN WAS INVISIBLE BECAUSE NOTHING EVER SET THIS. FCosmicFixedBody had no mesh field, the C++ builder had nothing to assign, and ACelestialBody only ever COPIED Mesh's mesh onto the shell - so a body spawned by the builder had a null mesh, a null shell, and rendered nothing at all while still lighting the scene and colliding. The old Python demo scripts set the mesh by hand, which is why this only appeared once the builder took over. Left null it falls back to the engine sphere rather than staying invisible. A grey ball is a bug you can see; nothing is a bug you go looking for."
       },
       {
        "type": "FVector",
        "name": "MeshStretch",
        "spec": "EditAnywhere, Category = \"Rendering\"",
        "replicated": null,
-       "doc": "Non-uniform stretch on the visual mesh (asteroids: lumpy potatoes, not eggs). Collision stays the analytic sphere."
+       "doc": "Non-uniform stretch on the visual mesh (a lumpy potato, not an egg). Collision stays the analytic sphere."
       },
       {
        "type": "TObjectPtr<USphereComponent>",
@@ -3841,13 +3715,12 @@
        "machine": null,
        "machine_note": null,
        "doc": "Strongest walking-gravity source at a position. Returns nullptr if none. OutAccel is the gravitational acceleration vector (cm/s^2).",
-       "calls": 6,
+       "calls": 5,
        "called_in": [
         "CelestialSubsystem.cpp",
         "CosmicFlightComponent.cpp",
         "CosmicWeaponsComponent.cpp",
         "EnemyFighter.cpp",
-        "SmartRingSystem.cpp",
         "SpellProjectile.cpp"
        ]
       },
@@ -4056,11 +3929,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "All registered bodies (read-only; used for analytic hazard checks).",
-       "calls": 8,
+       "calls": 5,
        "called_in": [
         "CosmicDemoManager.cpp",
-        "CosmicHUD.cpp",
-        "ShieldQuadrantComponent.cpp"
+        "CosmicHUD.cpp"
        ]
       },
       {
@@ -4083,10 +3955,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "The body the player is standing on. Its orbit FREEZES while anchored - a planet that teleports along its orbit under the character's feet causes violent ground shake. Null = nothing anchored. Defined in the .cpp, not inline: TWeakObjectPtr<ACelestialBody>'s assignment operator needs ACelestialBody to be a COMPLETE type at the point it is compiled, and this header only forward-declares it. That was silently fine as long as this header always happened to be pulled into a unity blob after something that had already included CelestialBody.h - until a TU compiles this header standalone (e.g. the adaptive build excluding a recently-touched .cpp from the unity file), at which point it fails with a wall of \"no operator=\" template noise pointing at WeakObjectPtrTemplates.h instead of at the real cause.",
-       "calls": 5,
+       "calls": 3,
        "called_in": [
         "CelestialSubsystem.cpp",
-        "CosmicDemoManager.cpp",
         "CosmicFlightComponent.cpp"
        ]
       },
@@ -4110,10 +3981,8 @@
        "machine": null,
        "machine_note": null,
        "doc": "The currently anchored (orbit-frozen) body, or null.",
-       "calls": 1,
-       "called_in": [
-        "CosmicDemoManager.cpp"
-       ]
+       "calls": 0,
+       "called_in": []
       },
       {
        "name": "Integrate",
@@ -4276,14 +4145,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       }
      ],
@@ -4835,7 +4704,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Point the built-in moveset and the cast montage at a different character's animation content. Called from UCosmicAppearanceComponent when the player changes body at a mannequin, so it has to be public. This is not cosmetic tidiness: a montage is bound to the skeleton it was authored on, and Montage_Play on a mesh with a different skeleton returns without playing and without complaining. Leaving Aurora's montages selected while wearing Zinx produces attacks that deal damage but show no animation at all - which reads as a broken attack, not a missing asset.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmicAbilityComponent.cpp",
         "CosmicAppearanceComponent.cpp"
@@ -5571,25 +5440,6 @@
        "called_in": []
       },
       {
-       "name": "UpdateRingIsland",
-       "ret": "void",
-       "sig": "void UpdateRingIsland();",
-       "params": [],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": 2,
-       "called_in": [
-        "CosmicDemoManager.cpp"
-       ]
-      },
-      {
        "name": "UpdateSkyAtmosphere",
        "ret": "void",
        "sig": "void UpdateSkyAtmosphere();",
@@ -5641,25 +5491,6 @@
        "machine": null,
        "machine_note": null,
        "doc": "Rebases the world origin to follow the player so collision/physics stay precise far from (0,0,0). This is the real fix for the landing bounce.",
-       "calls": 2,
-       "called_in": [
-        "CosmicDemoManager.cpp"
-       ]
-      },
-      {
-       "name": "UpdateRingCollision",
-       "ret": "void",
-       "sig": "void UpdateRingCollision();",
-       "params": [],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Proximity-gated ring collision: enables real QueryOnly/Block collision on the ONE ring the player is currently inside (so the character is physically stopped by the chunks) and freezes that planet's orbit for the duration, then turns both back off on exit. Only one ring is ever collidable at a time - that is what keeps the per-frame cost the original NoCollision design was avoiding.",
        "calls": 2,
        "called_in": [
         "CosmicDemoManager.cpp"
@@ -5860,6 +5691,13 @@
        "doc": "Local offset for the ship mesh relative to the character root."
       },
       {
+       "type": "TMap<FName, FCosmicMeleeMoveset>",
+       "name": "MeleeSwingMovesets",
+       "spec": "EditAnywhere, Category = \"Cosmic Demo|Melee\"",
+       "replicated": null,
+       "doc": "DO have an `UpperBody` montage slot, and every montage in the project is authored for it, so a clip here is the fix. KEYED BY CHARACTER because montages are skeleton-bound: one clip cannot serve both heroes, and Montage_Play on the wrong skeleton returns 0 silently (\u00a710). The key matches the appearance catalog's ids. Inside each moveset the clips are keyed by WEAPON TYPE, and one clip serves both hands - the off hand plays it mirrored. Seeded in the constructor with Aurora's and Zinx's surviving attack montages, so melee animates out of the box rather than waiting for someone to find this property. Clear an entry to disable that hero's swing animation; the swing itself still lands."
+      },
+      {
        "type": "TArray<FCosmicHotbarSlot>",
        "name": "HotbarAbilities",
        "spec": "EditAnywhere, Category = \"UI\"",
@@ -5872,27 +5710,6 @@
        "spec": "EditAnywhere, Category = \"Demo\"",
        "replicated": null,
        "doc": "box3d dice-pusher capsule on the player (the dice-field stress test). OFF in the pool arena: pool planets run in a SCALED box3d space and the real-scale capsule would phantom-collide with them."
-      },
-      {
-       "type": "bool",
-       "name": "bEnableRingIslands",
-       "spec": "EditAnywhere, Category = \"RingDive\"",
-       "replicated": null,
-       "doc": "Ring dive island setup (local box3d physics inside rings)."
-      },
-      {
-       "type": "TObjectPtr<UStaticMesh>",
-       "name": "RingBergMesh",
-       "spec": "EditAnywhere, Category = \"RingDive\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "TObjectPtr<UMaterialInterface>",
-       "name": "RingBergMaterial",
-       "spec": "EditAnywhere, Category = \"RingDive\"",
-       "replicated": null,
-       "doc": ""
       },
       {
        "type": "bool",
@@ -6565,9 +6382,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "Does THIS machine run the full movement simulation for this pawn? True on exactly one machine per pawn: whoever holds its input. That is the owning client for a remote player, the server for its own listen-server pawn or an AI pawn, and the single process in standalone. The unpossessed-on-authority case is not an edge case for tidiness: a pawn spawned by the game mode has no controller until RestartPlayer possesses it, and with the character load now going through an async hub fetch that window is not always one frame. Nobody else can simulate it, so the authority does.",
-       "calls": 8,
+       "calls": 9,
        "called_in": [
         "CosmicFlightComponent.cpp",
+        "Portal.cpp",
         "RSSCharacter.cpp"
        ]
       },
@@ -6724,10 +6542,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 2,
+       "calls": 1,
        "called_in": [
-        "CosmicFlightComponent.cpp",
-        "ShieldQuadrantComponent.cpp"
+        "CosmicFlightComponent.cpp"
        ]
       },
       {
@@ -9678,14 +9495,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       }
      ],
@@ -9829,6 +9646,25 @@
      "replication": {}
     },
     {
+     "name": "FCosmicMeleeMoveset",
+     "base": "",
+     "kind": "struct",
+     "uspec": "BlueprintType",
+     "file": "Plugins/Cosmos/Source/Cosmos/Public/CosmicMeleeComponent.h",
+     "doc": "Swing clips for one body, keyed by the WEAPON TYPE being swung. File scope, not nested in the component: UnrealHeaderTool does not allow a USTRUCT inside a UCLASS.",
+     "functions": [],
+     "properties": [
+      {
+       "type": "TMap<ECosmicItemType, TSoftObjectPtr<UAnimMontage>>",
+       "name": "ByWeapon",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Melee\"",
+       "replicated": null,
+       "doc": ""
+      }
+     ],
+     "replication": {}
+    },
+    {
      "name": "UCosmicMeleeComponent",
      "base": "UActorComponent",
      "kind": "class",
@@ -9852,6 +9688,57 @@
        "doc": "",
        "calls": null,
        "called_in": []
+      },
+      {
+       "name": "SetAnimationCharacter",
+       "ret": "void",
+       "sig": "void SetAnimationCharacter(FName CharacterId) { AnimCharacterId = CharacterId; }",
+       "params": [
+        {
+         "type": "FName",
+         "name": "CharacterId",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Melee\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Which body is currently worn, and therefore which montage to swing with. Set by UCosmicAppearanceComponent through SetAnimationCharacter, the same call and the same moment the ability component gets it. Both have to move together: an appearance swap that updated one and not the other would give a character casting with the right clip and swinging with a clip bound to the body it used to be wearing.",
+       "calls": 3,
+       "called_in": [
+        "CosmicAbilityComponent.cpp",
+        "CosmicAppearanceComponent.cpp"
+       ]
+      },
+      {
+       "name": "ResolveSwingMontage",
+       "ret": "UAnimMontage*",
+       "sig": "UAnimMontage* ResolveSwingMontage(ECosmicItemType WeaponType) const;",
+       "params": [
+        {
+         "type": "ECosmicItemType",
+         "name": "WeaponType",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Resolves the clip for the worn body and the weapon being swung. Null when none is configured.",
+       "calls": 2,
+       "called_in": [
+        "CosmicMeleeComponent.cpp"
+       ]
       },
       {
        "name": "GetMainCooldown",
@@ -9957,11 +9844,18 @@
      ],
      "properties": [
       {
+       "type": "TMap<FName, FCosmicMeleeMoveset>",
+       "name": "SwingMovesets",
+       "spec": "EditAnywhere, Category = \"Melee\"",
+       "replicated": null,
+       "doc": "tables rather than one with a character argument threaded through it. Movesets by worn body (\"Aurora\", \"Zinx\"), keyed the same way the appearance catalog and UCosmicAbilityComponent::SetAnimationCharacter key theirs, so there is one vocabulary rather than two. A missing character or a missing weapon type is a working state: melee behaves as it did before this existed - damage lands, nothing animates. THE OUTER KEY IS A WORKAROUND FOR THREE SKELETONS. Section 10's shared-skeleton migration deletes it: one skeleton means one clip per weapon serves every body."
+      },
+      {
        "type": "float",
        "name": "UnarmedPower",
        "spec": "EditAnywhere, Category = \"Melee\"",
        "replicated": null,
-       "doc": "Unarmed base damage (scaled by the profile's DamageMult)."
+       "doc": ""
       }
      ],
      "replication": {}
@@ -10478,38 +10372,6 @@
        "called_in": [
         "CosmicPlayerRepComponent.cpp",
         "RSSCharacter.cpp"
-       ]
-      },
-      {
-       "name": "BeginLocalAttack",
-       "ret": "void",
-       "sig": "void BeginLocalAttack(float DurationSeconds, bool bFullBody);",
-       "params": [
-        {
-         "type": "float",
-         "name": "DurationSeconds",
-         "default": null
-        },
-        {
-         "type": "bool",
-         "name": "bFullBody",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "adding either would change this class's network checksum and force the world-server image to be rebuilt in lockstep (invariant 14) for a value that only ever exists on the machine holding the input. WHY IT LIVES HERE rather than on ARSSCharacter, where the animation fields are: Cosmos must not depend on the RSS game module (the same rule that sent NetState and MountVisual to this component). The melee and ability components are in Cosmos and cannot see ARSSCharacter or IRSSAnimStateProvider. They can see this. @param DurationSeconds how long the swing lasts. The caller knows: the melee cooldown, or the montage's own play length. @param bFullBody drives the anim graph's full-body vs upper-body split, so a swing can leave locomotion running.",
-       "calls": 3,
-       "called_in": [
-        "CosmicAbilityComponent.cpp",
-        "CosmicMeleeComponent.cpp",
-        "CosmicPlayerRepComponent.cpp"
        ]
       },
       {
@@ -11131,10 +10993,8 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 1,
-       "called_in": [
-        "CosmicDemoManager.cpp"
-       ]
+       "calls": 0,
+       "called_in": []
       },
       {
        "name": "OnSkyAnchored",
@@ -13783,14 +13643,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 234,
+       "calls": 220,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialBody.cpp",
-        "CelestialSubsystem.cpp"
+        "CelestialSubsystem.cpp",
+        "CockpitAbility.cpp"
        ]
       },
       {
@@ -13900,14 +13760,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 234,
+       "calls": 220,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialBody.cpp",
-        "CelestialSubsystem.cpp"
+        "CelestialSubsystem.cpp",
+        "CockpitAbility.cpp"
        ]
       },
       {
@@ -15124,6 +14984,13 @@
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Spawning\"",
        "replicated": null,
        "doc": "Spawn radius from spawner location (cm)"
+      },
+      {
+       "type": "TWeakObjectPtr<class ACelestialBody>",
+       "name": "HomeBody",
+       "spec": "VisibleAnywhere, BlueprintReadOnly, Category = \"Spawning\"",
+       "replicated": null,
+       "doc": "The planet this patrol belongs to, if any. A patrol placed at a planet must RIDE it. Planets here are not scenery - they orbit at thousands of cm/s and are teleport-integrated into place each frame, so a spawner left at a fixed world location would be light seconds behind its planet within a minute and would keep spawning fighters into empty space. The world builder attaches the spawner to the body, and this is the record of which one for anything that needs to ask."
       },
       {
        "type": "TSubclassOf<AEnemyFighter>",
@@ -17192,14 +17059,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 234,
+       "calls": 220,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialBody.cpp",
-        "CelestialSubsystem.cpp"
+        "CelestialSubsystem.cpp",
+        "CockpitAbility.cpp"
        ]
       },
       {
@@ -17412,276 +17279,12 @@
      "replication": {}
     },
     {
-     "name": "ARingDiveIsland",
-     "base": "AActor",
-     "kind": "class",
-     "uspec": "",
-     "file": "Plugins/Cosmos/Source/Cosmos/Public/RingDiveIsland.h",
-     "doc": "A floating-origin box3d physics island, spawned around the player when they dive into a planetary ring. THIS is how box3d powers a galaxy-scale game: physics engines compute in 32-bit floats, so instead of one absolute world, a local box3d world is created ON DEMAND with its origin AT the player. The ~150 ice bergs around you become real rigid bodies - you plow through them with a kinematic capsule, lasers apply real b3 impulses, torpedoes blast them apart with real contact response, and berg-vs-berg collisions are solved by box3d's multithreaded solver. The island lives while you're inside i\u2026",
-     "functions": [
-      {
-       "name": "BeginPlay",
-       "ret": "void",
-       "sig": "virtual void BeginPlay() override;",
-       "params": [],
-       "const": false,
-       "virtual": true,
-       "static": false,
-       "inline_body": false,
-       "engine_override": true,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": null,
-       "called_in": []
-      },
-      {
-       "name": "EndPlay",
-       "ret": "void",
-       "sig": "virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;",
-       "params": [
-        {
-         "type": "const EEndPlayReason::Type",
-         "name": "EndPlayReason",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": true,
-       "static": false,
-       "inline_body": false,
-       "engine_override": true,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": null,
-       "called_in": []
-      },
-      {
-       "name": "Tick",
-       "ret": "void",
-       "sig": "virtual void Tick(float DeltaSeconds) override;",
-       "params": [
-        {
-         "type": "float",
-         "name": "DeltaSeconds",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": true,
-       "static": false,
-       "inline_body": false,
-       "engine_override": true,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": null,
-       "called_in": []
-      },
-      {
-       "name": "NudgeBerg",
-       "ret": "void",
-       "sig": "void NudgeBerg(int32 InstanceIndex, const FVector& ImpulseDirUE, float Strength);",
-       "params": [
-        {
-         "type": "int32",
-         "name": "InstanceIndex",
-         "default": null
-        },
-        {
-         "type": "const FVector&",
-         "name": "ImpulseDirUE",
-         "default": null
-        },
-        {
-         "type": "float",
-         "name": "Strength",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Real box3d impulse on a berg (from lasers). Instance = ISM index.",
-       "calls": 3,
-       "called_in": [
-        "CosmicWeaponsComponent.cpp",
-        "RingDiveIsland.cpp"
-       ]
-      },
-      {
-       "name": "Blast",
-       "ret": "void",
-       "sig": "void Blast(const FVector& WorldPos, float Radius, float Strength);",
-       "params": [
-        {
-         "type": "const FVector&",
-         "name": "WorldPos",
-         "default": null
-        },
-        {
-         "type": "float",
-         "name": "Radius",
-         "default": null
-        },
-        {
-         "type": "float",
-         "name": "Strength",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Real box3d blast (from torpedoes) at a world position.",
-       "calls": 2,
-       "called_in": [
-        "CosmicWeaponsComponent.cpp",
-        "RingDiveIsland.cpp"
-       ]
-      },
-      {
-       "name": "IsAlive",
-       "ret": "bool",
-       "sig": "bool IsAlive() const { return bWorldCreated; }",
-       "params": [],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": true,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": 0,
-       "called_in": []
-      },
-      {
-       "name": "ToIsland",
-       "ret": "b3Vec3",
-       "sig": "b3Vec3 ToIsland(const FVector& WorldUE) const;",
-       "params": [
-        {
-         "type": "const FVector&",
-         "name": "WorldUE",
-         "default": null
-        }
-       ],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "UE world <-> island-local box3d (Y-up meters, origin at OriginUE)",
-       "calls": 5,
-       "called_in": [
-        "RingDiveIsland.cpp"
-       ]
-      },
-      {
-       "name": "FromIsland",
-       "ret": "FVector",
-       "sig": "FVector FromIsland(const b3Vec3& P) const;",
-       "params": [
-        {
-         "type": "const b3Vec3&",
-         "name": "P",
-         "default": null
-        }
-       ],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": 2,
-       "called_in": [
-        "RingDiveIsland.cpp"
-       ]
-      }
-     ],
-     "properties": [
-      {
-       "type": "int32",
-       "name": "BergCount",
-       "spec": "EditAnywhere, Category = \"Island\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "float",
-       "name": "FieldRadius",
-       "spec": "EditAnywhere, Category = \"Island\"",
-       "replicated": null,
-       "doc": "Bergs spawn in a disk of this radius (cm) around the island origin."
-      },
-      {
-       "type": "FVector2D",
-       "name": "BergSizeRange",
-       "spec": "EditAnywhere, Category = \"Island\"",
-       "replicated": null,
-       "doc": "Berg circumradius range (cm)."
-      },
-      {
-       "type": "float",
-       "name": "DespawnDistance",
-       "spec": "EditAnywhere, Category = \"Island\"",
-       "replicated": null,
-       "doc": "Island dissolves when the player is this far from its origin (cm)."
-      },
-      {
-       "type": "TObjectPtr<UStaticMesh>",
-       "name": "BergMesh",
-       "spec": "EditAnywhere, Category = \"Island\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "TObjectPtr<UMaterialInterface>",
-       "name": "BergMaterial",
-       "spec": "EditAnywhere, Category = \"Island\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "TObjectPtr<UInstancedStaticMeshComponent>",
-       "name": "BergISM",
-       "spec": "VisibleAnywhere",
-       "replicated": null,
-       "doc": ""
-      }
-     ],
-     "replication": {}
-    },
-    {
      "name": "UShieldQuadrantComponent",
      "base": "UActorComponent",
      "kind": "class",
      "uspec": "",
      "file": "Plugins/Cosmos/Source/Cosmos/Public/ShieldQuadrantComponent.h",
-     "doc": "Quadrant shields: Forward / Right / Rear / Left. Asteroid impacts drain the quadrant facing the hit; shields regenerate after a quiet period. If an impact lands on a depleted quadrant, the ship (character) is lost -> respawn via UCosmicFlightComponent.",
+     "doc": "Quadrant shields: Forward / Right / Rear / Left. An impact drains the quadrant facing it; shields regenerate after a quiet period. If an impact lands on a depleted quadrant, the ship (character) is lost -> respawn via UCosmicFlightComponent. A PURE DAMAGE SINK, AND DELIBERATELY SO SINCE 2026-08-27. This component used to reach OUT for its own damage: it bound OnActorHit, cast the other actor to AAsteroid, and ran a 0.15 s all-actors scan looking for rocks and ring annuli to be hit by. That inverted the dependency - a shield system that knows what an asteroid is - and when asteroids and rings\u2026",
      "functions": [
       {
        "name": "BeginPlay",
@@ -17773,8 +17376,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "Apply damage from a world-space impact point.",
-       "calls": 4,
+       "calls": 2,
        "called_in": [
+        "EnemyFighter.cpp",
         "ShieldQuadrantComponent.cpp"
        ]
       },
@@ -17806,77 +17410,6 @@
        "calls": 2,
        "called_in": [
         "CosmicFlightComponent.cpp",
-        "ShieldQuadrantComponent.cpp"
-       ]
-      },
-      {
-       "name": "OnOwnerHit",
-       "ret": "void",
-       "sig": "void OnOwnerHit(AActor* SelfActor, AActor* OtherActor, FVector NormalImpulse, const FHitResult& Hit);",
-       "params": [
-        {
-         "type": "AActor*",
-         "name": "SelfActor",
-         "default": null
-        },
-        {
-         "type": "AActor*",
-         "name": "OtherActor",
-         "default": null
-        },
-        {
-         "type": "FVector",
-         "name": "NormalImpulse",
-         "default": null
-        },
-        {
-         "type": "const FHitResult&",
-         "name": "Hit",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": "",
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": 2,
-       "called_in": [
-        "CosmicFlightComponent.cpp",
-        "ShieldQuadrantComponent.cpp"
-       ]
-      },
-      {
-       "name": "HandleRockImpact",
-       "ret": "void",
-       "sig": "void HandleRockImpact(class AAsteroid* Rock, const FVector& ImpactPoint);",
-       "params": [
-        {
-         "type": "class AAsteroid*",
-         "name": "Rock",
-         "default": null
-        },
-        {
-         "type": "const FVector&",
-         "name": "ImpactPoint",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": 3,
-       "called_in": [
         "ShieldQuadrantComponent.cpp"
        ]
       },
@@ -17927,521 +17460,6 @@
        "spec": "EditAnywhere, Category = \"Shields\"",
        "replicated": null,
        "doc": "Seconds without damage before regen starts."
-      }
-     ],
-     "replication": {}
-    },
-    {
-     "name": "ARingChunk",
-     "base": "AActor",
-     "kind": "class",
-     "uspec": "",
-     "file": "Plugins/Cosmos/Source/Cosmos/Public/SmartRingSystem.h",
-     "doc": "Individual ring chunk that exists as a real physics object near the player. Pooled and reused to avoid spawn/destroy overhead.",
-     "functions": [
-      {
-       "name": "Tick",
-       "ret": "void",
-       "sig": "virtual void Tick(float DeltaSeconds) override;",
-       "params": [
-        {
-         "type": "float",
-         "name": "DeltaSeconds",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": true,
-       "static": false,
-       "inline_body": false,
-       "engine_override": true,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": null,
-       "called_in": []
-      },
-      {
-       "name": "Activate",
-       "ret": "void",
-       "sig": "void Activate(const FTransform& Transform, ACelestialBody* Planet, int32 InstIndex);",
-       "params": [
-        {
-         "type": "const FTransform&",
-         "name": "Transform",
-         "default": null
-        },
-        {
-         "type": "ACelestialBody*",
-         "name": "Planet",
-         "default": null
-        },
-        {
-         "type": "int32",
-         "name": "InstIndex",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Activate chunk at position/rotation",
-       "calls": 7,
-       "called_in": [
-        "CosmicFlightComponent.cpp",
-        "Portal.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "Deactivate",
-       "ret": "void",
-       "sig": "void Deactivate();",
-       "params": [],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Deactivate and return to pool",
-       "calls": 8,
-       "called_in": [
-        "CosmicFlightComponent.cpp",
-        "Portal.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "TakeHit",
-       "ret": "void",
-       "sig": "void TakeHit(float Damage);",
-       "params": [
-        {
-         "type": "float",
-         "name": "Damage",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Take damage",
-       "calls": 8,
-       "called_in": [
-        "Asteroid.cpp",
-        "CosmicWeaponsComponent.cpp",
-        "EnemyFighter.cpp",
-        "ShieldQuadrantComponent.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "IsActive",
-       "ret": "bool",
-       "sig": "bool IsActive() const { return bActive; }",
-       "params": [],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": true,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Is this chunk active",
-       "calls": 5,
-       "called_in": [
-        "CosmicFlightComponent.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      }
-     ],
-     "properties": [
-      {
-       "type": "TObjectPtr<UStaticMeshComponent>",
-       "name": "Mesh",
-       "spec": "VisibleAnywhere",
-       "replicated": null,
-       "doc": ""
-      }
-     ],
-     "replication": {}
-    },
-    {
-     "name": "USmartRingSystem",
-     "base": "USceneComponent",
-     "kind": "class",
-     "uspec": "",
-     "file": "Plugins/Cosmos/Source/Cosmos/Public/SmartRingSystem.h",
-     "doc": "Smart ring component that manages visual + physics hybrid ring system. Attached to ACelestialBody to replace the simple RingISM approach.",
-     "functions": [
-      {
-       "name": "BeginPlay",
-       "ret": "void",
-       "sig": "virtual void BeginPlay() override;",
-       "params": [],
-       "const": false,
-       "virtual": true,
-       "static": false,
-       "inline_body": false,
-       "engine_override": true,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": null,
-       "called_in": []
-      },
-      {
-       "name": "TickComponent",
-       "ret": "void",
-       "sig": "virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;",
-       "params": [
-        {
-         "type": "float",
-         "name": "DeltaTime",
-         "default": null
-        },
-        {
-         "type": "ELevelTick",
-         "name": "TickType",
-         "default": null
-        },
-        {
-         "type": "FActorComponentTickFunction*",
-         "name": "ThisTickFunction",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": true,
-       "static": false,
-       "inline_body": false,
-       "engine_override": true,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "",
-       "calls": null,
-       "called_in": []
-      },
-      {
-       "name": "BuildRing",
-       "ret": "void",
-       "sig": "void BuildRing(float PlanetRadius, UStaticMesh* FallbackMesh);",
-       "params": [
-        {
-         "type": "float",
-         "name": "PlanetRadius",
-         "default": null
-        },
-        {
-         "type": "UStaticMesh*",
-         "name": "FallbackMesh",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Build the ring system",
-       "calls": 2,
-       "called_in": [
-        "CelestialBody.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "BreakChunk",
-       "ret": "void",
-       "sig": "void BreakChunk(int32 InstanceIndex, const FVector& ImpactPoint, const FVector& ImpactDirection, float ImpulseMagnitude);",
-       "params": [
-        {
-         "type": "int32",
-         "name": "InstanceIndex",
-         "default": null
-        },
-        {
-         "type": "const FVector&",
-         "name": "ImpactPoint",
-         "default": null
-        },
-        {
-         "type": "const FVector&",
-         "name": "ImpactDirection",
-         "default": null
-        },
-        {
-         "type": "float",
-         "name": "ImpulseMagnitude",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Destroy a visual chunk and spawn physics version",
-       "calls": 2,
-       "called_in": [
-        "CosmicWeaponsComponent.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "GetChunkTransform",
-       "ret": "bool",
-       "sig": "bool GetChunkTransform(int32 InstanceIndex, FTransform& OutTransform) const;",
-       "params": [
-        {
-         "type": "int32",
-         "name": "InstanceIndex",
-         "default": null
-        },
-        {
-         "type": "FTransform&",
-         "name": "OutTransform",
-         "default": null
-        }
-       ],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Get chunk transform for instance index",
-       "calls": 2,
-       "called_in": [
-        "CosmicWeaponsComponent.cpp",
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "UpdateActiveChunks",
-       "ret": "void",
-       "sig": "void UpdateActiveChunks();",
-       "params": [],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Update which chunks should be active based on player proximity",
-       "calls": 2,
-       "called_in": [
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "GetPooledChunk",
-       "ret": "ARingChunk*",
-       "sig": "ARingChunk* GetPooledChunk();",
-       "params": [],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Get or create a chunk from the pool",
-       "calls": 3,
-       "called_in": [
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "ReturnChunkToPool",
-       "ret": "void",
-       "sig": "void ReturnChunkToPool(ARingChunk* Chunk);",
-       "params": [
-        {
-         "type": "ARingChunk*",
-         "name": "Chunk",
-         "default": null
-        }
-       ],
-       "const": false,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Return chunk to pool",
-       "calls": 2,
-       "called_in": [
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "GetPlayerLocation",
-       "ret": "FVector",
-       "sig": "FVector GetPlayerLocation() const;",
-       "params": [],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Find player location",
-       "calls": 2,
-       "called_in": [
-        "SmartRingSystem.cpp"
-       ]
-      },
-      {
-       "name": "GetParentBody",
-       "ret": "ACelestialBody*",
-       "sig": "ACelestialBody* GetParentBody() const;",
-       "params": [],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": false,
-       "engine_override": false,
-       "ufunction": null,
-       "machine": null,
-       "machine_note": null,
-       "doc": "Get parent celestial body",
-       "calls": 3,
-       "called_in": [
-        "SmartRingSystem.cpp"
-       ]
-      }
-     ],
-     "properties": [
-      {
-       "type": "TObjectPtr<UInstancedStaticMeshComponent>",
-       "name": "VisualRing",
-       "spec": "VisibleAnywhere, BlueprintReadOnly, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Visual ring instances (non-collidable, high count)"
-      },
-      {
-       "type": "float",
-       "name": "RingInner",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring inner radius (multiple of planet radius)"
-      },
-      {
-       "type": "float",
-       "name": "RingOuter",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring outer radius (multiple of planet radius)"
-      },
-      {
-       "type": "int32",
-       "name": "VisualChunkCount",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Total visual chunks (high for beauty)"
-      },
-      {
-       "type": "float",
-       "name": "RingTiltDeg",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring tilt angle (degrees)"
-      },
-      {
-       "type": "float",
-       "name": "RingSpinDegPerSec",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring rotation speed (deg/s)"
-      },
-      {
-       "type": "TObjectPtr<UMaterialInterface>",
-       "name": "RingMaterial",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring material"
-      },
-      {
-       "type": "TObjectPtr<UStaticMesh>",
-       "name": "ChunkMesh",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Ring\"",
-       "replicated": null,
-       "doc": "Ring chunk mesh (optional, uses planet mesh if null)"
-      },
-      {
-       "type": "float",
-       "name": "ActivationRadius",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Performance\"",
-       "replicated": null,
-       "doc": "Activation radius around player (cm) - chunks within this become physics objects"
-      },
-      {
-       "type": "int32",
-       "name": "MaxActiveChunks",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Performance\"",
-       "replicated": null,
-       "doc": "Maximum active physics chunks at once"
-      },
-      {
-       "type": "float",
-       "name": "UpdateInterval",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Performance\"",
-       "replicated": null,
-       "doc": "How often to update active chunks (seconds, 0 = every frame)"
-      },
-      {
-       "type": "int32",
-       "name": "ChunkPoolSize",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Performance\"",
-       "replicated": null,
-       "doc": "Pre-warmed pool size per ring (only ringed bodies pool). Kept small so PIE startup stays fast; more spawn lazily on demand near a ring."
-      },
-      {
-       "type": "TArray<TObjectPtr<ARingChunk>>",
-       "name": "ActiveChunks",
-       "spec": "",
-       "replicated": null,
-       "doc": "Active physics chunks"
-      },
-      {
-       "type": "TArray<TObjectPtr<ARingChunk>>",
-       "name": "ChunkPool",
-       "spec": "",
-       "replicated": null,
-       "doc": "Pooled inactive chunks"
       }
      ],
      "replication": {}
@@ -18585,6 +17603,13 @@
        "doc": ""
       },
       {
+       "type": "FName",
+       "name": "AtmosphereName",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Body|Atmosphere\"",
+       "replicated": null,
+       "doc": "Gameplay label for the tint above (\"Red\", \"Blue\", ...). See FCosmicPlanetField::AtmosphereTints for why this is a name and not a colour comparison. Optional on a fixed body."
+      },
+      {
        "type": "FSoftObjectPath",
        "name": "Mesh",
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Body|Rendering\"",
@@ -18616,12 +17641,38 @@
      "replication": {}
     },
     {
+     "name": "FCosmicAtmosphereTint",
+     "base": "",
+     "kind": "struct",
+     "uspec": "BlueprintType",
+     "file": "Plugins/Cosmos/Source/Cosmos/Public/SolarSystemDefinition.h",
+     "doc": "The procedural planet field: demo4's PLANETS / PLANET_R / DIST_IN / DIST_OUT / BREAK_V / ATMO_CHANCE, lifted out of the script. One named entry in an atmosphere palette. The name is gameplay-facing (\"Red\" is what an enemy patrol filters on); the colour is what renders. Keeping them in one struct is what stops the two drifting - a parallel names array would let a reorder silently relabel every planet in the system.",
+     "functions": [],
+     "properties": [
+      {
+       "type": "FName",
+       "name": "Name",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\"",
+       "replicated": null,
+       "doc": ""
+      },
+      {
+       "type": "FLinearColor",
+       "name": "Color",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\"",
+       "replicated": null,
+       "doc": ""
+      }
+     ],
+     "replication": {}
+    },
+    {
      "name": "FCosmicPlanetField",
      "base": "",
      "kind": "struct",
      "uspec": "BlueprintType",
      "file": "Plugins/Cosmos/Source/Cosmos/Public/SolarSystemDefinition.h",
-     "doc": "The procedural planet field: demo4's PLANETS / PLANET_R / DIST_IN / DIST_OUT / BREAK_V / ATMO_CHANCE, lifted out of the script.",
+     "doc": "A solar system described as DATA rather than as a script that builds one. WHY THIS EXISTS setup_cosmic_demo*.py builds a system by spawning actors from the editor. A dedicated server runs a cooked binary with no editor and no `unreal` Python module, so it cannot run those scripts - it has no way to build a world at all. This type is what a server (or a client, or the editor) reads instead. SEED + RULES, NOT A LIST OF OBJECTS demo4 places 100 planets by seeded random inside distance bands rather than listing each one, and that is kept here deliberately. A definition is a few hundred bytes inst\u2026",
      "functions": [],
      "properties": [
       {
@@ -18702,11 +17753,11 @@
        "doc": "Pool of materials, one picked at random per planet. demo4 drew from the Automotive set, which is why its field read as a bowl of mixed metals and glass rather than a hundred identical objects. A single PlanetMaterial makes the arena look like untextured placeholder geometry even when the material itself is fine."
       },
       {
-       "type": "TArray<FLinearColor>",
-       "name": "AtmosphereColors",
+       "type": "TArray<FCosmicAtmosphereTint>",
+       "name": "AtmosphereTints",
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Atmosphere\"",
        "replicated": null,
-       "doc": "Palette for atmosphere tint. One entry picked at random. Empty falls back to the ACelestialBody default (Earth blue)."
+       "doc": "silently, because a patrol that spawns nowhere looks exactly like a patrol that has not been written yet. The name is carried onto ACelestialBody::AtmosphereName, so the tint and the label can never disagree: they are assigned from the same entry. Empty falls back to the ACelestialBody default (Earth blue, unnamed). REPLACED the old bare `AtmosphereColors` array on 2026-08-27. A holo-sim spec saved before that date has no AtmosphereTints key and will fall back to the default blue rather than erroring - acceptable while holo-sims are still unproven (M5/M6), and the reason this is a rename rather than a second parallel array nobody would keep in sync."
       },
       {
        "type": "FSoftObjectPath",
@@ -18728,6 +17779,41 @@
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Atmosphere\"",
        "replicated": null,
        "doc": "Bias atmosphere chance toward bigger planets. demo4: chance * (0.5 + 0.5 * (r - MinRadius) / span), so the smallest planet gets half the base chance and the largest gets the full amount. A pea-sized rock with a glowing halo reads as a bug."
+      },
+      {
+       "type": "FName",
+       "name": "EnemyPatrolAtmosphere",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Enemies\"",
+       "replicated": null,
+       "doc": "Planets whose atmosphere carries this name get an enemy patrol. NAME_None disables patrols entirely. Matched against ACelestialBody::AtmosphereName, which the builder set from the same tint entry that set the colour - so this is a label lookup, not a colour comparison, and it cannot be broken by nudging a channel. Enemy fighters and their spawner have existed and worked for a long time. NOTHING HAD EVER PLACED ONE: Cosmos.umap contained no enemy or fighter string of any kind, which is the whole reason no enemy has ever been seen in this game. Placing them from the builder rather than by hand means the next regenerated system gets them too."
+      },
+      {
+       "type": "float",
+       "name": "EnemyPatrolRadiusMultiplier",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Enemies\", meta = (ClampMin = \"1.0\"",
+       "replicated": null,
+       "doc": "Patrol radius as a multiple of the planet's radius. The spawner's own default is a flat 10 km, which is meaningless here: planets in this field range from ~28,000 to ~375,000 cm in radius, so one absolute number would put fighters inside the big ones and a long way from the small ones."
+      },
+      {
+       "type": "int32",
+       "name": "EnemyPatrolFightersPerWave",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Enemies\", meta = (ClampMin = \"1\"",
+       "replicated": null,
+       "doc": ""
+      },
+      {
+       "type": "int32",
+       "name": "EnemyPatrolMaxActive",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Enemies\", meta = (ClampMin = \"1\"",
+       "replicated": null,
+       "doc": ""
+      },
+      {
+       "type": "float",
+       "name": "EnemyPatrolWaveInterval",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Field|Enemies\", meta = (ClampMin = \"1.0\"",
+       "replicated": null,
+       "doc": ""
       },
       {
        "type": "FSoftObjectPath",
@@ -19159,14 +18245,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       }
      ],
@@ -19695,14 +18781,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 234,
+       "calls": 220,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialBody.cpp",
-        "CelestialSubsystem.cpp"
+        "CelestialSubsystem.cpp",
+        "CockpitAbility.cpp"
        ]
       },
       {
@@ -19769,6 +18855,13 @@
        "spec": "Config, EditAnywhere, Category = \"Dedicated Server|Registry\"",
        "replicated": null,
        "doc": "Server-only. Register with the hub so clients can discover this shard."
+      },
+      {
+       "type": "bool",
+       "name": "bAdvertiseFromPIE",
+       "spec": "Config, EditAnywhere, Category = \"Dedicated Server|Registry\", meta = (EditCondition = \"bAdvertiseToHub\"",
+       "replicated": null,
+       "doc": "- It publishes a 127.0.0.1 row into whichever hub BaseUrl names. Against a PRODUCTION hub that row is visible to real players and resolves to their own machine. - It claims that host:port, so any admin command queued for that row is delivered to it. A queued `shutdown` reached a PIE session and called FPlatformMisc::RequestExit, which in-process means the EDITOR exits. Turning this on restores the PIE server browser (which is why the behaviour existed) and is the right setting when BaseUrl points at a local or dev hub. It does NOT re-enable the admin command channel: a PIE world never binds that, with or without this flag, because a remote kill switch over a developer's editor is not a feature anyone asked for."
       },
       {
        "type": "FString",
@@ -20881,14 +19974,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       }
      ],
@@ -20959,14 +20052,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       }
      ],
@@ -21037,14 +20130,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       }
      ],
@@ -21136,14 +20229,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 183,
+       "calls": 181,
        "called_in": [
-        "Asteroid.cpp",
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
         "BuildablePiece.cpp",
         "CockpitAbility.cpp",
-        "CockpitKeybindManager.cpp"
+        "CockpitKeybindManager.cpp",
+        "CockpitTravelManager.cpp"
        ]
       },
       {
@@ -21647,14 +20740,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 234,
+       "calls": 220,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialBody.cpp",
-        "CelestialSubsystem.cpp"
+        "CelestialSubsystem.cpp",
+        "CockpitAbility.cpp"
        ]
       },
       {
@@ -22193,7 +21286,32 @@
        "machine": null,
        "machine_note": null,
        "doc": "Fired when the grace period elapses with the instance still empty.",
-       "calls": 2,
+       "calls": 1,
+       "called_in": [
+        "RSSGameModeBase.cpp"
+       ]
+      },
+      {
+       "name": "ShutdownInstance",
+       "ret": "void",
+       "sig": "void ShutdownInstance(const FString& Reason);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Reason",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "The single exit path, named by its trigger. ShutdownEmptyInstance() above is only the timer-compatible void() wrapper around this; the admin `shutdown` command calls here directly. Reason is logged verbatim, because the two callers are indistinguishable afterwards and the log is the only record of which one it was. Refuses outright in a PIE world - see the comment on the guard.",
+       "calls": 3,
        "called_in": [
         "RSSGameModeBase.cpp"
        ]
@@ -22237,7 +21355,7 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "RSSGameModeBase.cpp"
        ]
@@ -22661,7 +21779,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Update cooldown/cast timers (called from ability manager).",
-       "calls": 54,
+       "calls": 50,
        "called_in": [
         "BuildablePiece.cpp",
         "CelestialBody.cpp",
@@ -34223,8 +33341,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 4334020-dirty",
- "generated_at": "2026-08-24T18:20:35Z",
- "game_commit": "4334020",
+ "generated_from": "RaysSpaceSim @ 0cbc9fb-dirty",
+ "generated_at": "2026-08-29T02:19:05Z",
+ "game_commit": "0cbc9fb",
  "game_dirty": true
 }
