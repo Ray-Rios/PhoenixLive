@@ -4301,7 +4301,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -6159,10 +6159,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "riding anything, and identity in any frame this component has not ticked in - the value is frame-stamped, so a camera update with no flight tick in front of it can neither re-apply nor miss it. (It was read-and-clear for one revision; that broke the moment a second reader needed it.) WHY THIS EXISTS. The ride moves the character's FRAME, and until 2026-09-01 exactly one consumer of that frame was never told: the view. ACosmicPlayerCameraManager::ProcessViewRotation derives the walk heading by projecting the PREVIOUS frame's world-space forward onto the local horizon - and on a spinning planet that horizon rotates every frame while the forward does not. Standing perfectly still with no mouse input, the heading therefore slid and the elevation drifted, which reads exactly as \"the camera rolls around wildly once the planet gets spinning\". Building on a planet is what spins it up, which is why it presented as a build bug.",
-       "calls": 5,
+       "calls": 2,
        "called_in": [
-        "CosmicFlightComponent.cpp",
-        "CosmicPlayerCameraManager.cpp"
+        "CosmicFlightComponent.cpp"
        ]
       },
       {
@@ -7110,6 +7109,20 @@
       },
       {
        "type": "bool",
+       "name": "bSnapCameraUpOnLanding",
+       "spec": "EditAnywhere, Category = \"Camera\"",
+       "replicated": null,
+       "doc": "Adopt the new surface frame OUTRIGHT on a fresh landing instead of easing into it. Requested 2026-09-06: \"can we remove that re-orientation time completely and snap the camera upright when they land?\" The damping in UpdateCameraSmoothedUp exists for facet-seam CHATTER during continuous contact - running over a die's folds flips the measured normal every few frames and the view used to hunt. A touchdown is not chatter: it is a new frame, known good, and easing into it is exactly the re-orientation lag. Damping still applies while walking."
+      },
+      {
+       "type": "float",
+       "name": "UnjumpedGroundStickySeconds",
+       "spec": "EditAnywhere, Category = \"Movement\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "the planet and damages structures. So being \"thrown off\" is not a force applied to the character at all: it is the RIDE failing while the planet lurches, and once the ride is gone the probe finds nothing and the player coasts away. The 09-06 capture is a player 19.5 seconds airborne at 120 m/s with `probeHit=0 via NONE`, having done nothing but stand there. StableGroundCoyoteSeconds (0.35) is the right budget for a JUMP - it must expire quickly or a jump cannot leave the surface. It is far too short for \"the ground was yanked out from under me\", which is a much longer, much more violent event and one the player never asked for. So: a departure the player CHOSE gets the short grace, and one they did not gets this. The result is Ray's spec - \"shoved along the surface, but never launched into space\". A jump still works exactly as before."
+      },
+      {
+       "type": "bool",
        "name": "bShowFrameDebug",
        "spec": "EditAnywhere, Category = \"Flight|Frame\"",
        "replicated": null,
@@ -7968,7 +7981,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Global multiplier for every UI dimension. Derived from the viewport height against a 1080p baseline, then multiplied by the player's own preference, so text stays the same APPARENT size at any resolution.",
-       "calls": 26,
+       "calls": 25,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9247,7 +9260,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Offset for an element, already multiplied by the global UI scale.",
-       "calls": 11,
+       "calls": 10,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9272,7 +9285,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Size multiplier for an element.",
-       "calls": 11,
+       "calls": 10,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9317,7 +9330,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Record where an element drew this frame (for the edit handles). Harmless outside edit mode - it's a couple of float stores.",
-       "calls": 10,
+       "calls": 9,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9671,7 +9684,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -13819,14 +13832,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 222,
+       "calls": 224,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialSubsystem.cpp",
-        "CockpitAbility.cpp"
+        "CelestialBody.cpp",
+        "CelestialSubsystem.cpp"
        ]
       },
       {
@@ -13936,14 +13949,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 222,
+       "calls": 224,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialSubsystem.cpp",
-        "CockpitAbility.cpp"
+        "CelestialBody.cpp",
+        "CelestialSubsystem.cpp"
        ]
       },
       {
@@ -15770,45 +15783,12 @@
      "replication": {}
     },
     {
-     "name": "FPoolPocket",
-     "base": "",
-     "kind": "struct",
-     "uspec": "BlueprintType",
-     "file": "Plugins/Cosmos/Source/Cosmos/Public/PoolArenaManager.h",
-     "doc": "Red-vs-blue planetary pool. Owns the arena rules: team pockets (sink a pool planet in a pocket = +1 for that team), the boundary wall reflection, and an optional center pull that keeps the table lively. Pool planet MOTION is box3d (see APoolPlanet); this manager only reads/writes velocities through it.",
-     "functions": [],
-     "properties": [
-      {
-       "type": "FVector",
-       "name": "Location",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Pool\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "int32",
-       "name": "Team",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Pool\"",
-       "replicated": null,
-       "doc": "0 = Red, 1 = Blue."
-      },
-      {
-       "type": "float",
-       "name": "Radius",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Pool\"",
-       "replicated": null,
-       "doc": ""
-      }
-     ],
-     "replication": {}
-    },
-    {
      "name": "APoolArenaManager",
      "base": "AActor",
      "kind": "class",
      "uspec": "",
      "file": "Plugins/Cosmos/Source/Cosmos/Public/PoolArenaManager.h",
-     "doc": "Red-vs-blue planetary pool. Owns the arena rules: team pockets (sink a pool planet in a pocket = +1 for that team), the boundary wall reflection, and an optional center pull that keeps the table lively. Pool planet MOTION is box3d (see APoolPlanet); this manager only reads/writes velocities through it.",
+     "doc": "FPoolPocket, the Pockets array, TeamScores and GetTeamScore were removed on 2026-09-06. The red/blue team game is gone - this is a space sim with orbiting planets that can be knocked around, not a pool table, and a planet reaching a \"pocket\" no longer scores or despawns it. THE CLASS STAYS because it is not only the pool game: it owns the arena BOUNDARY (ArenaRadius + WallRestitution), the CENTRE PULL that keeps the field from dispersing, and SunClearance, which is the inner wall that stops planets clipping into the star. All three are wanted. ACosmicPocketDoor also stays,",
      "functions": [
       {
        "name": "Tick",
@@ -15832,42 +15812,9 @@
        "doc": "",
        "calls": null,
        "called_in": []
-      },
-      {
-       "name": "GetTeamScore",
-       "ret": "int32",
-       "sig": "int32 GetTeamScore(int32 Team) const { return TeamScores.IsValidIndex(Team) ? TeamScores[Team] : 0; }",
-       "params": [
-        {
-         "type": "int32 Team) const { return TeamScores.IsValidIndex(Team",
-         "name": "",
-         "default": null
-        }
-       ],
-       "const": true,
-       "virtual": false,
-       "static": false,
-       "inline_body": true,
-       "engine_override": false,
-       "ufunction": "BlueprintPure, Category = \"Pool\"",
-       "machine": "pure",
-       "machine_note": "read-only, any machine",
-       "doc": "",
-       "calls": 4,
-       "called_in": [
-        "CosmicHUD.cpp",
-        "PoolArenaManager.cpp"
-       ]
       }
      ],
      "properties": [
-      {
-       "type": "TArray<FPoolPocket>",
-       "name": "Pockets",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
-       "doc": ""
-      },
       {
        "type": "float",
        "name": "ArenaRadius",
@@ -15895,13 +15842,6 @@
        "spec": "EditAnywhere, Category = \"Pool\"",
        "replicated": null,
        "doc": "Extra margin (cm) kept between a planet's surface and the sun's shell, so a ball never clips into the star. The playable region is the ANNULUS between this inner no-go sphere and the outer wall."
-      },
-      {
-       "type": "TArray<int32>",
-       "name": "TeamScores",
-       "spec": "VisibleAnywhere, Category = \"Pool\"",
-       "replicated": null,
-       "doc": ""
       }
      ],
      "replication": {}
@@ -17288,14 +17228,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 222,
+       "calls": 224,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialSubsystem.cpp",
-        "CockpitAbility.cpp"
+        "CelestialBody.cpp",
+        "CelestialSubsystem.cpp"
        ]
       },
       {
@@ -18132,27 +18072,6 @@
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Arena\"",
        "replicated": null,
        "doc": "Margin kept between a planet's surface and the star's shell, cm."
-      },
-      {
-       "type": "bool",
-       "name": "bHasPockets",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Arena\"",
-       "replicated": null,
-       "doc": ""
-      },
-      {
-       "type": "double",
-       "name": "PocketDistance",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Arena\"",
-       "replicated": null,
-       "doc": "Distance from origin along +/-X. demo4: 2.1e7 * SCALE."
-      },
-      {
-       "type": "double",
-       "name": "PocketRadius",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Arena\"",
-       "replicated": null,
-       "doc": "Sink radius. demo4: 4.0e6 * SCALE."
       }
      ],
      "replication": {}
@@ -18474,7 +18393,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -19010,14 +18929,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 222,
+       "calls": 224,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialSubsystem.cpp",
-        "CockpitAbility.cpp"
+        "CelestialBody.cpp",
+        "CelestialSubsystem.cpp"
        ]
       },
       {
@@ -20203,7 +20122,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20281,7 +20200,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20359,7 +20278,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20458,7 +20377,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 185,
+       "calls": 186,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20969,14 +20888,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 222,
+       "calls": 224,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "BuildComponent.cpp",
-        "CelestialSubsystem.cpp",
-        "CockpitAbility.cpp"
+        "CelestialBody.cpp",
+        "CelestialSubsystem.cpp"
        ]
       },
       {
@@ -33570,8 +33489,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ b34b7ae-dirty",
- "generated_at": "2026-09-06T02:43:30Z",
- "game_commit": "b34b7ae",
+ "generated_from": "RaysSpaceSim @ 7f75106-dirty",
+ "generated_at": "2026-09-06T19:47:01Z",
+ "game_commit": "7f75106",
  "game_dirty": true
 }
