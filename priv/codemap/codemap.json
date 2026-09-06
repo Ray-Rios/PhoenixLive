@@ -3121,6 +3121,110 @@
        "called_in": []
       },
       {
+       "name": "HasFrameDelta",
+       "ret": "bool",
+       "sig": "bool HasFrameDelta() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "True when this body has already updated its pose this frame, so the delta below describes THIS frame's motion.",
+       "calls": 3,
+       "called_in": [
+        "CelestialBody.cpp"
+       ]
+      },
+      {
+       "name": "GetFrameRotationDelta",
+       "ret": "FQuat",
+       "sig": "FQuat GetFrameRotationDelta() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "literally cannot tell 230 degrees one way from 130 the other. That is not a theoretical concern here. `APoolPlanet::MaxPoolSpin` is 12 rad/s and the 09-02 bomb runs hitched to **335 ms a frame**, which is 4.02 rad = 230 degrees of genuine rotation in a single tick. The pose difference is unusable there, and the sanity guard that used to sit on it (a quarter turn, meant to reject teleports) fired on every one of those frames and dropped the ride entirely - which is exactly \"the camera still can't keep it clamped down after a bunch of bombs go off\". Bombs raise the spin toward the cap, the cap plus a hitch exceeds the guard, and the guard throws away the correct answer. Angular velocity has no wrap and no ambiguity, and it is authoritative on both sides of the wire (box3d on the server, the replicated pose on a client), so this is frame-rate independent by construction.",
+       "calls": 2,
+       "called_in": [
+        "CelestialBody.cpp",
+        "CosmicGroundEnemy.cpp"
+       ]
+      },
+      {
+       "name": "GetFrameAngularVelocity",
+       "ret": "FVector",
+       "sig": "FVector GetFrameAngularVelocity() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "This body's angular velocity in rad/s, world space, valid on BOTH sides: the live box3d body where there is one, the last replicated snapshot on a client. Unlike the frame delta this does not require the body to have ticked yet, so a caller in an earlier tick group can still use it.",
+       "calls": 2,
+       "called_in": [
+        "CelestialBody.cpp",
+        "CosmicFlightComponent.cpp"
+       ]
+      },
+      {
+       "name": "CarryPoint",
+       "ret": "FVector",
+       "sig": "FVector CarryPoint(const FVector& WorldP) const;",
+       "params": [
+        {
+         "type": "const FVector&",
+         "name": "WorldP",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Transports a world-space point from where this body was at the start of the frame to where it is now - i.e. what standing on it should do to you. Returns WorldP unchanged when there is no usable delta.",
+       "calls": 2,
+       "called_in": [
+        "CelestialBody.cpp",
+        "CosmicGroundEnemy.cpp"
+       ]
+      },
+      {
+       "name": "ApplyAtmosphereTint",
+       "ret": "void",
+       "sig": "void ApplyAtmosphereTint();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "EFFECTS. Push AtmosphereColor into the shell's material instance. Idempotent; safe to call whenever the tint or the material changes.",
+       "calls": 2,
+       "called_in": [
+        "CelestialBody.cpp"
+       ]
+      },
+      {
        "name": "ApplyVisualRadius",
        "ret": "void",
        "sig": "void ApplyVisualRadius(double VisualRadius);",
@@ -3251,7 +3355,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Does THIS machine simulate this body? Net mode, not IsRunningDedicatedServer() and not bPinned. We have been bitten by the process-level check before (the shard heartbeat silently never fired under PIE because IsRunningDedicatedServer() is per-PROCESS and PIE runs client and server in one). NM_Client is the only mode that must not simulate: standalone, listen server and dedicated all own it.",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "CelestialBody.cpp",
         "PoolPlanet.cpp"
@@ -3290,10 +3394,48 @@
        "machine": null,
        "machine_note": null,
        "doc": "Angular velocity of whatever actually drives this body, rad/s. Zero for a plain orbiting body (the integrator is point masses and does not spin anything); APoolPlanet overrides it with the box3d body's spin.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CelestialBody.cpp",
         "PoolPlanet.cpp"
+       ]
+      },
+      {
+       "name": "GetMaxAngularSpeed",
+       "ret": "double",
+       "sig": "virtual double GetMaxAngularSpeed() const { return 50.0; }",
+       "params": [],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "solver is also asked to respect it (APoolPlanet::Tick) is then a performance measure, not the guarantee. WHY THIS IS NOT LEFT TO THE SOLVER CLAMP. On 2026-09-05, with a freshly deployed server and MaxPoolSpin at 1.75, a client measured its ride body at **407 rad/s** and 16.5 km/s - 230x and 55x their caps. The per-tick clamp in APoolPlanet::Tick is unreachable on a client by design (that Tick returns early without authority) and, on the server, runs AFTER ACelestialBody::Tick has already published the pose, so the wire carries the pre-clamp value by construction. A cap enforced in one place that several paths route around is not a cap. Defaults are deliberately loose - they exist to catch garbage, not to govern anything. A body with real limits overrides them (see APoolPlanet).",
+       "calls": 2,
+       "called_in": [
+        "CelestialBody.cpp"
+       ]
+      },
+      {
+       "name": "GetMaxLinearSpeed",
+       "ret": "double",
+       "sig": "virtual double GetMaxLinearSpeed() const { return 1.0e7; }",
+       "params": [],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "CelestialBody.cpp"
        ]
       },
       {
@@ -3475,6 +3617,13 @@
        "doc": "Optional second sphere drawn slightly above the surface: lava on stars, ocean on water planets. Enabled when ShellMaterial is set."
       },
       {
+       "type": "TObjectPtr<UMaterialInstanceDynamic>",
+       "name": "ShellMID",
+       "spec": "Transient",
+       "replicated": null,
+       "doc": "Per-body dynamic instance of ShellMaterial, so each planet can carry its own tint. Without one, SetMaterial hands every planet the same shared asset and AtmosphereColor reaches nothing you can see - which is exactly why all eight tints rendered as the material's authored blue."
+      },
+      {
        "type": "float",
        "name": "ShellScale",
        "spec": "EditAnywhere, Category = \"Rendering\"",
@@ -3501,6 +3650,13 @@
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\"",
        "replicated": null,
        "doc": "Atmosphere tint (RGB). Drives BOTH the from-orbit shell glow and the from-ground SkyAtmosphere sky color, so the sky matches the planet's look from space. Default is Earth sky blue."
+      },
+      {
+       "type": "float",
+       "name": "AtmosphereTintStrength",
+       "spec": "EditAnywhere, Category = \"Atmosphere\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "colour, straight through. This was 0.0331 (RayleighReferenceScale) for one revision, on the assumption that M_Atmosphere's vector parameter is a physical Rayleigh coefficient. The asset says otherwise: it holds a Fresnel, a Multiply, a Constant, ONE texture parameter (AtmosphereLUT) and ONE vector parameter - the shape of a rim-glow shell where the vector is a straight TINT, not a coefficient. Scaling a tint by 0.0331 crushes it to near-black, which is why setting it produced no visible change at all. The physical coefficient on UAtmosphereComponent keeps RayleighReferenceScale, because there it really is one. Two different quantities, two different scales - conflating them is what cost the last two passes. Exposed so it can be dialled without a rebuild."
       },
       {
        "type": "FName",
@@ -4145,7 +4301,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -5984,6 +6140,26 @@
        "machine_note": null,
        "doc": "Returns the local gravity frame for on-foot mouse look. True only when walking on a body (not flying / in deep space); OutUp is the surface normal at the character, and the signs fold in the invert flags above. ACosmicPlayerCameraManager calls this to steer look in the local frame.",
        "calls": 2,
+       "called_in": [
+        "CosmicFlightComponent.cpp",
+        "CosmicPlayerCameraManager.cpp"
+       ]
+      },
+      {
+       "name": "GetRideRotationDelta",
+       "ret": "FQuat",
+       "sig": "FQuat GetRideRotationDelta() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "riding anything, and identity in any frame this component has not ticked in - the value is frame-stamped, so a camera update with no flight tick in front of it can neither re-apply nor miss it. (It was read-and-clear for one revision; that broke the moment a second reader needed it.) WHY THIS EXISTS. The ride moves the character's FRAME, and until 2026-09-01 exactly one consumer of that frame was never told: the view. ACosmicPlayerCameraManager::ProcessViewRotation derives the walk heading by projecting the PREVIOUS frame's world-space forward onto the local horizon - and on a spinning planet that horizon rotates every frame while the forward does not. Standing perfectly still with no mouse input, the heading therefore slid and the elevation drifted, which reads exactly as \"the camera rolls around wildly once the planet gets spinning\". Building on a planet is what spins it up, which is why it presented as a build bug.",
+       "calls": 5,
        "called_in": [
         "CosmicFlightComponent.cpp",
         "CosmicPlayerCameraManager.cpp"
@@ -9495,7 +9671,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -13643,7 +13819,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 220,
+       "calls": 222,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -13760,7 +13936,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 220,
+       "calls": 222,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -16111,6 +16287,52 @@
        "called_in": []
       },
       {
+       "name": "GetMaxAngularSpeed",
+       "ret": "double",
+       "sig": "virtual double GetMaxAngularSpeed() const override { return (double)MaxPoolSpin; }",
+       "params": [
+        {
+         "type": ") const override { return (double",
+         "name": "",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": true,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "A pool planet's real limits. These are the same two numbers APoolPlanet::Tick asks the solver to respect - stated once here so the wire and every rider enforce them too, rather than trusting a per-tick clamp that a client never runs and that the publish path front-runs. See ACelestialBody::GetMaxAngularSpeed.",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "GetMaxLinearSpeed",
+       "ret": "double",
+       "sig": "virtual double GetMaxLinearSpeed() const override { return (double)MaxPoolSpeed; }",
+       "params": [
+        {
+         "type": ") const override { return (double",
+         "name": "",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": true,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
        "name": "GetCoreSafeRadius",
        "ret": "float",
        "sig": "float GetCoreSafeRadius() const;",
@@ -16219,7 +16441,14 @@
        "name": "MaxPoolSpin",
        "spec": "EditAnywhere, Category = \"Pool\", meta = (ClampMin = \"0.1\"",
        "replicated": null,
-       "doc": "Hard cap on angular speed (rad/s) - same rationale for spin energy."
+       "doc": "revolution every 3.6 SECONDS. The 09-06 log caught the frame doing its job perfectly at that rate - `up`, `probe` and `charUp` tracking together with `upVsProbe` pinned at 13 degrees while `up` swung 35 degrees in six frames - and a correct camera faithfully following a world that turns over every 3.6 s is still a tumble dryer. Nothing downstream can fix that; it is the number. 0.25 rad/s is 14 deg/s, a revolution every 25 s. A bomb visibly sets a planet turning and you can stand on it while it does. Headroom is enormous: even a one-second hitch is 14 degrees, nowhere near the half-turn wrap. THIS IS THE DIAL. If bombs should feel wilder or calmer, change it here rather than damping the camera - damping the camera is what produced every bug in the 08-31..09-02 sequence."
+      },
+      {
+       "type": "float",
+       "name": "PoolPlanetAngularDamping",
+       "spec": "EditAnywhere, Category = \"Pool\", meta = (ClampMin = \"0.0\", ClampMax = \"5.0\"",
+       "replicated": null,
+       "doc": "Angular damping for THIS planet's box3d body, applied at creation. Planets already had angular damping - UBox3DWorldSubsystem stamps its shared PoolAngularDamping (0.35, roughly a 2 s half-life) into every body def, which is why a knocked planet visibly settles. But that value is SHARED WITH THE DICE FIELD and is also what the options-menu slider drives, so there was no way to tune planet spin decay without moving the dice too. This is the planet's own knob, defaulted to the same 0.35 so behaviour is unchanged until someone deliberately changes it. Deliberately NOT the fix for bomb spin. Damping governs how fast a planet settles AFTER you stop hitting it; while you are still bombing, the spin simply sits at MaxPoolSpin above. That cap is the dial for how violent bombing feels; this one is for how long the aftermath lasts."
       },
       {
        "type": "float",
@@ -17059,7 +17288,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 220,
+       "calls": 222,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -18245,7 +18474,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -18781,7 +19010,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 220,
+       "calls": 222,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -19974,7 +20203,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20052,7 +20281,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20130,7 +20359,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20229,7 +20458,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 181,
+       "calls": 185,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20740,7 +20969,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 220,
+       "calls": 222,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -33341,8 +33570,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 0cbc9fb-dirty",
- "generated_at": "2026-08-29T02:19:05Z",
- "game_commit": "0cbc9fb",
+ "generated_from": "RaysSpaceSim @ b34b7ae-dirty",
+ "generated_at": "2026-09-06T02:43:30Z",
+ "game_commit": "b34b7ae",
  "game_dirty": true
 }
