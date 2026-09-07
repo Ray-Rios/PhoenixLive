@@ -3173,7 +3173,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "This body's angular velocity in rad/s, world space, valid on BOTH sides: the live box3d body where there is one, the last replicated snapshot on a client. Unlike the frame delta this does not require the body to have ticked yet, so a caller in an earlier tick group can still use it.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CelestialBody.cpp",
         "CosmicFlightComponent.cpp"
@@ -7113,6 +7113,20 @@
        "spec": "EditAnywhere, Category = \"Camera\"",
        "replicated": null,
        "doc": "Adopt the new surface frame OUTRIGHT on a fresh landing instead of easing into it. Requested 2026-09-06: \"can we remove that re-orientation time completely and snap the camera upright when they land?\" The damping in UpdateCameraSmoothedUp exists for facet-seam CHATTER during continuous contact - running over a die's folds flips the measured normal every few frames and the view used to hunt. A touchdown is not chatter: it is a new frame, known good, and easing into it is exactly the re-orientation lag. Damping still applies while walking."
+      },
+      {
+       "type": "float",
+       "name": "CameraRideDecoupleGain",
+       "spec": "EditAnywhere, Category = \"Camera\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "How hard the horizon IGNORES the ride body's own rotation, per rad/s. At the 0.25 rad/s spin cap this leaves ~9% of the re-levelling rate, so a planet knocked spinning by a bomb carries the character but not their head. At rest it is 1.0 and re-levelling runs at full CameraUpRelevelRate. Zero disables the decoupling and restores the pre-2026-09-07 behaviour."
+      },
+      {
+       "type": "float",
+       "name": "CameraUpRelevelRate",
+       "spec": "EditAnywhere, Category = \"Camera\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Rate the horizon re-converges on the true surface up once the ride is calm. The decoupling below follows only the part of the surface frame the PLAYER moved through, so after a long tumble the camera's up can sit well off the real one. Deliberately slow: this is meant to read as the world settling over a second or two, not as the view being pulled straight."
       },
       {
        "type": "float",
@@ -13832,7 +13846,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 224,
+       "calls": 225,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -13949,7 +13963,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 224,
+       "calls": 225,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -17228,7 +17242,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 224,
+       "calls": 225,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -18929,7 +18943,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 224,
+       "calls": 225,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20888,7 +20902,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 224,
+       "calls": 225,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -33489,8 +33503,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ b45c6cf-dirty",
- "generated_at": "2026-09-06T22:40:29Z",
- "game_commit": "b45c6cf",
+ "generated_from": "RaysSpaceSim @ 6e032e5-dirty",
+ "generated_at": "2026-09-07T02:38:37Z",
+ "game_commit": "6e032e5",
  "game_dirty": true
 }
