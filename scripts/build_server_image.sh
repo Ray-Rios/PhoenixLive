@@ -77,7 +77,31 @@ UE_ROOT="$(cygpath -u "$UE_ROOT" 2>/dev/null || echo "$UE_ROOT")"
 RUNUAT="$UE_ROOT/Engine/Build/BatchFiles/RunUAT.bat"
 
 IMAGE="${HOLOSIM_IMAGE_NAME:-raysspacesim-server}"
-TAG="${HOLOSIM_IMAGE_TAG:-prod}"
+# UNIQUE PER BUILD. Was "prod", a FIXED tag, and that is a trap here.
+#
+# world_server_launcher.ex creates the game-server pod with
+# imagePullPolicy: IfNotPresent (its default). With a fixed tag the node is
+# entitled to keep whatever it already has for that name, so a rebuild can be
+# invisible to the cluster no matter how many times the deployment is deleted
+# and re-applied.
+#
+# That is not theoretical. On 2026-09-06 it cost a full day: the client loaded a
+# freshly built Cosmos while the server served an older one, and because
+# build_cosmos.py SPAWNS planets at runtime (UE names them from a global counter
+# - PoolPlanet_2, _5, _9 - so the set differs every build) the two maps had ZERO
+# overlapping actor names. Every celestial actor failed to replicate:
+#
+#   LogNet: Warning: UActorChannel::ProcessBunch: SerializeNewActor failed to
+#   find/spawn actor. FullNetGUIDPath: .../PersistentLevel.PoolPlanet_...
+#
+# 82 failures against 82 spawned bodies. Atmosphere tints never arrived, and
+# bombs did nothing because the client's planet reference was unresolvable on
+# the server - "BOOM!" with no effect.
+#
+# A tag that changes every build makes IfNotPresent correct by construction:
+# the name is never already present. Override with HOLOSIM_IMAGE_TAG if you
+# genuinely want to reuse one.
+TAG="${HOLOSIM_IMAGE_TAG:-$(date +%Y%m%d-%H%M%S)}"
 SERVER_CONFIG="${SERVER_CONFIG:-Development}"
 
 echo "=========================================================="

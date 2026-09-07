@@ -174,12 +174,26 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
       desired: 0,
       ready: 0,
       pods: [],
-      error: nil
+      error: nil,
+      # What THIS pod would deploy if you pressed Start/Apply right now, versus
+      # what the world Deployment is actually running. These can diverge for a
+      # while after a build: HOLOSIM_IMAGE is only read from the environment
+      # once, at boot (config/runtime.exs), so a pod that hasn't itself been
+      # restarted since the ConfigMap changed will patch the Deployment with
+      # the SAME image it already has - a genuine no-op that still returns
+      # {:ok, :started}. Surfacing both values here is what makes that
+      # otherwise-silent state visible instead of looking like a stuck button.
+      configured_image: nil,
+      running_image: nil,
+      image_stale?: false
     }
 
     case unavailable_reason() do
-      nil -> read_status(%{base | available?: true, namespace: namespace()})
-      _ -> base
+      nil ->
+        read_status(%{base | available?: true, namespace: namespace(), configured_image: config(:image)})
+
+      _ ->
+        base
     end
   end
 
@@ -235,6 +249,7 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
       {:ok, dep} ->
         desired = get_in(dep, ["spec", "replicas"]) || 0
         ready = get_in(dep, ["status", "readyReplicas"]) || 0
+        running_image = container_image(dep)
 
         %{
           base
@@ -242,7 +257,9 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
             desired: desired,
             ready: ready,
             state: state_of(desired, ready),
-            pods: pod_summaries(ns)
+            pods: pod_summaries(ns),
+            running_image: running_image,
+            image_stale?: not is_nil(running_image) and running_image != base.configured_image
         }
 
       {:error, :not_found} ->
@@ -296,6 +313,19 @@ defmodule PhoenixApp.Games.WorldServerLauncher do
   end
 
   defp container_message(_), do: nil
+
+  # The Deployment's DESIRED image, i.e. what a rollout will converge pods
+  # toward - not any one pod's current image, which can lag behind mid-rollout.
+  defp container_image(dep) do
+    dep
+    |> get_in(["spec", "template", "spec", "containers"])
+    |> List.wrap()
+    |> Enum.find(&(&1["name"] == "world"))
+    |> case do
+      %{"image" => image} -> image
+      _ -> nil
+    end
+  end
 
   defp newest_pod do
     case Kubernetes.list_pods(namespace(), "app=#{@label}") do

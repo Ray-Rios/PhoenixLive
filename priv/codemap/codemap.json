@@ -7119,7 +7119,7 @@
        "name": "UnjumpedGroundStickySeconds",
        "spec": "EditAnywhere, Category = \"Movement\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
-       "doc": "the planet and damages structures. So being \"thrown off\" is not a force applied to the character at all: it is the RIDE failing while the planet lurches, and once the ride is gone the probe finds nothing and the player coasts away. The 09-06 capture is a player 19.5 seconds airborne at 120 m/s with `probeHit=0 via NONE`, having done nothing but stand there. StableGroundCoyoteSeconds (0.35) is the right budget for a JUMP - it must expire quickly or a jump cannot leave the surface. It is far too short for \"the ground was yanked out from under me\", which is a much longer, much more violent event and one the player never asked for. So: a departure the player CHOSE gets the short grace, and one they did not gets this. The result is Ray's spec - \"shoved along the surface, but never launched into space\". A jump still works exactly as before."
+       "doc": "into space\". A jump still works exactly as before. 2.5 s was far too short, and the 09-06 log says why. Airborne episodes START at 38-57 cm/s - the player is not being flung anywhere, they gently lose contact - and then run to **13.9 seconds**. Gravity cannot be what keeps them up; the planet is simply leaving, at up to MaxPoolSpeed (3 km/s, and `rideLin` sits pinned there after a bomb). Once the grace expires the ride is gone and the planet is already kilometres away, so nothing recovers - which is the \"thrown off\" the player sees. So the number has to outlast the event, not the twitch. 30 s is effectively \"until you jump\", which is the actual rule being expressed: a departure you CHOSE ends the ride, and nothing else does. A player who walks off an edge still falls - gravity is radial and the ride does not prevent falling, it prevents the planet leaving without you."
       },
       {
        "type": "bool",
@@ -33489,8 +33489,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 7f75106-dirty",
- "generated_at": "2026-09-06T19:47:01Z",
- "game_commit": "7f75106",
+ "generated_from": "RaysSpaceSim @ b45c6cf-dirty",
+ "generated_at": "2026-09-06T22:40:29Z",
+ "game_commit": "b45c6cf",
  "game_dirty": true
 }

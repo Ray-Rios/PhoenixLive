@@ -540,12 +540,49 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                 <%= @world.deployment_name %> in namespace <%= @world.namespace || "-" %>
               </p>
             </div>
-            <span class={"px-2 py-1 rounded text-xs font-medium #{world_classes}"}>
-              <%= world_text %>
-            </span>
+            <div class="flex items-center gap-2">
+              <%= if @world.image_stale? do %>
+                <span
+                  class="px-2 py-1 rounded text-xs font-medium bg-amber-900/40 text-amber-300"
+                  title="The running Deployment's image does not match what this pod would deploy. Press Start/Apply again to converge it - see the note below for why they can diverge."
+                >
+                  Image outdated
+                </span>
+              <% end %>
+              <span class={"px-2 py-1 rounded text-xs font-medium #{world_classes}"}>
+                <%= world_text %>
+              </span>
+            </div>
           </div>
 
           <%= if @world.available? do %>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Configured image</div>
+                <div class={"mt-1 font-mono text-xs break-all #{if @world.image_stale?, do: "text-amber-300", else: "text-white"}"}>
+                  <%= @world.configured_image || "-" %>
+                </div>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Running image</div>
+                <div class={"mt-1 font-mono text-xs break-all #{if @world.image_stale?, do: "text-amber-300", else: "text-white"}"}>
+                  <%= @world.running_image || "-" %>
+                </div>
+              </div>
+            </div>
+
+            <%= if @world.image_stale? do %>
+              <p class="text-xs text-amber-300 mb-4">
+                These differ. Start/Apply will patch the Deployment to the configured image -
+                if you already pressed it and this is still showing, the pod answering this
+                page has not yet picked up the new <span class="font-mono">HOLOSIM_IMAGE</span>;
+                that only happens on a <span class="font-mono">phoenix-web</span> restart
+                (<span class="font-mono">./deploy-game.sh</span> or
+                <span class="font-mono">--set</span> trigger one). Reload this page once that
+                restart has finished, then press Start/Apply again.
+              </p>
+            <% end %>
+
             <div class="flex flex-wrap gap-2 mb-4">
               <button
                 phx-click="world_start"
