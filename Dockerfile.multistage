@@ -167,6 +167,14 @@ COPY priv/repo ./priv/repo
 COPY priv/games_repo ./priv/games_repo
 COPY priv/gettext ./priv/gettext
 
+# THE RAYSSPACESIM CODE MAP. Same failure shape as the games_repo migrations
+# above: priv is copied a directory at a time, so without this line
+# /admin/raysspacesim/codebase has no snapshot in ANY release, no matter how
+# many times deploy-game.sh regenerates priv/codemap/codemap.json locally or
+# how many times this script runs - CodeMap.baked_path/0 resolves inside the
+# release, and that path simply never existed in the image.
+COPY priv/codemap ./priv/codemap
+
 # Copy built assets from assets-builder stage
 COPY --from=assets-builder /app/priv/static ./priv/static
 

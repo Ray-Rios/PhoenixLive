@@ -3173,7 +3173,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "This body's angular velocity in rad/s, world space, valid on BOTH sides: the live box3d body where there is one, the last replicated snapshot on a client. Unlike the frame delta this does not require the body to have ticked yet, so a caller in an earlier tick group can still use it.",
-       "calls": 3,
+       "calls": 2,
        "called_in": [
         "CelestialBody.cpp",
         "CosmicFlightComponent.cpp"
@@ -3313,9 +3313,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
-        "CosmicDemoManager.cpp"
+        "CosmicDemoManager.cpp",
+        "CosmicFlightComponent.cpp"
        ]
       },
       {
@@ -3957,7 +3958,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Body whose SURFACE is closest to the position (walkable bodies only, i.e. SurfaceGravity > 0). OutAltitude = distance above the surface (cm).",
-       "calls": 17,
+       "calls": 19,
        "called_in": [
         "BuildComponent.cpp",
         "CelestialSubsystem.cpp",
@@ -4301,7 +4302,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -6306,7 +6307,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Teleport home (black hole death, shield breach).",
-       "calls": 6,
+       "calls": 7,
        "called_in": [
         "CosmicFlightComponent.cpp",
         "ShieldQuadrantComponent.cpp"
@@ -6747,7 +6748,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Bounce/skid off a planet surface and charge the impact as crash damage.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmicFlightComponent.cpp"
        ]
@@ -7102,34 +7103,6 @@
       },
       {
        "type": "float",
-       "name": "CameraUpSmoothRate",
-       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.5\"",
-       "replicated": null,
-       "doc": "How fast the CAMERA's horizon catches up to the physics frame, per second. Purely cosmetic damping and deliberately slower than the body: running over facets flips the measured ground normal constantly, and every one of those flips used to be handed straight to the view. Letting the camera lag lets the body react at full speed while the horizon ignores the chatter. Raise it toward SurfaceAlignTurnRate for a tighter, twitchier view; lower it for a floatier one. Exposed in Settings > Controls as \"Camera Steadying\" (1-30). Raised from the first pass's 6.0 - that damped the wobble but made re-levelling after a genuine slope change too sluggish."
-      },
-      {
-       "type": "bool",
-       "name": "bSnapCameraUpOnLanding",
-       "spec": "EditAnywhere, Category = \"Camera\"",
-       "replicated": null,
-       "doc": "Adopt the new surface frame OUTRIGHT on a fresh landing instead of easing into it. Requested 2026-09-06: \"can we remove that re-orientation time completely and snap the camera upright when they land?\" The damping in UpdateCameraSmoothedUp exists for facet-seam CHATTER during continuous contact - running over a die's folds flips the measured normal every few frames and the view used to hunt. A touchdown is not chatter: it is a new frame, known good, and easing into it is exactly the re-orientation lag. Damping still applies while walking."
-      },
-      {
-       "type": "float",
-       "name": "CameraRideDecoupleGain",
-       "spec": "EditAnywhere, Category = \"Camera\", meta = (ClampMin = \"0.0\"",
-       "replicated": null,
-       "doc": "How hard the horizon IGNORES the ride body's own rotation, per rad/s. At the 0.25 rad/s spin cap this leaves ~9% of the re-levelling rate, so a planet knocked spinning by a bomb carries the character but not their head. At rest it is 1.0 and re-levelling runs at full CameraUpRelevelRate. Zero disables the decoupling and restores the pre-2026-09-07 behaviour."
-      },
-      {
-       "type": "float",
-       "name": "CameraUpRelevelRate",
-       "spec": "EditAnywhere, Category = \"Camera\", meta = (ClampMin = \"0.0\"",
-       "replicated": null,
-       "doc": "Rate the horizon re-converges on the true surface up once the ride is calm. The decoupling below follows only the part of the surface frame the PLAYER moved through, so after a long tumble the camera's up can sit well off the real one. Deliberately slow: this is meant to read as the world settling over a second or two, not as the view being pulled straight."
-      },
-      {
-       "type": "float",
        "name": "UnjumpedGroundStickySeconds",
        "spec": "EditAnywhere, Category = \"Movement\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
@@ -7319,10 +7292,24 @@
       },
       {
        "type": "float",
+       "name": "UnburyDeadlockSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.5\"",
+       "replicated": null,
+       "doc": "How long the core check will keep deferring to the un-bury before it stops believing it, in seconds. The core check refuses to kill a player who is grounded on the body they are analytically inside, on the grounds that the un-bury will free them. On 2026-09-07 that promise was not being kept - the containment escape is gated on the probe having MISSED, and standing on the inside of a hollow shell gives a probe that HITS - so the two guards deferred to each other and the player rode around inside PoolPlanet_56 indefinitely. The escape itself is fixed; this is the tiebreak that makes the deadlock impossible rather than merely unlikely, and reaching it is logged as an Error."
+      },
+      {
+       "type": "float",
        "name": "MaxStepUpHeight",
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Movement\", meta = (ClampMin = \"0.0\", ClampMax = \"100.0\"",
        "replicated": null,
        "doc": "How high an obstacle the character can walk straight over, in cm. The on-foot controller commits its walk as a single swept move, so before this existed ANY blocking hit stopped you dead - a 10 cm lip of terrain or the corner of a build piece was a wall. 45 cm is knee height on this 180 cm character, which is the height people intuitively expect to step over without thinking about it."
+      },
+      {
+       "type": "float",
+       "name": "MaxGroundSnapCm",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"10.0\"",
+       "replicated": null,
+       "doc": "Largest single-frame ground snap, in cm. The snap closes the gap between the capsule and the measured floor. On a 3.4 km circumradius die that gap is honestly tens of centimetres, so this is deliberately well above MaxStepUpHeight - the first version of this bound used the step height and made walking over knee-high objects feel like being pushed back, because a legitimate 80 cm settle took two frames. The amplification is bounded separately and matters more: the snap moves along Up to close a distance measured along SurfN, and that divide is floored at 0.25, i.e. a 4x multiplier on a steep face. See the snap itself."
       },
       {
        "type": "float",
@@ -9150,7 +9137,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Immediate-mode helpers (return true when clicked / changed this frame).",
-       "calls": 43,
+       "calls": 40,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9230,7 +9217,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 23,
+       "calls": 24,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9698,7 +9685,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -13846,7 +13833,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 225,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -13963,7 +13950,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 225,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -16622,7 +16609,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 3,
+       "calls": 2,
        "called_in": [
         "CosmicHUD.cpp",
         "Portal.cpp"
@@ -17242,7 +17229,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 225,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -18407,7 +18394,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -18943,7 +18930,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 225,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20136,7 +20123,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20214,7 +20201,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20292,7 +20279,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20391,7 +20378,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 186,
+       "calls": 187,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20902,7 +20889,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 225,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -33503,8 +33490,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 6e032e5-dirty",
- "generated_at": "2026-09-07T02:38:37Z",
- "game_commit": "6e032e5",
+ "generated_from": "RaysSpaceSim @ 4dd9ed8-dirty",
+ "generated_at": "2026-09-08T01:48:24Z",
+ "game_commit": "4dd9ed8",
  "game_dirty": true
 }
