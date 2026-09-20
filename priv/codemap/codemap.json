@@ -3134,9 +3134,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "True when this body has already updated its pose this frame, so the delta below describes THIS frame's motion.",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
-        "CelestialBody.cpp"
+        "CelestialBody.cpp",
+        "CosmicFlightComponent.cpp"
        ]
       },
       {
@@ -3199,9 +3200,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "Transports a world-space point from where this body was at the start of the frame to where it is now - i.e. what standing on it should do to you. Returns WorldP unchanged when there is no usable delta.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CelestialBody.cpp",
+        "CosmicFlightComponent.cpp",
         "CosmicGroundEnemy.cpp"
        ]
       },
@@ -3872,7 +3874,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Strongest walking-gravity source at a position. Returns nullptr if none. OutAccel is the gravitational acceleration vector (cm/s^2).",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "CelestialSubsystem.cpp",
         "CosmicFlightComponent.cpp",
@@ -3958,7 +3960,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Body whose SURFACE is closest to the position (walkable bodies only, i.e. SurfaceGravity > 0). OutAltitude = distance above the surface (cm).",
-       "calls": 19,
+       "calls": 21,
        "called_in": [
         "BuildComponent.cpp",
         "CelestialSubsystem.cpp",
@@ -4302,7 +4304,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -6623,7 +6625,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Reason is diagnostic only. There are six separate paths that can drop the pilot out of the ship and they behave very differently - one of them places you on a surface, the others just stop flying wherever you happen to be. Tagging each one is the only way to tell from a screenshot which fired, and at what altitude, without guessing.",
-       "calls": 7,
+       "calls": 9,
        "called_in": [
         "CosmicFlightComponent.cpp"
        ]
@@ -6883,6 +6885,86 @@
        "machine": null,
        "machine_note": null,
        "doc": "EFFECTS. On-foot camera boom inheritance, the camera manager's view-angle limits, and the run-cycle anim-rate scale - none of these feed gravity, the walk vector or the capsule.",
+       "calls": 2,
+       "called_in": [
+        "CosmicFlightComponent.cpp"
+       ]
+      },
+      {
+       "name": "EndCrashSequence",
+       "ret": "void",
+       "sig": "void EndCrashSequence(const TCHAR* Why);",
+       "params": [
+        {
+         "type": "const TCHAR*",
+         "name": "Why",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Emit and close the open contact sequence, if there is one.",
+       "calls": 5,
+       "called_in": [
+        "CosmicFlightComponent.cpp"
+       ]
+      },
+      {
+       "name": "EndCrashPhysics",
+       "ret": "void",
+       "sig": "void EndCrashPhysics(const TCHAR* Why);",
+       "params": [
+        {
+         "type": "const TCHAR*",
+         "name": "Why",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Hand the ship back to the arcade flight model. See bCrashPhysics.",
+       "calls": 7,
+       "called_in": [
+        "CosmicFlightComponent.cpp"
+       ]
+      },
+      {
+       "name": "TickCrashRest",
+       "ret": "bool",
+       "sig": "bool TickCrashRest(float DeltaTime, const FVector& Pos);",
+       "params": [
+        {
+         "type": "float",
+         "name": "DeltaTime",
+         "default": null
+        },
+        {
+         "type": "const FVector&",
+         "name": "Pos",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Resting-contact handling for a crashed ship, run every flight tick. The counterpart to HandleCrashImpact, and it exists because that function cannot run when it is most needed: it is driven by `OnActorHit`, and a ship that has come to rest stops generating hits. Probes outside-in for the surface, refreshes the body carry (which was also only ever refreshed by contacts), applies continuous friction, and ends the flight in a landing when the ship is genuinely still. Returns true if it seated the pilot.",
        "calls": 2,
        "called_in": [
         "CosmicFlightComponent.cpp"
@@ -7159,6 +7241,48 @@
       },
       {
        "type": "float",
+       "name": "CrashSettleSpeed",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Not a threshold on the approach - the contact model above deliberately has none, and this does not add one. It is the termination condition that model never had: with crashing enabled all three auto-land paths are switched off, so a ship bounced, skidded, bled speed and then went on bouncing forever with no route from flying to standing except destroying it. Ray, 2026-09-12: \"the remaining issue is bouncing off the planets when trying to crash land on them.\" 600 is about walking pace, and `CrashBounce` (0.35) takes a normal impact under it in roughly three contacts while `CrashSkidFriction` (0.7) takes a shallow skid about seven - so how you flew it still decides how ugly the arrival looks and what it costs the hull. Set to 0 to bounce forever."
+      },
+      {
+       "type": "float",
+       "name": "CrashRestDecel",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "`CrashSettleSpeed` is 600. The ship stalled at **883** - 1.5x the line - and the contacts stopped, because a hull resting on a surface is not sweeping INTO anything and `OnActorHit` only fires on a blocking hit. Every remaining mechanism in the crash model is driven by that event, so at the exact moment the ship comes to rest, everything that could finish the landing switches off. The ship then sits at or just inside the surface, still flying, until the pilot toggles out - which is the other half of the report, because toggling out there puts the capsule in the ground. So resting contact gets a continuous force, which is what resting contact has in every physics engine ever written. 4000 cm/s^2 takes the 883 above to a standstill in a quarter of a second and is irrelevant during the bouncing phase, which is dominated by impulses an order of magnitude larger."
+      },
+      {
+       "type": "float",
+       "name": "CrashPhysicsMinSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Seconds a crash keeps the ship under real physics no matter what is held down. This is the 09-14 throttle latch done properly. The thing worth stopping is the engine undoing a crash while the crash is still resolving; the thing NOT worth doing is making the pilot release and re-press a key, which is what the latch did and what Ray reported. A crash gets this long to play out - long enough for the bleed and the settle - and after it a throttle command flies the ship out, with nothing to release."
+      },
+      {
+       "type": "float",
+       "name": "CrashPhysicsRadii",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"1.0\"",
+       "replicated": null,
+       "doc": "Crash physics persists while the ship is within this many body radii. The distance test the 09-12 carry timer was standing in for. A timer says \"the crash is probably over by now\"; this says \"the ship is genuinely away from the thing it hit\", which is the actual question. A ship still inside a planet's neighbourhood after a collision is still crashing, however long it has been, and a ship clear of it is flying whatever the clock says."
+      },
+      {
+       "type": "float",
+       "name": "CrashRestProbeCm",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "How far below the hull still counts as resting on a surface, cm. Measured outside-in along the radial, so it finds the surface whether the ship is sitting on it or slightly inside it - and after a crash it is usually slightly inside it. Every `EXITFLIGHT` line in the 09-15 log has a negative `alt`, from -11 m to -2017 m."
+      },
+      {
+       "type": "float",
+       "name": "CrashSettleMinDot",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"-1.0\", ClampMax = \"1.0\"",
+       "replicated": null,
+       "doc": "Minimum dot(contact normal, outward radial) for a settled contact to count as a FLOOR rather than a wall. Stops the ship \"landing\" flat against the vertical face of a tetromino arm it has merely stopped against."
+      },
+      {
+       "type": "float",
        "name": "PostDeathInvulnSeconds",
        "spec": "EditAnywhere, Category = \"Flight|Crash\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
@@ -7292,6 +7416,13 @@
       },
       {
        "type": "float",
+       "name": "UnburyMaxStepEscapeCm",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "travel metres has stopped describing a burial. The 09-11 log: `un-buried from 'PoolPlanet_35' in 21 step(s) (1764 cm) along radial`, immediately after `snap DECLINED on 'BuildablePiece_31'`, followed by the displacement tracer naming the un-bury as the mover of 1765 cm. That is 17.6 m of teleport and it is \"touching the bomb object launched me off the planet\". The reason it needed 21 steps is that on a tetromino the radial can be 86 degrees off the local surface, so the search tunnels sideways through cell after cell. 400 cm is several capsule heights - comfortably past any jam a missed carry frame or a hard landing can produce, and far short of a launch. Set to 0 to restore the unbounded search."
+      },
+      {
+       "type": "float",
        "name": "UnburyDeadlockSeconds",
        "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.5\"",
        "replicated": null,
@@ -7310,6 +7441,34 @@
        "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"10.0\"",
        "replicated": null,
        "doc": "Largest single-frame ground snap, in cm. The snap closes the gap between the capsule and the measured floor. On a 3.4 km circumradius die that gap is honestly tens of centimetres, so this is deliberately well above MaxStepUpHeight - the first version of this bound used the step height and made walking over knee-high objects feel like being pushed back, because a legitimate 80 cm settle took two frames. The amplification is bounded separately and matters more: the snap moves along Up to close a distance measured along SurfN, and that divide is floored at 0.25, i.e. a 4x multiplier on a steep face. See the snap itself."
+      },
+      {
+       "type": "float",
+       "name": "GroundSnapMinDotUp",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\", ClampMax = \"1.0\"",
+       "replicated": null,
+       "doc": "floor and 0 would accept anything short of a ceiling. Deliberately NOT WalkableMinDot, which returns -0.2 for build-piece actors (the station included, via its StableGround tag) and so admits a surface 101 degrees off your up. That is correct for the PROBE - \"can this be stood on at all\", tolerant of the odd faces of player-built structures - and wrong for the SNAP, which moves the character ALONG that surface's normal. Snapping to a near-vertical face shoves you sideways, and on 2026-09-08 that threw the player off the station 32 times in one session. Lower it if characters fail to settle onto steep die facets; raise it if anything still shoves sideways. Declining to snap is always safe - gravity and the walk sweep still run and the next frame re-probes."
+      },
+      {
+       "type": "float",
+       "name": "ProbeRadialMinDotUp",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\", ClampMax = \"1.0\"",
+       "replicated": null,
+       "doc": "the ground probe stops believing it. 0.34 is about 70 degrees. The probe fires along the radial because on a planet that is the one axis that reliably finds the facet underfoot. Near the STATION the nearest body is kilometres away at an arbitrary angle, so the radial is nearly horizontal - the probe fires sideways, hits the vertical face of a nearby buildable, and calls it the ground. Everything downstream inherits that wall as the floor. A die's facets sit 35-48 degrees off the radial in ordinary play and the probe already rejects past ~75, so this cannot misfire on a planet; on the station it is the difference between probing down and probing sideways. Set to 0 to always trust the radial (the pre-2026-09-09 behaviour)."
+      },
+      {
+       "type": "float",
+       "name": "DisplaceWarnCm",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Log a warning when the character moves further than this in ONE frame, cm. A diagnostic, not a limit - nothing is clamped. Rounds were spent guessing at \"touching a bomb launches me\" while the log ruled out every instrumented path at once (snap declined 0, snap clamped 0, un-buried 0): something moved the character and none of the things that log said it was them. This measures the displacement itself instead of its suspects, and on its first run it named the station ride bug in 26 lines. A walk step is BaseWalkSpeed*dt, about 12 cm at a 46 ms frame, so 200 is comfortably past anything walking produces while staying under a real fall. Set to 0 to silence it."
+      },
+      {
+       "type": "float",
+       "name": "StableFrameHoldMarginCm",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "While airborne off the station or a build piece the frame stays that floor's until the feet touch something (bLastGroundWasStable), rather than expiring on StableGroundCoyoteSeconds - a 0.35 s grace cannot cover a jump that lasts about a second, and when it lapsed on the station the frame swung to a planet that was 166 degrees away from the deck, i.e. directly overhead, and gravity threw the player off. See the declaration of bHoldStableFrame in TickOnFootSurface for the log. This is what keeps that from becoming a frame you can never leave: measured from the piece's own bounding sphere, so it scales with the structure. 30 m covers a hop and a stumble off an edge; anything further and the ordinary planetary handover takes over as before. Set to 0 for the old behaviour."
       },
       {
        "type": "float",
@@ -7740,6 +7899,13 @@
        "spec": "EditAnywhere, Category = \"Enemy\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
        "doc": ""
+      },
+      {
+       "type": "float",
+       "name": "EnemyStepUpHeight",
+       "spec": "EditAnywhere, Category = \"Enemy|Movement\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "How high a lip this creature can walk over, in cm. It moves itself with a single swept AddActorWorldOffset, and a swept move has no concept of stepping - so before 2026-09-09 anything raised stopped it dead and it re-tried the same blocked move every frame. That is the stutter on the station deck's corrugation, and the ones that eventually crossed had found a low spot rather than climbed. Matched to the player's MaxStepUpHeight (45) so a surface the player can walk over is one the enemies can follow them over - a chase that fails on geometry the player crosses freely reads as broken AI rather than as terrain."
       },
       {
        "type": "float",
@@ -9685,7 +9851,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -10297,6 +10463,46 @@
        "doc": "",
        "calls": null,
        "called_in": []
+      },
+      {
+       "name": "AccumulateDrift",
+       "ret": "void",
+       "sig": "void AccumulateDrift(const FRotator& NewRotation, bool bWalkFrame, bool bHadInput, const FVector& Up);",
+       "params": [
+        {
+         "type": "const FRotator&",
+         "name": "NewRotation",
+         "default": null
+        },
+        {
+         "type": "bool",
+         "name": "bWalkFrame",
+         "default": null
+        },
+        {
+         "type": "bool",
+         "name": "bHadInput",
+         "default": null
+        },
+        {
+         "type": "const FVector&",
+         "name": "Up",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Accumulate this frame into the drift instrument and emit a line when due. Called with the SAME rotation ReportIfSnapped sees, on every path out of ProcessViewRotation including the early returns - a bug that only showed up on the menu path or the degenerate path would otherwise be invisible to the one tool built to find it.",
+       "calls": 7,
+       "called_in": [
+        "CosmicPlayerCameraManager.cpp"
+       ]
       }
      ],
      "properties": [
@@ -10305,14 +10511,14 @@
        "name": "WalkPitchLimit",
        "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"10.0\", ClampMax = \"89.0\"",
        "replicated": null,
-       "doc": "Elevation limit above/below the local horizon while walking (degrees)."
+       "doc": "is about to keep rotating. Next frame it clamps again. A limit is supposed to have a fixed point you settle at. A limit evaluated in a frame that rotates relative to the thing it limits has none - it is a ratchet, and it pays out in whatever direction the ride happens to be turning. That is why pitch AND yaw both wander: the clamp moves the forward off the heading it had, and the heading is the yaw. Now the clamp is applied to the INPUT INCREMENT only: the mouse cannot push elevation past the limit, and nothing else is allowed to move it at all. If the planet's rotation carries the view past the limit the view stays exactly where the player left it (the head does not move), and the player can always steer out again, because input that REDUCES the excess is never refused."
       },
       {
        "type": "float",
        "name": "SnapReportDegrees",
        "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
-       "doc": "Log a line whenever the view jumps more than this in one frame (degrees). The camera snap has survived two fixes made by reading the code, so this exists to stop the third one being another guess. It reports the ACTUAL angle between last frame's forward and this frame's, plus which branch produced it and what the inputs were - which is the one thing static reading cannot tell you. OFF by default now that the cause is known and fixed (see MaxLookDeltaDegrees). Set it to 8 to turn the diagnostic back on if the view ever starts jumping again - it costs one dot product per frame and only formats a string when something actually moves that far."
+       "doc": "produced it and what the inputs were - which is the one thing static reading cannot tell you. OFF by default now that the cause is known and fixed (see MaxLookDeltaDegrees). Set it to 8 to turn the diagnostic back on if the view ever starts jumping again - it costs one dot product per frame and only formats a string when something actually moves that far. NOTE 2026-09-12: this sitting at 0 is why the 09-12 log had nothing to say about the camera. It only ever fires on a JUMP, and the reported fault is a DRIFT - tens of degrees accumulated a fraction of a degree at a time, every single frame of which is far below any sane snap threshold. Drift needs an accumulator, not a threshold; that is CameraDriftReportSeconds below."
       },
       {
        "type": "float",
@@ -10320,6 +10526,27 @@
        "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
        "doc": "- it is nearly pure pitch while yaw stays under a degree, where a hand moving that fast would smear across both axes; - ordinary frames in the same session peak around 20 degrees. The cause is the OS cursor being recentred against the viewport edge under LockOnCapture: one frame reports the whole jump back across the window. It is a windowing artefact, which is why it is worse in PIE, and why it survived every change to the rotation maths. 45 degrees is chosen to sit above real input and below the spike. At 60 fps that is a 2700 deg/sec flick - faster than anyone aims, slower than a warp. A dropped frame costs one frame of look; an accepted spike costs the shot you were lining up."
+      },
+      {
+       "type": "float",
+       "name": "CameraDriftReportSeconds",
+       "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "pitch/yaw are the two that got reasoned about instead, repeatedly, and both outlived every fix that reasoning produced. What it measures is the rule at the top of this file, directly: the total angle the view forward moved on frames where the look input was EXACTLY zero. That number has one correct value and it is zero. Anything else names a writer of pitch/yaw that is not the mouse, and the same line carries the candidates - which branch was running, whether the branch flipped, and whether either clamp bit - so the next run identifies it rather than re-opening the argument. Cheap: one dot product and a compare per frame, one formatted line every few seconds, and only when there is drift worth naming."
+      },
+      {
+       "type": "float",
+       "name": "CameraDriftReportMinDegrees",
+       "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Drift below this many degrees in a report window is not reported. Rebuilding the rotation costs a float round trip (rotator -> quat -> vector -> matrix -> rotator) every frame, worth around 1e-5 degrees. Reporting that would bury the signal in its own noise. 0.05 deg over a couple of seconds is two orders of magnitude above the round trip and two orders below anything a player can see, so a clean frame stays silent and a real ratchet does not."
+      },
+      {
+       "type": "bool",
+       "name": "bWidenWorldPitchClampOnFoot",
+       "spec": "EditAnywhere, Category = \"Cosmos|Camera\"",
+       "replicated": null,
+       "doc": "ViewPitchMin/Max to +/-70 on foot, and `Super::ProcessViewRotation` enforces that against the view's WORLD pitch. World pitch is measured from the world horizon, and on a planet the player's own level horizon has no fixed world pitch at all - stand on the side of a body and a perfectly level view reads as world pitch 90. So every frame the walk branch is unavailable (airborne during a bombing run, gravity body momentarily lost, out of the 3x-radius well) the fallback hard-writes the view to 70 degrees of WORLD pitch and the walk branch then accepts that as the truth. The walk branch owns the elevation limit, in the frame where elevation means something. This widens the fallback's clamp to +/-89.9 for the duration of the Super call and restores it immediately, so the authored value keeps its meaning everywhere else and nothing outside this function sees a change."
       }
      ],
      "replication": {}
@@ -10724,6 +10951,31 @@
        "called_in": [
         "CosmicPlayerRepComponent.cpp"
        ]
+      },
+      {
+       "name": "Server_SetPoolPhysics",
+       "ret": "void",
+       "sig": "void Server_SetPoolPhysics(const FCosmicPoolPhysics& In);",
+       "params": [
+        {
+         "type": "const FCosmicPoolPhysics&",
+         "name": "In",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Server, Reliable, WithValidation",
+       "machine": "server-rpc",
+       "machine_note": "owning client \u2192 server",
+       "doc": "Same shape as Server_RequestCelestialImpulse above and for the same reason: a client can ask, only the server can do. See FCosmicPoolPhysics for why every one of these knobs was silently inert. Reliable because a dropped tuning message leaves the panel and the world disagreeing, which is the exact failure this is fixing. The HUD throttles to ten a second while a slider is being dragged so \"reliable\" stays cheap. Clamped server-side, hard. The client is trusted with its own movement in this build (see the NETWORKING block in CosmicFlightComponent.h) and that is a deliberate choice about one pawn; this reaches every body in the arena for every player, so it gets real bounds rather than a sanity check.",
+       "calls": 1,
+       "called_in": [
+        "CosmicHUD.cpp"
+       ]
       }
      ],
      "properties": [
@@ -10765,6 +11017,13 @@
        "replicated": "ReplicatedUsing=OnRep_Appearance",
        "doc": "NOT COND_SkipOwner, unlike NetState and MountVisual. Those are streams the owner is authoritative over and must never be echoed back. This is a latch, so it goes to everyone including the owner: it is what makes a LATE JOINER see the bodies people are already wearing, which is the case the whole thing exists for. OnRep_Appearance is a no-op when the look is already correct, which is the owner's usual case. TRANSIENT, AND THEREFORE NOT PERSISTENT. This lives on the pawn's component and dies with the pawn, so an appearance does NOT currently survive a respawn or a server change - nothing re-publishes it, and the hub does not store it. Making it stick means writing it into the character record through UPhxServerAuth::SaveCharacter and applying it on spawn; that is a separate piece of work, not an accident of this one.",
        "cond": "COND_None"
+      },
+      {
+       "type": "bool",
+       "name": "bAllowClientPhysicsTuning",
+       "spec": "EditAnywhere, Category = \"Cosmos|Dev\"",
+       "replicated": null,
+       "doc": "Whether this server accepts pool-physics tuning from a client at all. TRUE while this is a development tool and the dev panel is the only thing that sends it. **This has to be false before anything ships to players who are not Ray** - it lets any connected client retune the arena for everyone. Recorded here rather than in a TODO because the whole point of the dev panel is that it is convenient, and convenient things get left switched on."
       }
      ],
      "replication": {
@@ -13833,7 +14092,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -13950,7 +14209,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -16146,9 +16405,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "Live-set this body's linear + angular damping (runtime options menu). box3d has no \"all bodies\" call, so the menu iterates planets and calls this.",
-       "calls": 2,
+       "calls": 4,
        "called_in": [
         "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp",
         "PoolPlanet.cpp"
        ]
       },
@@ -16386,10 +16646,31 @@
       },
       {
        "type": "float",
+       "name": "MinPoolSpin",
+       "spec": "EditAnywhere, Category = \"Pool\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "looks like the rest of the time, which is most of the time. Applied after the max clamp, on the authority only, keeping whatever axis the body already has and falling back to IdleSpinAxis - a fixed, per-planet direction - when the spin has decayed too far to have a meaningful one. So a planet settles to a slow tumble rather than to a stop, and no two settle the same way. 0.03 rad/s is 1.7 deg/s: about 17 degrees over ten seconds, and a revolution every 3.5 minutes. Enough that nothing in the field reads as frozen, far below anything that makes a surface hard to stand on. Live on the dev panel next to Max Planet Spin. Set to 0 for the pre-2026-09-12 behaviour, where a planet that has finished settling stops dead."
+      },
+      {
+       "type": "float",
        "name": "PoolPlanetAngularDamping",
        "spec": "EditAnywhere, Category = \"Pool\", meta = (ClampMin = \"0.0\", ClampMax = \"5.0\"",
        "replicated": null,
        "doc": "Angular damping for THIS planet's box3d body, applied at creation. Planets already had angular damping - UBox3DWorldSubsystem stamps its shared PoolAngularDamping (0.35, roughly a 2 s half-life) into every body def, which is why a knocked planet visibly settles. But that value is SHARED WITH THE DICE FIELD and is also what the options-menu slider drives, so there was no way to tune planet spin decay without moving the dice too. This is the planet's own knob, defaulted to the same 0.35 so behaviour is unchanged until someone deliberately changes it. Deliberately NOT the fix for bomb spin. Damping governs how fast a planet settles AFTER you stop hitting it; while you are still bombing, the spin simply sits at MaxPoolSpin above. That cap is the dial for how violent bombing feels; this one is for how long the aftermath lasts."
+      },
+      {
+       "type": "bool",
+       "name": "bCoupleSpinToSpeedSettle",
+       "spec": "EditAnywhere, Category = \"Pool|Motion\"",
+       "replicated": null,
+       "doc": "looks unnatural. Dampening effects should be clamped together.\"* The numbers agree with him: angular damping is 0.35/s (a 2.0 s half-life) while the linear aftermath is PoolPlanetOrbitRestoreRate at 0.12/s (5.8 s), so the tumble dies about three times faster than the shove. With this on, the angular damping is interpolated between PoolPlanetOrbitRestoreRate (at the speed cap) and the settled value (in its lane), so the two aftermaths finish together. Deliberately a coupling rather than a retune of either constant: 0.35 is what stops contact spin noise and the restore rate is what makes bombing feel right, and both still do their jobs at the ends of the range. Turn it off for the pre-2026-09-11 behaviour."
+      },
+      {
+       "type": "float",
+       "name": "PoolPlanetOrbitRestoreRate",
+       "spec": "EditAnywhere, Category = \"Pool|Motion\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "toward the planet's authored drift speed and never touches DIRECTION, so a planet keeps orbiting exactly where it was orbiting and only loses the extra a bomb gave it. Below that speed it does nothing at all. The direction part is not a detail. The first version of this damped the velocity VECTOR toward `InitialVelocity` - the spawn tangent - which pulled every planet toward one fixed heading and broke every orbit in the arena within one playtest. See the note at the implementation. Exponential: 0.12 is roughly a 6 s half-life, so a planet knocked to the cap is visibly back in its lane inside half a minute. Raise it for a snappier settle, set it to 0 to restore the pre-2026-09-08 behaviour where a bomb's shove is permanent."
       },
       {
        "type": "float",
@@ -17229,7 +17510,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 227,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -18394,7 +18675,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -18930,7 +19211,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20123,7 +20404,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20201,7 +20482,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20279,7 +20560,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20378,7 +20659,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 187,
+       "calls": 196,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20889,7 +21170,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -32907,9 +33188,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
-        "CosmicHUD.cpp"
+        "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp"
        ]
       },
       {
@@ -33490,8 +33772,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 4dd9ed8-dirty",
- "generated_at": "2026-09-08T01:48:24Z",
- "game_commit": "4dd9ed8",
+ "generated_from": "RaysSpaceSim @ 1c21468-dirty",
+ "generated_at": "2026-09-19T19:45:02Z",
+ "game_commit": "1c21468",
  "game_dirty": true
 }
