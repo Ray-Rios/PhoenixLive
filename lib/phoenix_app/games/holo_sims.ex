@@ -101,6 +101,22 @@ defmodule PhoenixApp.Games.HoloSims do
     |> GamesRepo.all()
   end
 
+  @doc """
+  Every sim for a game, newest first - the admin screen's library view.
+
+  Unfiltered by visibility on purpose: an operator needs to see the private
+  sim a player says will not open, which no player-facing listing shows them.
+  """
+  def list_for_admin(game_id, opts \\ []) do
+    limit_n = Keyword.get(opts, :limit, 100)
+
+    HoloSim
+    |> where([s], s.game_id == ^game_id)
+    |> order_by([s], desc: s.inserted_at)
+    |> limit(^limit_n)
+    |> GamesRepo.all()
+  end
+
   # ---------------------------------------------------------------------
   # Slots — SUPERSEDED BY users.channel_allowance, KEPT FOR ITS DATA
   # ---------------------------------------------------------------------
@@ -300,13 +316,38 @@ defmodule PhoenixApp.Games.HoloSims do
         {:error, :already_exists, "That channel already has a Holo-sim."}
 
       true ->
+        channel = PhoenixApp.Repo.get(PhoenixApp.Forum.Channel, channel_id)
+
+        # The sim and its channel share one name and one publicity (2026-10-08).
+        # No name typed -> the sim takes the channel's. A name typed -> the
+        # channel is renamed to match. Visibility not given -> the sim takes the
+        # channel's publicity rather than defaulting to private and flipping a
+        # public channel private behind its owner's back.
         attrs =
           attrs
+          |> Map.update("name", channel.name, fn
+            n when n in [nil, ""] -> channel.name
+            n -> n
+          end)
+          |> Map.put_new("visibility", if(channel.is_public, do: "public", else: "private"))
           |> Map.put("game_id", game_id)
           |> Map.put("owner_user_id", user_id)
           |> Map.put("channel_id", channel_id)
 
-        %HoloSim{} |> HoloSim.changeset(attrs) |> GamesRepo.insert()
+        with {:ok, sim} <- %HoloSim{} |> HoloSim.changeset(attrs) |> GamesRepo.insert() do
+          sync_channel_publicity(sim)
+
+          case sync_channel_name(sim) do
+            :ok ->
+              {:ok, sim}
+
+            {:error, message} ->
+              # Undo: a sim whose name its channel refused would be out of step
+              # from birth. The channel is unchanged, so deleting is a clean undo.
+              GamesRepo.delete(sim)
+              {:error, :name_taken, "Name #{message}."}
+          end
+        end
     end
   end
 
@@ -351,16 +392,81 @@ defmodule PhoenixApp.Games.HoloSims do
   hot paths in different databases, and a derived value would mean a cross-
   database read to answer "is this listed".
   """
+  #
+  # THE NAME IS STORED TWICE TOO, since 2026-10-08 (Ray: name and visibility may
+  # change "as long as they're reflected both in-game and on phxlive channels").
+  # The sim is written first, then the channel renamed through
+  # Forum.update_channel/2 so the website's channel list updates live. Channel
+  # names are GLOBALLY unique and sim names only per owner, so the channel is the
+  # one that can refuse - in which case the sim's name is put back and the
+  # refusal returned as an error on :name.
   def update_sim(%HoloSim{} = sim, attrs) do
     case sim |> HoloSim.owner_changeset(attrs) |> GamesRepo.update() do
       {:ok, updated} ->
         sync_channel_publicity(updated)
-        {:ok, updated}
+
+        case sync_channel_name(updated) do
+          :ok ->
+            {:ok, updated}
+
+          {:error, message} ->
+            {:ok, _} = updated |> Ecto.Changeset.change(name: sim.name) |> GamesRepo.update()
+
+            {:error,
+             sim
+             |> HoloSim.owner_changeset(attrs)
+             |> Ecto.Changeset.add_error(:name, message)
+             |> Map.put(:action, :update)}
+        end
 
       error ->
         error
     end
   end
+
+  @doc """
+  Write the sim's own id into its spec's `SystemId`.
+
+  The spec is generated before the row exists, so it cannot know the id. The
+  struct documents SystemId as "for Holo-sim this is the row id in the hub".
+  """
+  def stamp_system_id(%HoloSim{spec: %{} = spec} = sim) do
+    if spec["SystemId"] == to_string(sim.id) do
+      {:ok, sim}
+    else
+      sim
+      |> Ecto.Changeset.change(spec: Map.put(spec, "SystemId", to_string(sim.id)))
+      |> GamesRepo.update()
+    end
+  end
+
+  def stamp_system_id(sim), do: {:ok, sim}
+
+  defp sync_channel_name(%HoloSim{channel_id: channel_id, name: name}) when is_binary(channel_id) do
+    case PhoenixApp.Repo.get(PhoenixApp.Forum.Channel, channel_id) do
+      nil ->
+        :ok
+
+      %{name: ^name} ->
+        :ok
+
+      channel ->
+        case PhoenixApp.Forum.update_channel(channel, %{name: name}) do
+          {:ok, _} ->
+            :ok
+
+          {:error, %Ecto.Changeset{errors: errors}} ->
+            if Keyword.has_key?(errors, :name),
+              do: {:error, "is already the name of another phxlive channel"},
+              else: {:error, "could not rename the channel"}
+
+          {:error, _} ->
+            {:error, "could not rename the channel"}
+        end
+    end
+  end
+
+  defp sync_channel_name(_), do: :ok
 
   defp sync_channel_publicity(%HoloSim{channel_id: channel_id, visibility: visibility})
        when is_binary(channel_id) do

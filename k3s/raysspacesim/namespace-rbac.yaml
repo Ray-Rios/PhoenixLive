@@ -83,6 +83,15 @@ rules:
 - apiGroups: [""]
   resources: ["services"]
   verbs: ["create", "get", "list", "watch", "patch", "delete"]
+
+# Holo-sim instances, moved here from phoenixapp on 2026-10-08. Same verbs the
+# InstanceLauncher was granted in base/rbac.yaml, and the same reasoning: one
+# Job per sim, created on a player's door press, deleted by TTL or terminate/1.
+# Each instance also gets its own LoadBalancer Service (the rule above) - a pod
+# hostPort is not published to the Windows host under Docker Desktop.
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "get", "list", "watch", "delete"]
 ---
 # The hub's service account lives in phoenixapp (or phoenixapp-dev); the Role
 # it is being granted lives here. A RoleBinding may name a subject from another

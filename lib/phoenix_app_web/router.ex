@@ -215,6 +215,9 @@ defmodule PhoenixAppWeb.Router do
     # bare /:id routes, or Phoenix matches "access" as an :id.
     get "/:game_slug/holosims", Api.HoloSimController, :index
     post "/:game_slug/holosims", Api.HoloSimController, :create
+    # Static segments BEFORE /:id, or "options" would be read as a sim id.
+    get "/:game_slug/holosims/options", Api.HoloSimController, :options
+    get "/:game_slug/holosims/:id/world", Api.HoloSimController, :world
 
     get "/:game_slug/holosims/:id/access/:target_user_id", Api.HoloSimController, :check_access
     put "/:game_slug/holosims/:id/state", Api.HoloSimController, :save_state

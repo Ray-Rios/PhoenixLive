@@ -15,6 +15,7 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
 
   alias PhoenixApp.Games
   alias PhoenixApp.Games.HoloSims
+  alias PhoenixApp.Games.HoloSimSpec
   alias PhoenixApp.Games.InstanceLauncher
 
   plug PhoenixAppWeb.Plugs.GamesApiKeyOrAuth
@@ -67,19 +68,18 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
   #
   # Both end with a sim that has a channel. There is no path to a sim without
   # one, because a sim without one has no access control list.
+  #
+  # THE WORLD COMES FROM `options`, NEVER FROM A CLIENT `spec` (2026-10-08).
+  # HoloSimSpec builds the spec from a closed set of choices; a `spec` or
+  # `template_id` in the request is ignored. See that module's moduledoc.
   def create(conn, %{"game_slug" => slug} = params) do
     with {:ok, game} <- fetch_game(slug),
-         {:ok, user_id} <- resolve_user_id(conn, params) do
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, spec} <- build_spec(params) do
       attrs =
-        Map.take(params, [
-          "name",
-          "description",
-          "visibility",
-          "kind",
-          "spec",
-          "template_id",
-          "visitors_can_build"
-        ])
+        params
+        |> Map.take(["name", "description", "visibility", "kind", "visitors_can_build"])
+        |> Map.put("spec", spec)
 
       result =
         case params["channel_id"] do
@@ -93,14 +93,27 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
             HoloSims.create_for_existing_channel(game.id, user_id, channel_id, attrs)
         end
 
-      case result do
-        {:ok, sim, _channel} ->
-          conn |> put_status(:created) |> json(%{success: true, sim: sim_json(sim, user_id)})
+      # Both create paths end here with a sim whose spec has no SystemId yet.
+      result =
+        case result do
+          {:ok, sim, _channel} -> {:ok, sim}
+          other -> other
+        end
 
-        {:ok, sim} ->
+      case result do
+        {:ok, %{} = sim} ->
+          sim =
+            case HoloSims.stamp_system_id(sim) do
+              {:ok, stamped} -> stamped
+              _ -> sim
+            end
+
           conn |> put_status(:created) |> json(%{success: true, sim: sim_json(sim, user_id)})
 
         {:error, :already_exists, message} ->
+          error(conn, 409, message)
+
+        {:error, :name_taken, message} ->
           error(conn, 409, message)
 
         {:error, :forbidden, message} ->
@@ -123,6 +136,47 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
 
         {:error, other} ->
           error(conn, 422, inspect(other))
+      end
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  defp build_spec(params) do
+    case HoloSimSpec.build(params["kind"], params["options"] || %{}, nil, params["name"]) do
+      {:ok, spec} -> {:ok, spec}
+      {:error, message} -> {:error, 422, message}
+    end
+  end
+
+  # GET /holosims/options - what the door's creation form offers. Served by the
+  # hub rather than hard-coded in the client so the two cannot disagree about
+  # which choices are valid: the hub is the one that will reject a bad one.
+  def options(conn, _params) do
+    json(conn, %{success: true, options: HoloSimSpec.catalog()})
+  end
+
+  # GET /holosims/:id/world - SERVER KEY ONLY. What an instance needs to build
+  # its sim at boot: the spec it was created with and the last saved state.
+  # Separate from `show` because `show` is access-checked against a player and
+  # strips nothing; an instance is not a player and needs both halves at once.
+  def world(conn, %{"id" => id} = params) do
+    with :ok <- require_server_auth(conn),
+         {:ok, _game} <- fetch_game(params["game_slug"]) do
+      case HoloSims.get_sim(id) do
+        nil ->
+          error(conn, 404, "Holo-sim not found")
+
+        sim ->
+          state = HoloSims.get_state(sim.id)
+
+          json(conn, %{
+            success: true,
+            sim: sim_json(sim, nil),
+            spec: sim.spec,
+            state: state && state.state,
+            state_saved_at: state && state.saved_at
+          })
       end
     else
       {:error, status, message} -> error(conn, status, message)
@@ -163,15 +217,9 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
          {:ok, user_id} <- resolve_user_id(conn, params),
          {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id),
          :ok <- require_edit(sim, user_id) do
-      attrs = Map.take(params, [
-          "name",
-          "description",
-          "visibility",
-          "kind",
-          "spec",
-          "template_id",
-          "visitors_can_build"
-        ])
+      # Options are fixed once a sim exists (Ray, 2026-10-08): no kind, spec or
+      # template here. Name and visibility carry through to the channel.
+      attrs = Map.take(params, ["name", "description", "visibility", "visitors_can_build"])
 
       case HoloSims.update_sim(sim, attrs) do
         {:ok, updated} -> json(conn, %{success: true, sim: sim_json(updated, user_id)})
@@ -411,6 +459,14 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
   defp launch_error_message(:no_image_configured),
     do: "Instance orchestration is not configured on this server."
 
+  defp launch_error_message(:previous_instance_ending),
+    do: "This Holo-sim's last instance is still shutting down. Try the door again in a few seconds."
+
+  # The instance could not be given a reachable port. Its Job has already been
+  # deleted - see InstanceLauncher.expose/4 - so retrying is safe.
+  defp launch_error_message({:service, _}),
+    do: "Could not open a network port for the Holo-sim. Try again shortly."
+
   defp launch_error_message(_), do: "Could not start an instance. Try again shortly."
 
   defp launch_json(:ready, sim, server) do
@@ -567,6 +623,9 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
       channel_id: sim.channel_id,
       visibility: sim.visibility,
       kind: sim.kind,
+      # The choices the world was generated from, read back out of the spec's
+      # Metadata - so the door can say "50 planets, dice" without the spec.
+      options: HoloSimSpec.options(sim.spec),
       template_id: sim.template_id,
       is_published: sim.is_published,
       is_locked: sim.is_locked,

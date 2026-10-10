@@ -123,6 +123,22 @@ defmodule PhoenixApp.Forum do
         end
 
         pubsub_broadcast("chat:channels", {:channel_updated, updated_channel})
+
+        # A channel's name and publicity are also its Holo-sim's (2026-10-08).
+        # Best effort: a sim that cannot take the new name (another sim of the
+        # same owner already has it) keeps its old one and is logged, rather than
+        # failing an edit the website already accepted.
+        if current.name != updated_channel.name or current.is_public != updated_channel.is_public do
+          case PhoenixApp.Games.SimAccess.channel_updated(updated_channel) do
+            {:error, reason} ->
+              require Logger
+              Logger.warning("Holo-sim sync for channel #{updated_channel.id} failed: #{inspect(reason)}")
+
+            _ ->
+              :ok
+          end
+        end
+
         {:ok, updated_channel}
       error -> error
     end

@@ -154,7 +154,12 @@ config :phoenix_app, PhoenixApp.Games.InstanceLauncher,
   # countdown inside the server itself.
   max_lifetime_seconds:
     String.to_integer(System.get_env("HOLOSIM_MAX_LIFETIME_SECONDS", "14400")),
-  secret_name: System.get_env("HOLOSIM_SECRET_NAME", "phoenix-secrets"),
+  # raysspacesim since 2026-10-08, beside the world server - instances parse
+  # untrusted network input and do not belong next to Postgres. The Secret is
+  # that namespace's copy (Secrets do not cross namespaces); its RBAC lives in
+  # k3s/raysspacesim and is applied by deploy-prod.sh.
+  namespace: System.get_env("HOLOSIM_NAMESPACE", "raysspacesim"),
+  secret_name: System.get_env("HOLOSIM_SECRET_NAME", "raysspacesim-secrets"),
 
   # NO :4000. That is the CONTAINER port; the phoenix-web Service publishes
   # `port: 80, targetPort: 4000`, so the Service has no port 4000 to connect to.

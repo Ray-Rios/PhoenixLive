@@ -3174,7 +3174,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "This body's angular velocity in rad/s, world space, valid on BOTH sides: the live box3d body where there is one, the last replicated snapshot on a client. Unlike the frame delta this does not require the body to have ticked yet, so a caller in an earlier tick group can still use it.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CelestialBody.cpp",
         "CosmicFlightComponent.cpp"
@@ -3200,7 +3200,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Transports a world-space point from where this body was at the start of the frame to where it is now - i.e. what standing on it should do to you. Returns WorldP unchanged when there is no usable delta.",
-       "calls": 3,
+       "calls": 5,
        "called_in": [
         "CelestialBody.cpp",
         "CosmicFlightComponent.cpp",
@@ -3874,7 +3874,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Strongest walking-gravity source at a position. Returns nullptr if none. OutAccel is the gravitational acceleration vector (cm/s^2).",
-       "calls": 6,
+       "calls": 7,
        "called_in": [
         "CelestialSubsystem.cpp",
         "CosmicFlightComponent.cpp",
@@ -4304,7 +4304,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -6168,6 +6168,31 @@
        ]
       },
       {
+       "name": "GetRideCarryActor",
+       "ret": "AActor*",
+       "sig": "AActor* GetRideCarryActor() const { return CarryActor.Get(); }",
+       "params": [
+        {
+         "type": ") const { return CarryActor.Get(",
+         "name": "",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "2026-09-25 camera fix, and it is worth being explicit about why it wants the actor rather than GetRideRotationDelta(): * a delta has to be consumed in the frame that produced it, so it depends on the camera update landing after this component's tick - a tick-order contract that nothing enforces and that no instrument can see broken; * a delta accumulates. Ten minutes of spin and back again does not put the view back where it started. A transform does neither. `world = RideXf * local` on the way out and `local = RideXf^-1 * world` on the way back in makes the ride's rotation cancel exactly, at any tick order, with no error to accumulate. Ray's spec is \"lock the camera to the character in the same orientation the user sets it\", which is a statement about a frame, not about a rate.",
+       "calls": 1,
+       "called_in": [
+        "CosmicPlayerCameraManager.cpp"
+       ]
+      },
+      {
        "name": "SetSpawnPointHere",
        "ret": "void",
        "sig": "void SetSpawnPointHere();",
@@ -6650,7 +6675,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmicFlightComponent.cpp"
        ]
@@ -6885,6 +6910,25 @@
        "machine": null,
        "machine_note": null,
        "doc": "EFFECTS. On-foot camera boom inheritance, the camera manager's view-angle limits, and the run-cycle anim-rate scale - none of these feed gravity, the walk vector or the capsule.",
+       "calls": 2,
+       "called_in": [
+        "CosmicFlightComponent.cpp"
+       ]
+      },
+      {
+       "name": "TickArenaBound",
+       "ret": "void",
+       "sig": "void TickArenaBound();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Hold the player inside the arena sphere. Runs last in the tick, after every mover, because a bound that runs before one of them is a suggestion.",
        "calls": 2,
        "called_in": [
         "CosmicFlightComponent.cpp"
@@ -7216,14 +7260,35 @@
        "name": "CrashBounce",
        "spec": "EditAnywhere, Category = \"Flight|Crash\", meta = (ClampMin = \"0.0\", ClampMax = \"1.0\"",
        "replicated": null,
-       "doc": "Fraction of speed retained bouncing off a surface (0 = stick, 1 = perfect bounce). Kept low so a crash tumbles and skids rather than pinballing."
+       "doc": "Fraction of speed retained bouncing off a surface (0 = stick, 1 = perfect bounce). **ZERO BY DEFAULT since 2026-09-27, at Ray's request** - he has set this and CrashSkidFriction to 0 at the start of every session for a fortnight, which is the clearest statement a default can get. A crash is meant to plant the ship where it lands; anything above 0 is a hop, and a hop on a surface that is itself moving is how this campaign spent nine passes. The fade curve below still exists and still does its job the moment anyone raises this - it is not dead code, it is the thing that makes a non-zero value behave like a material rather than like a basketball."
+      },
+      {
+       "type": "float",
+       "name": "CrashBounceFadeSpeed",
+       "spec": "EditAnywhere, Category = \"Flight|Crash\", meta = (ClampMin = \"1.0\"",
+       "replicated": null,
+       "doc": "A real coefficient of restitution is not a constant - it falls as impact speed rises, because more of the energy goes into deforming the thing rather than springing it back. `CrashBounce` alone is the walking-pace figure, and applying it at 30 m/s is what made a crashing hull behave like a basketball: the 09-21 log has four identical arrivals on PoolPlanet_3 at `into` ~3000, each returning ~1000 cm/s outward, each a two-second ballistic hop, before a slower fifth approach finally ground out a landing. The curve is `CrashBounce * Fade / (Fade + IntoSpeed)` - smooth everywhere, with no speed at which behaviour changes character, which is the no-threshold rule the contact model has kept since 09-12. At 1200: a 4 m/s tap keeps 27% of its bounce, a 30 m/s arrival keeps 10% and stays where it lands."
       },
       {
        "type": "float",
        "name": "CrashSkidFriction",
        "spec": "EditAnywhere, Category = \"Flight|Crash\", meta = (ClampMin = \"0.0\", ClampMax = \"1.0\"",
        "replicated": null,
-       "doc": "Fraction of ALONG-surface speed kept per impact - the skid. 1 = frictionless. This and CrashBounce together ARE the landing model - there is no separate \"was this a good landing\" test anywhere. Low bounce + high friction (low value here) plants the ship on contact; raise this toward 1 and a shallow approach will skate for kilometres before it sheds enough speed to settle."
+       "doc": "Fraction of ALONG-surface speed kept per impact - the skid. 1 = frictionless. This and CrashBounce together ARE the landing model - there is no separate \"was this a good landing\" test anywhere. Low bounce + high friction (low value here) plants the ship on contact; raise this toward 1 and a shallow approach will skate for kilometres before it sheds enough speed to settle. **ZERO BY DEFAULT since 2026-09-27**, same reason as CrashBounce: it is what Ray sets by hand every session. Note the sense - this is the fraction KEPT, so 0 is maximum friction, i.e. the ship stops dead along the surface too."
+      },
+      {
+       "type": "float",
+       "name": "CrashSettleClearanceCm",
+       "spec": "EditAnywhere, Category = \"Flight|Crash\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Clearance above the surface when a crash finally seats the pilot, cm. This is the CONSTANT part only. The settle adds a frame of surface travel on top (`SurfVel * DeltaTime`), because on a rotating body the facet you measured has moved on by the time the next frame looks at it - which is why \"stuck in the ground\" showed up the moment Ray turned the rotation up and never before. 20 cm is a comfortable skin on a still surface; the moving part scales itself, which is the difference between a fudge factor and a fix."
+      },
+      {
+       "type": "float",
+       "name": "CrashSettleMaxClearanceCm",
+       "spec": "EditAnywhere, Category = \"Flight|Crash\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Hard ceiling on the settle clearance, cm. The seat can never be further above the surface than this, whatever the arithmetic above produces. Not a tuning knob - a structural guard. The recurring failure in this campaign is \"a slip in a formula becomes a launch\": a tangential speed added along the normal (10-03) put the pilot 26-146 m up on every landing. A cap cannot make a wrong formula right, but it does make the wrong formula survivable, and it turns a silent regression into a visibly odd 2 m hover."
       },
       {
        "type": "float",
@@ -7259,6 +7324,27 @@
        "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
        "replicated": null,
        "doc": "Seconds a crash keeps the ship under real physics no matter what is held down. This is the 09-14 throttle latch done properly. The thing worth stopping is the engine undoing a crash while the crash is still resolving; the thing NOT worth doing is making the pilot release and re-press a key, which is what the latch did and what Ray reported. A crash gets this long to play out - long enough for the bleed and the settle - and after it a throttle command flies the ship out, with nothing to release."
+      },
+      {
+       "type": "float",
+       "name": "CrashPhysicsMaxSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"1.0\"",
+       "replicated": null,
+       "doc": "Hard ceiling on a single crash, seconds. The backstop under the state test. The 09-19 gate let the resting probe refuse the pilot's handback for as long as it kept finding surface, and an embedded hull finds surface on every frame. The 09-20 log has crashes of **9.98 s and 14.63 s** - Ray's \"stuck to a planet while in flight mode\". A guard that can refuse indefinitely is a trap, so the state test gets a ceiling. Invariant 72 allows a timer in exactly this position and no other: underneath a real test, never instead of one."
+      },
+      {
+       "type": "float",
+       "name": "CrashRestGripSpeed",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Outward separation below which a contact GRIPS instead of releasing, cm/s. See the grip note in HandleCrashImpact. A hull moving away from a surface it is embedded in at 14 m/s is in resting contact, not taking off, and the contact response was preserving that component in full - which is the pinned `into=-1370` limit cycle the 09-20 log shows eight times in a row. Removing it below this speed is ordinary resting-contact handling and is why real objects stop bouncing rather than buzzing. 2000 sits an order of magnitude above the observed noise and well below any deliberate departure, so a ship genuinely leaving is untouched."
+      },
+      {
+       "type": "float",
+       "name": "VelocityDriftReportCmS",
+       "spec": "EditAnywhere, Category = \"Flight|Ship\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Report when Move->Velocity changes between ticks by more than this, cm/s. The flight twin of the on-foot `MOVED UNEXPLAINED` line, and the instrument that answers the one question eight passes have not: whether the velocity we write at the end of a tick is still there at the start of the next. On PoolPlanet_12 the outward component held -1370 cm/s across eight contacts at a perfectly periodic 0.27 s while the tangential component bled to nothing, and nothing in this component can produce that. If the drift line fires, the writer is outside this file and the search moves with it."
       },
       {
        "type": "float",
@@ -7583,6 +7669,27 @@
        "doc": "Minimum teleport distance (cm) that justifies a rebase, when enabled. Deliberately larger than the whole arena."
       },
       {
+       "type": "bool",
+       "name": "bConfineToArena",
+       "spec": "EditAnywhere, Category = \"Flight|Arena\"",
+       "replicated": null,
+       "doc": "Keep the player inside the arena, the way the planets are kept inside it. Ray, 2026-09-25: *\"The players should not be allowed to leave the box3d world, just like the planets are not allowed to go flying outside the play area.\"* Same sphere, same centre, same hard position clamp - but a HARD STOP rather than the planets' 0.95 bounce, which at flight speed would throw a ship back across 47 km at almost the speed it arrived."
+      },
+      {
+       "type": "float",
+       "name": "ArenaPlayerMarginCm",
+       "spec": "EditAnywhere, Category = \"Flight|Arena\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "How far OUTSIDE the planets' wall the player's wall sits, in cm. This is forced, not tuned. `APoolArenaManager` clamps a planet's CENTRE to `ArenaRadius - Radius`, so a planet parked on the boundary has its far surface at exactly `ArenaRadius` - and anyone standing on that surface is already outside the wall by a capsule, before they build anything there. With no margin, the most reliable way to trigger the clamp would be standing perfectly still, and it would fight the ride carry every frame. 300 m on a 47 km arena is 0.6% - nothing as a play-space question, and far more than a capsule plus whatever is built on top of it."
+      },
+      {
+       "type": "float",
+       "name": "ArenaBoundReportSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Arena\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Seconds between \"still at the wall\" lines. 0 silences them. The FIRST touch always prints regardless, because \"did the bound engage at all\" is the question, and a periodic line that only starts after a delay cannot answer it (invariant 70)."
+      },
+      {
        "type": "float",
        "name": "StableGroundCoyoteSeconds",
        "spec": "EditAnywhere, Category = \"Cosmic|OnFoot\", meta = (ClampMin = \"0.0\", ClampMax = \"2.0\"",
@@ -7609,6 +7716,27 @@
        "spec": "Transient",
        "replicated": null,
        "doc": ""
+      },
+      {
+       "type": "float",
+       "name": "RideFrameReportSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Seconds between on-foot frame reports. 0 disables. Answers the two things left after the crash campaign: whether a planet is being adopted as a ride when the character is right next to it, and how far the station's authored deck-up is from the local hull normal on the parts of the hull that are not the deck."
+      },
+      {
+       "type": "float",
+       "name": "StationFrameReportSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Seconds between \"the station frame changed\" lines; 0 silences them. Every change is logged rather than throttled by time - walking from the deck out onto the hull should happen a handful of times a session, so a STREAM of these is the lower-hull flip returning and should be unmissable."
+      },
+      {
+       "type": "float",
+       "name": "DeepSpaceReportSeconds",
+       "spec": "EditAnywhere, Category = \"Flight|Frame\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Seconds between DEEP SPACE lines; 0 silences them. Prints which body is pulling you and how hard while nothing is close enough to stand on. A run that ends with the player drifting should have this line all over it naming a sensible body - and if it names the sun from 40 km out, that is the dominance test to look at, not the frame."
       }
      ],
      "replication": {}
@@ -9851,7 +9979,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -10512,6 +10640,13 @@
        "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"10.0\", ClampMax = \"89.0\"",
        "replicated": null,
        "doc": "is about to keep rotating. Next frame it clamps again. A limit is supposed to have a fixed point you settle at. A limit evaluated in a frame that rotates relative to the thing it limits has none - it is a ratchet, and it pays out in whatever direction the ride happens to be turning. That is why pitch AND yaw both wander: the clamp moves the forward off the heading it had, and the heading is the yaw. Now the clamp is applied to the INPUT INCREMENT only: the mouse cannot push elevation past the limit, and nothing else is allowed to move it at all. If the planet's rotation carries the view past the limit the view stays exactly where the player left it (the head does not move), and the player can always steer out again, because input that REDUCES the excess is never refused."
+      },
+      {
+       "type": "float",
+       "name": "ViewReseedToleranceDeg",
+       "spec": "EditAnywhere, Category = \"Cosmos|Camera\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "NOT A TOLERANCE ON DRIFT - there is no drift to tolerate. The carry is exact (a local vector through the ride's own transform), so on an ordinary frame the rotation handed back to us is bit-for-bit the one we wrote, and this reads zero. What it detects is somebody ELSE writing the control rotation on purpose: ExitFlight seeding the view, a respawn, a teleport. Those must win, and re-seeding is how they win, because overruling them with a stale local forward would yank the view back to where it was before the event. One degree is chosen to sit above the rotator<->quaternion round trip (about 1e-5 deg) and far below any deliberate write, which moves the view by tens of degrees at least. `ride reseeds` on the drift line counts how often it fires; a count near the frame rate means the carry is silently doing nothing."
       },
       {
        "type": "float",
@@ -12125,6 +12260,70 @@
        ]
       },
       {
+       "name": "StationSurfaceName",
+       "ret": "const TCHAR*",
+       "sig": "static const TCHAR* StationSurfaceName(ECosmicStationSurface Surface);",
+       "params": [
+        {
+         "type": "ECosmicStationSurface",
+         "name": "Surface",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "For the log. One name per surface, so a frame change says what it changed to.",
+       "calls": 3,
+       "called_in": [
+        "CosmicFlightComponent.cpp",
+        "CosmicStation.cpp"
+       ]
+      },
+      {
+       "name": "GetSecondaryModuleCenter",
+       "ret": "FVector",
+       "sig": "FVector GetSecondaryModuleCenter() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Centre of the secondary module, in world space, and its radius. HOISTED OUT OF BuildSecondaryModule - 2026-10-03, invariant 82. The direction and the 1.55 stand-off were magic numbers living inside the build function, which meant the only thing that knew where the module WAS could not be asked. `GetFrameUpAt` needs exactly that to treat it as its own walkable sphere, and a second copy of the numbers would drift the first time anyone moved it.",
+       "calls": 3,
+       "called_in": [
+        "CosmicStation.cpp"
+       ]
+      },
+      {
+       "name": "GetSecondaryModuleRadius",
+       "ret": "double",
+       "sig": "double GetSecondaryModuleRadius() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 3,
+       "called_in": [
+        "CosmicStation.cpp"
+       ]
+      },
+      {
        "name": "GetHoloSimDoorWorld",
        "ret": "bool",
        "sig": "bool GetHoloSimDoorWorld(FVector& OutLocation, FRotator& OutRotation) const;",
@@ -12174,6 +12373,25 @@
        "called_in": [
         "CosmicStation.cpp",
         "CosmosWorldBuilder.cpp"
+       ]
+      },
+      {
+       "name": "EnsureGravityAnchor",
+       "ret": "void",
+       "sig": "void EnsureGravityAnchor();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Spawn the station's gravity anchor if it does not have one. Idempotent.",
+       "calls": 2,
+       "called_in": [
+        "CosmicStation.cpp"
        ]
       },
       {
@@ -12260,6 +12478,29 @@
        "ret": "void",
        "sig": "virtual void BeginPlay() override;",
        "params": [],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "EndPlay",
+       "ret": "void",
+       "sig": "virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;",
+       "params": [
+        {
+         "type": "const EEndPlayReason::Type",
+         "name": "EndPlayReason",
+         "default": null
+        }
+       ],
        "const": false,
        "virtual": true,
        "static": false,
@@ -12729,6 +12970,20 @@
        "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Station|Shape\", meta = (ClampMin = \"1000\"",
        "replicated": null,
        "doc": "Hull radius, cm. 60,000 gives a 1.2 km sphere."
+      },
+      {
+       "type": "bool",
+       "name": "bProvideGravity",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Station|Gravity\"",
+       "replicated": null,
+       "doc": "planet's radial dominates out here\" - but it does nothing about the GRAVITY SOURCE. That comes from `UCelestialSubsystem::GetDominantBody`, which walks the registered celestial bodies, and the station is an `AActor`. It has never been in that list, so anywhere off the deck the nearest planet owns you and pulls you off the hull. Rather than make the station a celestial body - which would drag in the integrator, the replicated pose stream and the consumption logic, none of which a station wants - it spawns an invisible, collisionless, pinned `ACelestialBody` at its own origin. That is exactly what a pool planet is minus the visuals, it registers through the ordinary path, and every existing consumer (dominant body, nearest body, the on-foot radial frame, the crash model's gravity) starts working near the station with no changes at all."
+      },
+      {
+       "type": "double",
+       "name": "StationSurfaceGravity",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Station|Gravity\", meta = (ClampMin = \"0.0\"",
+       "replicated": null,
+       "doc": "Station surface gravity, cm/s^2. 980 = Earth, matching the pool planets."
       },
       {
        "type": "double",
@@ -14092,7 +14347,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 256,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -14209,7 +14464,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 256,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -16048,7 +16303,7 @@
      "kind": "class",
      "uspec": "",
      "file": "Plugins/Cosmos/Source/Cosmos/Public/PoolArenaManager.h",
-     "doc": "FPoolPocket, the Pockets array, TeamScores and GetTeamScore were removed on 2026-09-06. The red/blue team game is gone - this is a space sim with orbiting planets that can be knocked around, not a pool table, and a planet reaching a \"pocket\" no longer scores or despawns it. THE CLASS STAYS because it is not only the pool game: it owns the arena BOUNDARY (ArenaRadius + WallRestitution), the CENTRE PULL that keeps the field from dispersing, and SunClearance, which is the inner wall that stops planets clipping into the star. All three are wanted. ACosmicPocketDoor also stays,",
+     "doc": "clipping into the star. All three are wanted. ACosmicPocketDoor also stays, spawned as inert scenery - it never referenced teams or scoring at all. AND IT NOW DEFINES THE PLAYER'S WORLD, NOT ONLY THE PLANETS' - 2026-09-25. Ray: *\"The players should not be allowed to leave the box3d world, just like the planets are not allowed to go flying outside the play area.\"* `UCosmicFlightComponent::TickArenaBound` reads ArenaRadius from here and holds the pawn inside the same sphere. Two consequences that are easy to miss: * the radius has to REPLICATE, because the bound is enforced by whoever holds the\u2026",
      "functions": [
       {
        "name": "Tick",
@@ -16072,22 +16327,46 @@
        "doc": "",
        "calls": null,
        "called_in": []
+      },
+      {
+       "name": "GetLifetimeReplicatedProps",
+       "ret": "void",
+       "sig": "virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;",
+       "params": [
+        {
+         "type": "TArray<FLifetimeProperty>&",
+         "name": "OutLifetimeProps",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
       }
      ],
      "properties": [
       {
        "type": "float",
        "name": "ArenaRadius",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
-       "doc": "Planets bounce back inward at this distance from the arena origin."
+       "spec": "EditAnywhere, Replicated, Category = \"Pool\"",
+       "replicated": "Replicated",
+       "doc": "not obvious from this class: **this actor did not exist on a client at all.** `ACosmosWorldBuilder::BuildSystem` refuses to run on `NM_Client` (it would stack a second, non-replicated world on top of the replicated one), this actor is only ever spawned by the builder, and until now it did not replicate - so `TActorIterator<APoolArenaManager>` on a client found nothing. That was invisible while only the server's own Tick read it. The player bound (`UCosmicFlightComponent::TickArenaBound`) is enforced by whoever holds the pawn's input, which for a real player is the CLIENT. A bound the client cannot see is a bound the server has to correct after the fact, which is a rubber-band, so the radius has to reach the client. It is written once at world build and never again, so replicating it costs one float on join and nothing thereafter.",
+       "cond": "COND_None"
       },
       {
        "type": "float",
        "name": "WallRestitution",
        "spec": "EditAnywhere, Category = \"Pool\", meta = (ClampMin = \"0.1\", ClampMax = \"1.0\"",
        "replicated": null,
-       "doc": ""
+       "doc": "Deliberately NOT replicated - and this is a trap, not an oversight. `ACosmicHUD`'s World tab binds its slider to this member BY REFERENCE and writes it every frame of a drag, then sends the value to the server over `Server_SetPoolPhysics`. A replicated copy arriving mid-drag would overwrite the value under the mouse with one a round trip old, and the slider would fight the hand holding it. The server's value is the one that acts on the planets either way; the client's copy is only what the panel is showing. The same goes for CenterPull below."
       },
       {
        "type": "float",
@@ -16099,12 +16378,16 @@
       {
        "type": "float",
        "name": "SunClearance",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
-       "doc": "Extra margin (cm) kept between a planet's surface and the sun's shell, so a ball never clips into the star. The playable region is the ANNULUS between this inner no-go sphere and the outer wall."
+       "spec": "EditAnywhere, Replicated, Category = \"Pool\"",
+       "replicated": "Replicated",
+       "doc": "Extra margin (cm) kept between a planet's surface and the sun's shell, so a ball never clips into the star. The playable region is the ANNULUS between this inner no-go sphere and the outer wall. Replicated for the same reason as ArenaRadius: it is arena GEOMETRY, set once at world build, and the client has to be able to ask about it. Nothing binds a live slider to it.",
+       "cond": "COND_None"
       }
      ],
-     "replication": {}
+     "replication": {
+      "ArenaRadius": "COND_None",
+      "SunClearance": "COND_None"
+     }
     },
     {
      "name": "APoolPlanet",
@@ -17510,7 +17793,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 236,
+       "calls": 256,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -18675,7 +18958,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -19211,7 +19494,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 256,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20404,7 +20687,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20482,7 +20765,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20560,7 +20843,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20659,7 +20942,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 196,
+       "calls": 201,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -21170,7 +21453,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 256,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -33768,12 +34051,16 @@
    "bLocked": "COND_None",
    "LockedMessage": "COND_None"
   },
+  "APoolArenaManager": {
+   "ArenaRadius": "COND_None",
+   "SunClearance": "COND_None"
+  },
   "ARSSFrontEndGameState": {
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 1c21468-dirty",
- "generated_at": "2026-09-19T19:45:02Z",
- "game_commit": "1c21468",
- "game_dirty": true
+ "generated_from": "RaysSpaceSim @ 90edee9",
+ "generated_at": "2026-10-08T21:15:13Z",
+ "game_commit": "90edee9",
+ "game_dirty": false
 }

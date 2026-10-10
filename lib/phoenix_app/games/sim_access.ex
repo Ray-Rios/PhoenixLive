@@ -334,4 +334,55 @@ defmodule PhoenixApp.Games.SimAccess do
   end
 
   def channel_deleted(_), do: {:ok, :no_sim}
+
+  @doc """
+  A channel was edited on the website. Carry its name and publicity into the sim.
+
+  Ray, 2026-10-08: a sim's name and visibility may change "as long as they're
+  reflected both in-game and on phxlive channels". `HoloSims.update_sim/2` is the
+  game -> website half; this is the other one, called from
+  `Forum.update_channel/2`.
+
+  Written with a bare change rather than `HoloSims.update_sim/2`, so it can never
+  push back into the channel and loop. A sim edited from the game reaches here
+  with names that already match, which makes it a no-op.
+
+  Visibility is coarser on the channel (public or not) than on the sim (private,
+  invite, unlisted, public), so only the public boundary is crossed: a channel
+  made public makes the sim public; a channel made non-public demotes a public
+  sim to private and leaves invite/unlisted alone.
+  """
+  def channel_updated(%{id: channel_id, name: name, is_public: is_public})
+      when is_binary(channel_id) do
+    case sim_for_channel(channel_id) do
+      nil ->
+        {:ok, :no_sim}
+
+      %HoloSim{} = sim ->
+        visibility =
+          cond do
+            is_public -> "public"
+            sim.visibility == "public" -> "private"
+            true -> sim.visibility
+          end
+
+        changes =
+          %{name: name, visibility: visibility}
+          |> Enum.reject(fn {k, v} -> is_nil(v) or Map.get(sim, k) == v end)
+          |> Map.new()
+
+        if changes == %{} do
+          {:ok, sim}
+        else
+          sim
+          |> Ecto.Changeset.change(changes)
+          |> Ecto.Changeset.unique_constraint([:game_id, :owner_user_id, :name],
+            name: :holo_sims_owner_name_index
+          )
+          |> GamesRepo.update()
+        end
+    end
+  end
+
+  def channel_updated(_), do: {:ok, :no_sim}
 end

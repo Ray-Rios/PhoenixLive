@@ -226,6 +226,27 @@ defmodule PhoenixApp.Kubernetes do
     end
   end
 
+  @doc """
+  Services matching a label selector.
+
+  Added for Holo-sim instances, which get one LoadBalancer Service EACH. Port
+  allocation has to see them: a finished instance's Service keeps its host port
+  published until it is deleted, and a second instance handed that port gets a
+  Service the host cannot bind - the same silent "no packets received yet" that
+  a missing Service produces.
+  """
+  def list_services(namespace, label_selector) do
+    path =
+      "/api/v1/namespaces/#{namespace}/services?labelSelector=" <>
+        URI.encode_www_form(label_selector)
+
+    case request(:get, path, nil) do
+      {:ok, 200, body} -> {:ok, Map.get(body, "items", [])}
+      {:ok, status, body} -> {:error, {:http, status, message_from(body)}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @doc "Delete a Service. Missing counts as success."
   def delete_service(namespace, name) do
     case request(:delete, "/api/v1/namespaces/#{namespace}/services/#{name}", nil) do

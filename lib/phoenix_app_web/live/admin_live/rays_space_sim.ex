@@ -24,6 +24,7 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
   alias PhoenixApp.CodeMap
   alias PhoenixApp.Games
   alias PhoenixApp.Games.HoloSims
+  alias PhoenixApp.Games.InstanceLauncher
   alias PhoenixApp.Games.WorldServerLauncher
   alias PhoenixAppWeb.Components.AdminSidebar
 
@@ -199,7 +200,8 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
          assign(socket,
            world_logs: if(String.trim(text) == "", do: "(the pod has produced no output yet)", else: text),
            world_logs_error: nil,
-           world_logs_previous: previous?
+           world_logs_previous: previous?,
+           logs_title: "World server"
          )}
 
       {:error, :no_pod} ->
@@ -217,6 +219,46 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
            world_logs_error: describe_error(reason),
            world_logs_previous: previous?
          )}
+    end
+  end
+
+  def handle_event("instance_logs", %{"sim-id" => sim_id}, socket) do
+    {logs, error} =
+      case InstanceLauncher.logs(sim_id, tail_lines: 300) do
+        {:ok, text} ->
+          {if(String.trim(text) == "", do: "(the pod has produced no output yet)", else: text), nil}
+
+        {:error, :no_pod} ->
+          {nil, "That instance has no pod - it was never scheduled, or has been cleaned up."}
+
+        {:error, reason} ->
+          {nil, describe_error(reason)}
+      end
+
+    {:noreply,
+     assign(socket,
+       world_logs: logs,
+       world_logs_error: error,
+       world_logs_previous: false,
+       logs_title: "Holo-sim #{short(sim_id)}"
+     )}
+  end
+
+  def handle_event("instance_terminate", %{"sim-id" => sim_id}, socket) do
+    case InstanceLauncher.terminate(sim_id) do
+      :ok ->
+        log_action(socket, "holosim.terminate", "holo_sim", sim_id, %{})
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Instance for #{short(sim_id)} deleted (Job, pod and Service).")
+         |> load()}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Could not terminate: #{describe_error(reason)}")
+         |> load()}
     end
   end
 
@@ -264,6 +306,7 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
     |> assign_new(:world_logs, fn -> nil end)
     |> assign_new(:world_logs_error, fn -> nil end)
     |> assign_new(:world_logs_previous, fn -> false end)
+    |> assign_new(:logs_title, fn -> "World server" end)
   end
 
   # The badge answers "can I trust this page", not "does a file exist". A map
@@ -362,8 +405,84 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
     socket
     |> load_games()
     |> assign_world()
+    |> assign_instances()
     |> assign_codemap()
   end
+
+  # ---------------------------------------------------------------------------
+  # Holo-sim instances, AS THE CLUSTER SEES THEM - added 2026-10-08
+  #
+  # The Servers table only knows what has heartbeated. An instance that never
+  # boots, boots and cannot be reached, or retires after 60 s empty, was
+  # invisible here: the one Holo-sim launch ever attempted from the door came
+  # up, was unreachable (no Service), shut itself down, and left nothing on
+  # this page to say it had existed. Jobs, pods and Services are read straight
+  # from Kubernetes so each of those states has a row and a reason.
+  #
+  # Outside the DB rescue, like assign_world/1, for the same reason.
+  # ---------------------------------------------------------------------------
+  defp assign_instances(socket) do
+    {instances, error} =
+      case InstanceLauncher.list_instances() do
+        {:ok, list} -> {list, nil}
+        {:error, reason} -> {[], describe_error(reason)}
+      end
+
+    sims =
+      case socket.assigns[:game] do
+        nil ->
+          []
+
+        game ->
+          try do
+            HoloSims.list_for_admin(game.id)
+          rescue
+            _ -> []
+          end
+      end
+
+    sims_by_id = Map.new(sims, &{to_string(&1.id), &1})
+
+    assign(socket,
+      instances: Enum.map(instances, &Map.put(&1, :sim, Map.get(sims_by_id, &1.sim_id))),
+      instances_error: error,
+      instances_available?: InstanceLauncher.available?(),
+      holo_sims: sims,
+      owner_names: owner_names(sims)
+    )
+  end
+
+  # Users live in the OTHER database (see PROJECT.md §4), so no join. One lookup
+  # per distinct owner, on a list capped at 100 - fine for an admin page.
+  defp owner_names(sims) do
+    sims
+    |> Enum.map(& &1.owner_user_id)
+    |> Enum.uniq()
+    |> Map.new(fn id ->
+      name =
+        case PhoenixApp.Accounts.get_user(id) do
+          nil -> short(id)
+          user -> Map.get(user, :username) || Map.get(user, :email) || short(id)
+        end
+
+      {id, name}
+    end)
+  rescue
+    _ -> %{}
+  end
+
+  defp instance_label(%{finished?: true, succeeded?: true}),
+    do: {"Exited", "bg-gray-800 text-gray-400"}
+
+  defp instance_label(%{finished?: true}), do: {"Failed", "bg-red-900/40 text-red-300"}
+  defp instance_label(%{pod_phase: "Running", service_published?: true}),
+    do: {"Running", "bg-green-900/40 text-green-300"}
+
+  defp instance_label(%{pod_phase: "Running"}),
+    do: {"Running, no public port", "bg-amber-900/40 text-amber-300"}
+
+  defp instance_label(%{pod_phase: nil}), do: {"Scheduling", "bg-blue-900/40 text-blue-300"}
+  defp instance_label(%{pod_phase: phase}), do: {phase, "bg-blue-900/40 text-blue-300"}
 
   # Called on the 5-second tick like everything else here, which it can afford
   # to be: CodeMap.status/0 stats two files and reuses its last parse unless one
@@ -675,7 +794,7 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
               </div>
             <% end %>
 
-            <%= if @world_logs || @world_logs_error do %>
+            <%= if (@world_logs || @world_logs_error) and @logs_title == "World server" do %>
               <div class="mt-6">
                 <div class="flex justify-between items-center mb-2">
                   <h4 class="text-sm font-medium text-white">
@@ -981,6 +1100,142 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                 Controls are queued and collected on the server's next heartbeat, so a
                 stale server will never run them.
               </p>
+            <% end %>
+          </div>
+        </div>
+
+        <!-- Holo-sims: what the cluster is running, and the library -->
+        <div class="dark-glass shadow rounded-lg overflow-hidden mb-8">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg font-medium text-white mb-1">Holo-sim instances (cluster)</h3>
+            <p class="text-xs text-gray-500 mb-4">
+              Jobs, pods and Services read from Kubernetes - including instances that never
+              heartbeated. A finished Job stays listed until its TTL removes it.
+            </p>
+
+            <%= cond do %>
+              <% @instances_error -> %>
+                <p class="text-sm text-red-300"><%= @instances_error %></p>
+              <% not @instances_available? and @instances == [] -> %>
+                <p class="text-sm text-amber-300">
+                  Instance orchestration is unavailable here (not in a cluster, or
+                  HOLOSIM_IMAGE unset). Door launches fall back to a hand-started
+                  <code class="text-gray-300">run_holosim_server.bat</code>.
+                </p>
+              <% @instances == [] -> %>
+                <p class="text-sm text-gray-400">No instance Jobs in the cluster.</p>
+              <% true -> %>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full text-sm">
+                    <thead>
+                      <tr class="text-left text-gray-500 uppercase text-xs tracking-wide">
+                        <th class="py-2 pr-4">Sim</th>
+                        <th class="py-2 pr-4">State</th>
+                        <th class="py-2 pr-4">Port</th>
+                        <th class="py-2 pr-4">Service</th>
+                        <th class="py-2 pr-4">Detail</th>
+                        <th class="py-2">Controls</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800">
+                      <%= for i <- @instances do %>
+                        <% {label, classes} = instance_label(i) %>
+                        <tr class="text-gray-300">
+                          <td class="py-3 pr-4">
+                            <div class="text-white"><%= if i.sim, do: i.sim.name, else: "(deleted sim)" %></div>
+                            <div class="text-xs text-gray-500 font-mono"><%= short(i.sim_id) %> · <%= i.created_at %></div>
+                          </td>
+                          <td class="py-3 pr-4">
+                            <span class={"px-2 py-1 rounded text-xs font-medium #{classes}"}><%= label %></span>
+                          </td>
+                          <td class="py-3 pr-4"><%= i.port || "-" %></td>
+                          <td class="py-3 pr-4 text-xs">
+                            <%= cond do %>
+                              <% i.service_published? -> %><span class="text-green-300">published</span>
+                              <% i.service_name -> %><span class="text-amber-300" title="LoadBalancer has no ingress yet">pending</span>
+                              <% true -> %><span class="text-red-300">none</span>
+                            <% end %>
+                          </td>
+                          <td class="py-3 pr-4 text-xs text-amber-300"><%= i.pod_detail %></td>
+                          <td class="py-3">
+                            <div class="flex gap-2">
+                              <button
+                                phx-click="instance_logs"
+                                phx-value-sim-id={i.sim_id}
+                                class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300 hover:bg-gray-700"
+                              >
+                                Logs
+                              </button>
+                              <button
+                                phx-click="instance_terminate"
+                                phx-value-sim-id={i.sim_id}
+                                data-confirm="Delete this instance's Job, pod and Service? Anyone inside is disconnected without a save."
+                                class="px-2 py-1 rounded text-xs bg-red-900/40 text-red-300 hover:bg-red-900/70"
+                              >
+                                Terminate
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+            <% end %>
+
+            <%= if (@world_logs || @world_logs_error) and @logs_title != "World server" do %>
+              <div class="mt-6">
+                <div class="flex justify-between items-center mb-2">
+                  <h4 class="text-sm font-medium text-white">Logs - <%= @logs_title %></h4>
+                  <button phx-click="world_logs_close" class="text-xs text-gray-400 hover:text-white">
+                    Close
+                  </button>
+                </div>
+                <%= if @world_logs_error do %>
+                  <p class="text-sm text-red-300"><%= @world_logs_error %></p>
+                <% else %>
+                  <pre class="bg-black/50 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto whitespace-pre"><%= @world_logs %></pre>
+                <% end %>
+              </div>
+            <% end %>
+
+            <h3 class="text-lg font-medium text-white mt-8 mb-4">
+              Holo-sim library (<%= length(@holo_sims) %>)
+            </h3>
+            <%= if @holo_sims == [] do %>
+              <p class="text-sm text-gray-400">No Holo-sims have been created.</p>
+            <% else %>
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-gray-500 uppercase text-xs tracking-wide">
+                      <th class="py-2 pr-4">Name</th>
+                      <th class="py-2 pr-4">Owner</th>
+                      <th class="py-2 pr-4">Kind</th>
+                      <th class="py-2 pr-4">Visibility</th>
+                      <th class="py-2 pr-4">Launches</th>
+                      <th class="py-2">Last launched</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-800">
+                    <%= for sim <- @holo_sims do %>
+                      <tr class="text-gray-300">
+                        <td class="py-2 pr-4">
+                          <div class="text-white"><%= sim.name %></div>
+                          <div class="text-xs text-gray-500 font-mono"><%= short(sim.id) %></div>
+                        </td>
+                        <td class="py-2 pr-4"><%= Map.get(@owner_names, sim.owner_user_id, short(sim.owner_user_id)) %></td>
+                        <td class="py-2 pr-4"><%= sim.kind %></td>
+                        <td class="py-2 pr-4">
+                          <%= sim.visibility %><%= if sim.visibility == "public" and not sim.is_published, do: " (unpublished)" %>
+                        </td>
+                        <td class="py-2 pr-4"><%= sim.launch_count %></td>
+                        <td class="py-2"><%= ago(sim.last_launched_at) %></td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
             <% end %>
           </div>
         </div>

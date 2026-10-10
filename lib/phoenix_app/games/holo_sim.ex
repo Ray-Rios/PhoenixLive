@@ -113,13 +113,15 @@ defmodule PhoenixApp.Games.HoloSim do
   """
   def owner_changeset(sim, attrs) do
     sim
-    |> cast(attrs, [:name, :description, :visibility, :kind, :spec, :template_id, :visitors_can_build])
+    # NO :kind, :spec OR :template_id (Ray, 2026-10-08): a sim's world options
+    # are fixed for its lifetime - changing them means deleting the sim. Only the
+    # name and visibility (kept in step with the channel) and the description and
+    # build permission are editable.
+    |> cast(attrs, [:name, :description, :visibility, :visitors_can_build])
     |> validate_required([:name])
     |> validate_length(:name, min: 1, max: 80)
     |> validate_length(:description, max: 2000)
     |> validate_inclusion(:visibility, @visibilities)
-    |> validate_inclusion(:kind, @kinds)
-    |> validate_spec()
     |> unique_constraint([:game_id, :owner_user_id, :name], name: :holo_sims_owner_name_index)
   end
 
