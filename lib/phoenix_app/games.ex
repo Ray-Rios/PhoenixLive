@@ -80,6 +80,30 @@ defmodule PhoenixApp.Games do
     |> GamesRepo.update()
   end
 
+  @doc """
+  Record (or clear, with a nil sim id) where a character should resume.
+
+  Server-key only in the controller, except that a player may clear their own.
+  Bare `change/2`, deliberately bypassing GameCharacter.changeset/2 - these
+  fields are not castable from player input, and that changeset is the player
+  input path.
+  """
+  def set_holo_location(game_id, user_id, character_id, holo_sim_id, location \\ nil) do
+    case get_owned_character(game_id, user_id, character_id) do
+      nil ->
+        {:error, :not_found}
+
+      character ->
+        character
+        |> Ecto.Changeset.change(
+          holo_sim_id: holo_sim_id,
+          holo_sim_location: if(holo_sim_id, do: location, else: nil)
+        )
+        |> Ecto.Changeset.foreign_key_constraint(:holo_sim_id)
+        |> GamesRepo.update()
+    end
+  end
+
   def touch_character_last_played(%GameCharacter{} = character) do
     update_character(character, %{last_played_at: DateTime.utc_now() |> DateTime.truncate(:second)})
   end

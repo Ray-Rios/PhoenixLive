@@ -149,6 +149,43 @@ defmodule PhoenixAppWeb.Api.GamesController do
     end
   end
 
+  # PUT /api/games/:game_slug/characters/:id/holo_location
+  #
+  # Resume-in-sim (2026-10-09). The Holo-sim instance writes
+  # {holo_sim_id, location} on Logout and {holo_sim_id: null} when the player
+  # left with /exit. A PLAYER token may only clear - which the client does when
+  # the sim it was told to resume into is gone or refuses it - never set: a
+  # player-chosen sim id would be a login loop into a world they cannot enter.
+  def set_holo_location(conn, %{"game_slug" => slug, "id" => id} = params) do
+    with {:ok, game} <- fetch_game(slug),
+         {:ok, user_id} <- resolve_user_id(conn, params) do
+      sim_id = params["holo_sim_id"]
+      server? = conn.assigns[:games_auth_mode] == :server_api_key
+
+      cond do
+        not is_nil(sim_id) and not server? ->
+          error_response(conn, 403, "Only a game server may set a resume location.")
+
+        not is_nil(params["location"]) and not is_map(params["location"]) ->
+          error_response(conn, 422, "location must be an object")
+
+        true ->
+          case Games.set_holo_location(game.id, user_id, id, sim_id, params["location"]) do
+            {:ok, character} ->
+              json(conn, %{success: true, character: character_json(character)})
+
+            {:error, :not_found} ->
+              error_response(conn, 404, "Character not found")
+
+            {:error, changeset} ->
+              error_response(conn, 422, changeset_errors(changeset))
+          end
+      end
+    else
+      {:error, status, message} -> error_response(conn, status, message)
+    end
+  end
+
   # POST /api/games/:game_slug/characters/:id/release
   #
   # Called from Logout. Idempotent, and a release that finds nothing still
@@ -452,6 +489,10 @@ defmodule PhoenixAppWeb.Api.GamesController do
       name: character.name,
       stats: character.stats,
       settings: character.settings,
+      # Resume-in-sim: non-null means "the last session ended inside this
+      # Holo-sim without /exit" - the client routes the next login there.
+      holo_sim_id: character.holo_sim_id,
+      holo_sim_location: character.holo_sim_location,
       last_played_at: character.last_played_at,
       inserted_at: character.inserted_at,
       updated_at: character.updated_at

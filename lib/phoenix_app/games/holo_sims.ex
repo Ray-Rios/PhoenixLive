@@ -425,6 +425,32 @@ defmodule PhoenixApp.Games.HoloSims do
   end
 
   @doc """
+  May this user make a Holo-sim PUBLIC?
+
+  The same rule the website applies to channels (forum_live.ex, create user
+  channel): only Admins and GMs may create public ones. A sim's publicity IS
+  its channel's, so without this the game was a side door around the website's
+  rule - Ray, 2026-10-09: "enforce the same rules".
+
+  `channel_already_public?` covers building in, or keeping, a channel an admin
+  already made public: following the channel is not "making" anything public.
+  """
+  def may_make_public?(user_id, channel_already_public? \\ false)
+
+  def may_make_public?(_user_id, true), do: true
+
+  def may_make_public?(user_id, false) do
+    case PhoenixApp.Accounts.get_user(user_id) do
+      %{is_admin: true} -> true
+      %{role: role} when role in ["admin", "gm"] -> true
+      _ -> false
+    end
+  end
+
+  @public_refusal "Only Admins and GMs can make a Holo-sim public - the same rule as public channels on phxlive."
+  def public_refusal, do: @public_refusal
+
+  @doc """
   Write the sim's own id into its spec's `SystemId`.
 
   The spec is generated before the row exists, so it cannot know the id. The

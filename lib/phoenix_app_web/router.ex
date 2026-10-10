@@ -240,6 +240,7 @@ defmodule PhoenixAppWeb.Router do
     # above theirs - Phoenix would otherwise be free to read "claim" as an :id.
     post "/:game_slug/characters/:id/claim", Api.GamesController, :claim_character
     post "/:game_slug/characters/:id/release", Api.GamesController, :release_character
+    put "/:game_slug/characters/:id/holo_location", Api.GamesController, :set_holo_location
 
     get "/:game_slug/characters/:id", Api.GamesController, :get_character
     put "/:game_slug/characters/:id", Api.GamesController, :update_character

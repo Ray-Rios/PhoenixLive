@@ -4304,7 +4304,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -8931,6 +8931,51 @@
        ]
       },
       {
+       "name": "DrawHoloSimOptions",
+       "ret": "float",
+       "sig": "float DrawHoloSimOptions(float X, float Y, float W, float S, bool bClick);",
+       "params": [
+        {
+         "type": "float",
+         "name": "X",
+         "default": null
+        },
+        {
+         "type": "float",
+         "name": "Y",
+         "default": null
+        },
+        {
+         "type": "float",
+         "name": "W",
+         "default": null
+        },
+        {
+         "type": "float",
+         "name": "S",
+         "default": null
+        },
+        {
+         "type": "bool",
+         "name": "bClick",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Draws the option rows for the chosen kind; returns the height used.",
+       "calls": 2,
+       "called_in": [
+        "CosmicHUD.cpp"
+       ]
+      },
+      {
        "name": "DrawLog",
        "ret": "void",
        "sig": "void DrawLog();",
@@ -9431,7 +9476,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Immediate-mode helpers (return true when clicked / changed this frame).",
-       "calls": 40,
+       "calls": 49,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -9979,7 +10024,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -18958,7 +19003,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20255,12 +20300,135 @@
        "machine": null,
        "machine_note": null,
        "doc": "Convenience: BuildJoinUrl + ClientTravel.",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "HoloSimDoor.cpp",
         "PhxAccountSubsystem.cpp",
         "RSSCharacterSelectTerminal.cpp",
         "RSSMainMenuWidget.cpp"
+       ]
+      },
+      {
+       "name": "GetConnectedServerAddress",
+       "ret": "FString",
+       "sig": "FString GetConnectedServerAddress(UObject* WorldContextObject) const;",
+       "params": [
+        {
+         "type": "UObject*",
+         "name": "WorldContextObject",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Holo-sim\", meta = (WorldContext = \"WorldContextObject\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "\"host:port\" of the server this client is connected to, or empty when it has none.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimDoor.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "SetHoloSimReturnAddress",
+       "ret": "void",
+       "sig": "void SetHoloSimReturnAddress(const FString& Address);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Address",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Holo-sim\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Remember where to go back to. Called by the door immediately before it travels into a sim.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimDoor.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "IsInHoloSim",
+       "ret": "bool",
+       "sig": "bool IsInHoloSim() const { return !HoloSimReturnAddress.IsEmpty(); }",
+       "params": [
+        {
+         "type": ") const { return !HoloSimReturnAddress.IsEmpty(",
+         "name": "",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": "BlueprintPure, Category = \"Phx Account|Holo-sim\"",
+       "machine": "pure",
+       "machine_note": "read-only, any machine",
+       "doc": "True while this client went through a Holo-sim door and has not come back out.",
+       "calls": 2,
+       "called_in": [
+        "CosmicHUD.cpp",
+        "HoloSimDoor.cpp"
+       ]
+      },
+      {
+       "name": "GetHoloSimReturnAddress",
+       "ret": "const FString&",
+       "sig": "const FString& GetHoloSimReturnAddress() const { return HoloSimReturnAddress; }",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": "BlueprintPure, Category = \"Phx Account|Holo-sim\"",
+       "machine": "pure",
+       "machine_note": "read-only, any machine",
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "CosmicHUD.cpp"
+       ]
+      },
+      {
+       "name": "ExitHoloSim",
+       "ret": "bool",
+       "sig": "bool ExitHoloSim(UObject* WorldContextObject);",
+       "params": [
+        {
+         "type": "UObject*",
+         "name": "WorldContextObject",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Holo-sim\", meta = (WorldContext = \"WorldContextObject\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Leave the Holo-sim: travel back to the stashed address. Returns false, and changes nothing, when there is nowhere to return to or the travel could not be issued. The address is cleared only once travel is issued, so a failed /exit can be retried.",
+       "calls": 2,
+       "called_in": [
+        "CosmicHUD.cpp",
+        "PhxAccountSubsystem.cpp"
        ]
       },
       {
@@ -20687,7 +20855,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20765,7 +20933,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20843,7 +21011,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20942,7 +21110,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 201,
+       "calls": 202,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -21055,6 +21223,88 @@
        "spec": "BlueprintReadOnly, Category = \"Phx Account|Holo-sim\"",
        "replicated": null,
        "doc": ""
+      },
+      {
+       "type": "TMap<FString, FString>",
+       "name": "Options",
+       "spec": "BlueprintReadOnly, Category = \"Phx Account|Holo-sim\"",
+       "replicated": null,
+       "doc": "The creation options the world was generated from, as the hub recorded them (\"planet_count\" -> \"50\", \"shapes\" -> \"D6,D20,I\", ...). Fixed for the sim's lifetime. For display only - the instance reads the spec itself."
+      }
+     ],
+     "replication": {}
+    },
+    {
+     "name": "FPhxHoloSimOptions",
+     "base": "",
+     "kind": "struct",
+     "uspec": "BlueprintType",
+     "file": "Plugins/PhxAccount/Source/PhxAccount/Public/PhxAccountTypes.h",
+     "doc": "What a player picks when creating a Holo-sim. Ray's list, 2026-10-08 (PROJECT.md \u00a713, fortieth pass). FIXED FOR THE SIM'S LIFETIME - only name and visibility can change afterwards; anything else means deleting the sim. THE HUB IS THE AUTHORITY on which values are valid (PhoenixApp.Games.HoloSimSpec, also served at GET /holosims/options). The choice lists below are a copy for the form; a value the hub does not know is refused with a message rather than silently replaced.",
+     "functions": [],
+     "properties": [
+      {
+       "type": "int32",
+       "name": "PlanetCount",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|System\"",
+       "replicated": null,
+       "doc": "10 | 25 | 50 | 81 | 120."
+      },
+      {
+       "type": "FString",
+       "name": "PlanetSize",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|System\"",
+       "replicated": null,
+       "doc": "small | mixed | large."
+      },
+      {
+       "type": "FString",
+       "name": "Atmospheres",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|System\"",
+       "replicated": null,
+       "doc": "none | some | all."
+      },
+      {
+       "type": "bool",
+       "name": "bHostilePatrols",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|System\"",
+       "replicated": null,
+       "doc": "Needs atmospheres - patrols circle atmosphere planets."
+      },
+      {
+       "type": "int32",
+       "name": "Seed",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|System\"",
+       "replicated": null,
+       "doc": "1..2147483647, or 0 for \"hub picks one\". Shown so it can be shared."
+      },
+      {
+       "type": "int32",
+       "name": "GridSizeM",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|Planet\"",
+       "replicated": null,
+       "doc": "500 | 2000 | 8000 metres."
+      },
+      {
+       "type": "FString",
+       "name": "Gravity",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|Planet\"",
+       "replicated": null,
+       "doc": "\"0.5\" | \"1\" | \"1.5\" g. A string because that is the hub's key."
+      },
+      {
+       "type": "FString",
+       "name": "Sky",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|Planet\"",
+       "replicated": null,
+       "doc": "vacuum | planetary (planetary = the kept Ultra Dynamic Sky pieces)."
+      },
+      {
+       "type": "FString",
+       "name": "GridColor",
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Phx Account|Holo-sim|Planet\"",
+       "replicated": null,
+       "doc": "slate | sand | ice | moss | rust | violet."
       }
      ],
      "replication": {}
@@ -34059,8 +34309,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 90edee9",
- "generated_at": "2026-10-08T21:15:13Z",
- "game_commit": "90edee9",
+ "generated_from": "RaysSpaceSim @ e88e89d",
+ "generated_at": "2026-10-10T05:07:33Z",
+ "game_commit": "e88e89d",
  "game_dirty": false
 }

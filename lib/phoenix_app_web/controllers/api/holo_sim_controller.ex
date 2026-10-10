@@ -75,6 +75,7 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
   def create(conn, %{"game_slug" => slug} = params) do
     with {:ok, game} <- fetch_game(slug),
          {:ok, user_id} <- resolve_user_id(conn, params),
+         :ok <- check_public_on_create(user_id, params),
          {:ok, spec} <- build_spec(params) do
       attrs =
         params
@@ -141,6 +142,35 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
       {:error, status, message} -> error(conn, status, message)
     end
   end
+
+  # Public sims follow the website's public-channel rule (2026-10-09). Checked
+  # BEFORE anything is created, because the new-channel path creates the channel
+  # first and a refusal after that would leave one behind.
+  defp check_public_on_create(user_id, %{"visibility" => "public"} = params) do
+    already_public? =
+      case params["channel_id"] do
+        id when is_binary(id) ->
+          match?(%{is_public: true}, PhoenixApp.Repo.get(PhoenixApp.Forum.Channel, id))
+
+        _ ->
+          false
+      end
+
+    if HoloSims.may_make_public?(user_id, already_public?),
+      do: :ok,
+      else: {:error, 403, HoloSims.public_refusal()}
+  end
+
+  defp check_public_on_create(_user_id, _params), do: :ok
+
+  # Re-saving a sim that is already public is not "making" it public.
+  defp check_public_on_update(user_id, sim, %{"visibility" => "public"}) do
+    if HoloSims.may_make_public?(user_id, sim.visibility == "public"),
+      do: :ok,
+      else: {:error, 403, HoloSims.public_refusal()}
+  end
+
+  defp check_public_on_update(_user_id, _sim, _params), do: :ok
 
   defp build_spec(params) do
     case HoloSimSpec.build(params["kind"], params["options"] || %{}, nil, params["name"]) do
@@ -216,7 +246,8 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
     with {:ok, _game} <- fetch_game(params["game_slug"]),
          {:ok, user_id} <- resolve_user_id(conn, params),
          {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id),
-         :ok <- require_edit(sim, user_id) do
+         :ok <- require_edit(sim, user_id),
+         :ok <- check_public_on_update(user_id, sim, params) do
       # Options are fixed once a sim exists (Ray, 2026-10-08): no kind, spec or
       # template here. Name and visibility carry through to the channel.
       attrs = Map.take(params, ["name", "description", "visibility", "visitors_can_build"])

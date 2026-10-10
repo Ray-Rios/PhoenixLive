@@ -46,6 +46,14 @@ defmodule PhoenixApp.Games.GameCharacter do
     field :session_started_at, :utc_datetime
     field :session_last_seen_at, :utc_datetime
 
+    # --- Resume-in-sim (2026-10-09) -------------------------------------
+    #
+    # Also NOT castable, for the same reason as the claim fields above: written
+    # by a Holo-sim instance on Logout (server key), cleared on /exit. See the
+    # migration 20261009120000 and Games.set_holo_location/4.
+    field :holo_sim_id, :binary_id
+    field :holo_sim_location, :map
+
     belongs_to :game, PhoenixApp.Games.Game
 
     timestamps(type: :utc_datetime)
