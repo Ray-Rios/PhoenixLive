@@ -95,7 +95,12 @@ defmodule PhoenixApp.Games.HoloSims do
     limit_n = Keyword.get(opts, :limit, 50)
 
     HoloSim
-    |> where([s], s.game_id == ^game_id and s.visibility == "public" and s.is_published == true)
+    # NO is_published FILTER (2026-10-10). It was meant to hide a public sim
+    # until its owner "published" it, but nothing anywhere can publish one - so
+    # every public sim was invisible to everyone but its owner, which is how
+    # Ray found it. Public now means listed. Since 2026-10-09 only admins and
+    # GMs can make a sim public at all, which is the gate that matters.
+    |> where([s], s.game_id == ^game_id and s.visibility == "public")
     |> order_by([s], desc: s.launch_count, asc: s.name)
     |> limit(^limit_n)
     |> GamesRepo.all()
@@ -532,7 +537,15 @@ defmodule PhoenixApp.Games.HoloSims do
   The freed channel becomes buildable again, so the owner can start a different
   world in the same community without spending another channel slot.
   """
-  def delete_sim(%HoloSim{} = sim), do: GamesRepo.delete(sim)
+  #
+  # ITS SERVER ROWS GO FIRST (2026-10-10). game_servers.holo_sim_id is
+  # nilify_all, so deleting the sim alone turned its instance rows into rows
+  # with no sim - which is the definition of a WORLD server. Ray deleted a sim
+  # and the admin page showed three world servers.
+  def delete_sim(%HoloSim{} = sim) do
+    PhoenixApp.Games.delete_instance_rows(sim.id)
+    GamesRepo.delete(sim)
+  end
 
   @doc "Bump launch bookkeeping. Called when an instance is successfully handed out."
   def record_launch(%HoloSim{} = sim) do

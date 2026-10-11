@@ -569,6 +569,45 @@ defmodule PhoenixApp.Games do
   end
 
   @doc """
+  Delete Holo-sim instance rows that are dead (2026-10-10).
+
+  An instance is a process that lives minutes, and every launch can take a new
+  port - so its `game_servers` row is worthless once it stops heartbeating, and
+  leaving them made the admin list fill with "Stale" copies of every sim.
+  Worse, deleting a sim NILIFIES `holo_sim_id` on its rows (the FK), which turns
+  a dead instance into what looks like a stale WORLD server.
+
+  So: a row is an instance if it has a sim OR sits in the instance port range,
+  and an instance row that is offline or stale is deleted. World servers are
+  untouched - for them, "stale" is information an admin wants to see.
+  """
+  def prune_dead_instances(game_id, {port_min, port_max}) do
+    cutoff =
+      DateTime.utc_now()
+      |> DateTime.add(-server_stale_after_seconds(), :second)
+      |> DateTime.truncate(:second)
+
+    {count, _} =
+      GameServer
+      |> where([s], s.game_id == ^game_id)
+      |> where([s], not is_nil(s.holo_sim_id) or (s.port >= ^port_min and s.port <= ^port_max))
+      |> where([s], s.status == "offline" or s.last_heartbeat_at < ^cutoff or is_nil(s.last_heartbeat_at))
+      |> GamesRepo.delete_all()
+
+    {:ok, count}
+  end
+
+  @doc "Delete every server row belonging to one sim - live or not. Used when the sim is deleted."
+  def delete_instance_rows(holo_sim_id) do
+    {count, _} =
+      GameServer
+      |> where([s], s.holo_sim_id == ^holo_sim_id)
+      |> GamesRepo.delete_all()
+
+    {:ok, count}
+  end
+
+  @doc """
   Flip stale `online` rows to `offline`.
 
   The softer half of `prune_stale_servers/1`, and the one an admin screen wants:

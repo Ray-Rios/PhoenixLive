@@ -2175,6 +2175,101 @@
        ]
       },
       {
+       "name": "RequestPlace",
+       "ret": "void",
+       "sig": "void RequestPlace(EBuildPieceType Type, int32 Material, const FTransform& WorldXf, ACelestialBody* Body);",
+       "params": [
+        {
+         "type": "EBuildPieceType",
+         "name": "Type",
+         "default": null
+        },
+        {
+         "type": "int32",
+         "name": "Material",
+         "default": null
+        },
+        {
+         "type": "const FTransform&",
+         "name": "WorldXf",
+         "default": null
+        },
+        {
+         "type": "ACelestialBody*",
+         "name": "Body",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "NETWORKED BUILDING (2026-10-09). Every real piece is created and removed on the authority: directly when this machine is it (standalone, listen host), otherwise through UCosmicPlayerRepComponent's server RPCs. Ghosts - the placement preview and a piece being carried in edit mode - stay local.",
+       "calls": 3,
+       "called_in": [
+        "BuildComponent.cpp"
+       ]
+      },
+      {
+       "name": "RequestRemove",
+       "ret": "void",
+       "sig": "void RequestRemove(ABuildablePiece* Piece);",
+       "params": [
+        {
+         "type": "ABuildablePiece*",
+         "name": "Piece",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 3,
+       "called_in": [
+        "BuildComponent.cpp"
+       ]
+      },
+      {
+       "name": "SpawnLocalGhost",
+       "ret": "ABuildablePiece*",
+       "sig": "ABuildablePiece* SpawnLocalGhost(EBuildPieceType Type, int32 Material);",
+       "params": [
+        {
+         "type": "EBuildPieceType",
+         "name": "Type",
+         "default": null
+        },
+        {
+         "type": "int32",
+         "name": "Material",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "A local, non-replicated ghost of a given type/material - the carried piece in edit mode.",
+       "calls": 2,
+       "called_in": [
+        "BuildComponent.cpp"
+       ]
+      },
+      {
        "name": "SetPiece",
        "ret": "void",
        "sig": "void SetPiece(EBuildPieceType NewPiece);",
@@ -2431,6 +2526,29 @@
        "called_in": []
       },
       {
+       "name": "GetLifetimeReplicatedProps",
+       "ret": "void",
+       "sig": "virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;",
+       "params": [
+        {
+         "type": "TArray<FLifetimeProperty>&",
+         "name": "OutLifetimeProps",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
        "name": "Tick",
        "ret": "void",
        "sig": "virtual void Tick(float DeltaSeconds) override;",
@@ -2473,7 +2591,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "One-time setup for a freshly spawned piece (mesh, size, health, lights).",
-       "calls": 4,
+       "calls": 6,
        "called_in": [
         "BuildComponent.cpp",
         "BuildablePiece.cpp"
@@ -2499,7 +2617,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Choose the surface material from the AutomotiveMaterials palette (steel, glass, chrome, gold, plastic, carbon, leather, ...). Wraps in range.",
-       "calls": 8,
+       "calls": 10,
        "called_in": [
         "BuildComponent.cpp",
         "BuildablePiece.cpp"
@@ -2519,9 +2637,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 3,
+       "calls": 6,
        "called_in": [
-        "BuildComponent.cpp"
+        "BuildComponent.cpp",
+        "HoloSimWorld.cpp"
        ]
       },
       {
@@ -2687,8 +2806,11 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 0,
-       "called_in": []
+       "calls": 4,
+       "called_in": [
+        "BuildComponent.cpp",
+        "HoloSimWorld.cpp"
+       ]
       },
       {
        "name": "IsGhost",
@@ -2704,9 +2826,11 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 1,
+       "calls": 3,
        "called_in": [
-        "BuildComponent.cpp"
+        "BuildComponent.cpp",
+        "CosmicPlayerRepComponent.cpp",
+        "HoloSimWorld.cpp"
        ]
       },
       {
@@ -2789,6 +2913,44 @@
        "machine_note": null,
        "doc": "Detonate now (called by the fuse timer).",
        "calls": 1,
+       "called_in": [
+        "BuildablePiece.cpp"
+       ]
+      },
+      {
+       "name": "OnRep_PieceConfig",
+       "ret": "void",
+       "sig": "void OnRep_PieceConfig();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "",
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "BuildablePiece.cpp"
+       ]
+      },
+      {
+       "name": "ApplyReplicatedConfig",
+       "ret": "void",
+       "sig": "void ApplyReplicatedConfig();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Client: rebuild mesh/material/light from the replicated type + material.",
+       "calls": 3,
        "called_in": [
         "BuildablePiece.cpp"
        ]
@@ -2965,19 +3127,24 @@
       {
        "type": "EBuildPieceType",
        "name": "PieceType",
-       "spec": "",
-       "replicated": null,
-       "doc": ""
+       "spec": "ReplicatedUsing = OnRep_PieceConfig",
+       "replicated": "ReplicatedUsing=OnRep_PieceConfig",
+       "doc": "REPLICATED, with MaterialIndex, so a client can rebuild the piece's look from the two numbers that define it. Everything else ConfigurePiece sets is derived from these.",
+       "cond": "COND_None"
       },
       {
        "type": "int32",
        "name": "MaterialIndex",
-       "spec": "",
-       "replicated": null,
-       "doc": "AutomotiveMaterials palette (loaded in the constructor), and the current selection. SolidMaterial is set from this."
+       "spec": "ReplicatedUsing = OnRep_PieceConfig",
+       "replicated": "ReplicatedUsing=OnRep_PieceConfig",
+       "doc": "AutomotiveMaterials palette (loaded in the constructor), and the current selection. SolidMaterial is set from this.",
+       "cond": "COND_None"
       }
      ],
-     "replication": {}
+     "replication": {
+      "PieceType": "COND_None",
+      "MaterialIndex": "COND_None"
+     }
     },
     {
      "name": "FCelestialPose",
@@ -3960,7 +4127,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Body whose SURFACE is closest to the position (walkable bodies only, i.e. SurfaceGravity > 0). OutAltitude = distance above the surface (cm).",
-       "calls": 21,
+       "calls": 22,
        "called_in": [
         "BuildComponent.cpp",
         "CelestialSubsystem.cpp",
@@ -4304,7 +4471,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -6360,9 +6527,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "Tell the flight controller the pawn was moved by something other than it - a portal, a warp command, any teleport. The reference-frame carry works by differencing the ridden planet's transform frame to frame and applying that delta to the character, which is what lets you stand on a planet that is hurtling through the arena. After a teleport that difference is meaningless: it describes a journey the character did not make, and applying it flings the body across the map. Dropping the carry makes the next frame re-seed from wherever the pawn now actually is. Airborne state is cleared for the same reason - the old ground normal belongs to a surface that may be kilometres away. NewWorldVelocity is the motion the pawn should ARRIVE with, already in world space. A portal passes the entry velocity rotated into the exit's frame; a plain warp passes zero.",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
         "CosmicFlightComponent.cpp",
+        "CosmicPlayerRepComponent.cpp",
         "Portal.cpp"
        ]
       },
@@ -9476,7 +9644,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Immediate-mode helpers (return true when clicked / changed this frame).",
-       "calls": 49,
+       "calls": 50,
        "called_in": [
         "CosmicHUD.cpp"
        ]
@@ -10024,7 +10192,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -11055,7 +11223,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Owner-side publish. Does NOT apply locally - the caller has already done that, so the player who pressed the key sees the change on the same frame rather than after a round trip. This puts it on the wire for everyone else.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "AppearanceMannequin.cpp",
         "CosmicPlayerRepComponent.cpp"
@@ -11155,6 +11323,149 @@
        "calls": 1,
        "called_in": [
         "CosmicHUD.cpp"
+       ]
+      },
+      {
+       "name": "Server_RemoveBuildPiece",
+       "ret": "void",
+       "sig": "void Server_RemoveBuildPiece(ABuildablePiece* Piece);",
+       "params": [
+        {
+         "type": "ABuildablePiece*",
+         "name": "Piece",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Server, Reliable",
+       "machine": "server-rpc",
+       "machine_note": "owning client \u2192 server",
+       "doc": "Remove a piece (delete key, or picked up in edit mode).",
+       "calls": 1,
+       "called_in": [
+        "BuildComponent.cpp"
+       ]
+      },
+      {
+       "name": "Server_RequestLeaveHoloSim",
+       "ret": "void",
+       "sig": "void Server_RequestLeaveHoloSim();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Server, Reliable",
+       "machine": "server-rpc",
+       "machine_note": "owning client \u2192 server",
+       "doc": "/exit. Asks the instance to mark this player as LEAVING before they go, so the Logout that follows clears the resume location instead of saving it. The client travels only when the server answers - travelling first would race the Logout against this RPC.",
+       "calls": 1,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "Client_LeaveHoloSimApproved",
+       "ret": "void",
+       "sig": "void Client_LeaveHoloSimApproved();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Client, Reliable",
+       "machine": "client-rpc",
+       "machine_note": "server \u2192 owning client",
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "Client_ResumeAt",
+       "ret": "void",
+       "sig": "void Client_ResumeAt(ACelestialBody* Body, FTransform RelXf, FTransform AbsXf);",
+       "params": [
+        {
+         "type": "ACelestialBody*",
+         "name": "Body",
+         "default": null
+        },
+        {
+         "type": "FTransform",
+         "name": "RelXf",
+         "default": null
+        },
+        {
+         "type": "FTransform",
+         "name": "AbsXf",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Client, Reliable",
+       "machine": "client-rpc",
+       "machine_note": "server \u2192 owning client",
+       "doc": "Put the owning pawn back where it was when the player last left this sim. Body + RelXf when the spot was on a replicated body (uses the client's own copy of the body, so orbit latency does not move the spot); AbsXf otherwise, or if the body did not resolve.",
+       "calls": 1,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "RequestLeaveHoloSim",
+       "ret": "void",
+       "sig": "void RequestLeaveHoloSim();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Client-side entry point for /exit. Falls back to a direct exit with no server to ask.",
+       "calls": 2,
+       "called_in": [
+        "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "RestoreSavedAppearance",
+       "ret": "void",
+       "sig": "void RestoreSavedAppearance(int32 Attempt);",
+       "params": [
+        {
+         "type": "int32",
+         "name": "Attempt",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Owning client: put back the body the character chose (2026-10-10). A new pawn - every travel between world and Holo-sim, every relog - is built as the default; the choice lives on the character (UPhxAccountSubsystem::GetCharacterAppearance). Retries briefly because possession, and so IsLocallyControlled, can arrive after BeginPlay.",
+       "calls": 3,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
        ]
       }
      ],
@@ -11451,7 +11762,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 27,
+       "calls": 31,
        "called_in": [
         "CockpitActionButton.cpp",
         "CosmicPocketDoor.cpp",
@@ -14392,7 +14703,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 256,
+       "calls": 268,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -14509,7 +14820,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 256,
+       "calls": 268,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -15884,7 +16195,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Refresh the list of worlds and buildable channels. Called when the menu opens rather than on a timer. The contents change when someone adds you to a channel on the website, which is not something worth polling for - reopening the door is the natural refresh.",
-       "calls": 4,
+       "calls": 5,
        "called_in": [
         "CosmicHUD.cpp",
         "HoloSimDoor.cpp"
@@ -15955,6 +16266,32 @@
        ]
       },
       {
+       "name": "DeleteSim",
+       "ret": "void",
+       "sig": "void DeleteSim(const FString& HoloSimId);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "HoloSimId",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Holo-sim Door\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Delete a sim the player owns (2026-10-10). The library refreshes when the hub answers.",
+       "calls": 2,
+       "called_in": [
+        "CosmicHUD.cpp",
+        "HoloSimDoor.cpp"
+       ]
+      },
+      {
        "name": "CancelOpening",
        "ret": "void",
        "sig": "void CancelOpening();",
@@ -16007,7 +16344,7 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 4,
+       "calls": 5,
        "called_in": [
         "CosmicHUD.cpp",
         "HoloSimDoor.cpp"
@@ -16138,6 +16475,31 @@
        ]
       },
       {
+       "name": "OnSimDeleted",
+       "ret": "void",
+       "sig": "void OnSimDeleted(const FPhxAuthResult& Result);",
+       "params": [
+        {
+         "type": "const FPhxAuthResult&",
+         "name": "Result",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "",
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "HoloSimDoor.cpp"
+       ]
+      },
+      {
        "name": "OnLaunchAnswer",
        "ret": "void",
        "sig": "void OnLaunchAnswer(const FPhxAuthResult& Result, const FPhxHoloSimLaunch& Launch);",
@@ -16181,7 +16543,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 20,
+       "calls": 21,
        "called_in": [
         "HoloSimDoor.cpp",
         "RSSMainMenuWidget.cpp"
@@ -16212,7 +16574,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 27,
+       "calls": 31,
        "called_in": [
         "CockpitActionButton.cpp",
         "CosmicPocketDoor.cpp",
@@ -16340,6 +16702,658 @@
        "doc": ""
       }
      ],
+     "replication": {}
+    },
+    {
+     "name": "AHoloSimWorldInfo",
+     "base": "AActor",
+     "kind": "class",
+     "uspec": "NotPlaceable",
+     "file": "Plugins/Cosmos/Source/Cosmos/Public/HoloSimWorld.h",
+     "doc": "Holo-sim worlds: what an instance builds, what it saves, and where a returning player is put back. Added 2026-10-09 (PROJECT.md \u00a713, fortieth pass). THREE CLASSES, ONE JOB. UHoloSimWorldSubsystem SERVER ONLY. At boot, asks the hub for the sim's spec and saved state, configures the world, restores the saved build pieces, and installs the hooks that let ARSSGameModeBase (PhxAccount, which knows nothing of Cosmos) save pieces and resume locations. AHoloSimWorldInfo Replicated, always relevant. Carries the few numbers a CLIENT needs to rebuild the non-replicated parts of the world for itself (the\u2026",
+     "functions": [
+      {
+       "name": "BeginPlay",
+       "ret": "void",
+       "sig": "virtual void BeginPlay() override;",
+       "params": [],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "GetLifetimeReplicatedProps",
+       "ret": "void",
+       "sig": "virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;",
+       "params": [
+        {
+         "type": "TArray<FLifetimeProperty>&",
+         "name": "OutLifetimeProps",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "SetConfig",
+       "ret": "void",
+       "sig": "void SetConfig(const FHoloSimWorldConfig& InConfig);",
+       "params": [
+        {
+         "type": "const FHoloSimWorldConfig&",
+         "name": "InConfig",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Server: set once, after the hub answers. Applies locally and replicates.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "GetConfig",
+       "ret": "const FHoloSimWorldConfig&",
+       "sig": "const FHoloSimWorldConfig& GetConfig() const { return Config; }",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 0,
+       "called_in": []
+      },
+      {
+       "name": "IsApplied",
+       "ret": "bool",
+       "sig": "bool IsApplied() const { return bApplied; }",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "True once this machine has applied the config (floor built, station removed).",
+       "calls": 0,
+       "called_in": []
+      },
+      {
+       "name": "OnRep_Config",
+       "ret": "void",
+       "sig": "void OnRep_Config();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "",
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "ApplyLocal",
+       "ret": "void",
+       "sig": "void ApplyLocal();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Runs once per machine. Idempotent by bApplied.",
+       "calls": 4,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      }
+     ],
+     "properties": [
+      {
+       "type": "FHoloSimWorldConfig",
+       "name": "Config",
+       "spec": "ReplicatedUsing = OnRep_Config",
+       "replicated": "ReplicatedUsing=OnRep_Config",
+       "doc": "",
+       "cond": "COND_None"
+      },
+      {
+       "type": "TObjectPtr<AActor>",
+       "name": "LocalFloor",
+       "spec": "Transient",
+       "replicated": null,
+       "doc": ""
+      }
+     ],
+     "replication": {
+      "Config": "COND_None"
+     }
+    },
+    {
+     "name": "AHoloSimGridFloor",
+     "base": "AActor",
+     "kind": "class",
+     "uspec": "NotPlaceable",
+     "file": "Plugins/Cosmos/Source/Cosmos/Public/HoloSimWorld.h",
+     "doc": "Holo-sim worlds: what an instance builds, what it saves, and where a returning player is put back. Added 2026-10-09 (PROJECT.md \u00a713, fortieth pass). THREE CLASSES, ONE JOB. UHoloSimWorldSubsystem SERVER ONLY. At boot, asks the hub for the sim's spec and saved state, configures the world, restores the saved build pieces, and installs the hooks that let ARSSGameModeBase (PhxAccount, which knows nothing of Cosmos) save pieces and resume locations. AHoloSimWorldInfo Replicated, always relevant. Carries the few numbers a CLIENT needs to rebuild the non-replicated parts of the world for itself (the\u2026",
+     "functions": [
+      {
+       "name": "Build",
+       "ret": "void",
+       "sig": "void Build(double SizeCm, const FLinearColor& Color, double SurfaceGravity);",
+       "params": [
+        {
+         "type": "double",
+         "name": "SizeCm",
+         "default": null
+        },
+        {
+         "type": "const FLinearColor&",
+         "name": "Color",
+         "default": null
+        },
+        {
+         "type": "double",
+         "name": "SurfaceGravity",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Size the slab, draw the lines, and put the gravity anchor under it.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "EndPlay",
+       "ret": "void",
+       "sig": "virtual void EndPlay(const EEndPlayReason::Type Reason) override;",
+       "params": [
+        {
+         "type": "const EEndPlayReason::Type",
+         "name": "Reason",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      }
+     ],
+     "properties": [
+      {
+       "type": "TObjectPtr<UStaticMeshComponent>",
+       "name": "Slab",
+       "spec": "VisibleAnywhere, Category = \"Holo-sim\"",
+       "replicated": null,
+       "doc": ""
+      },
+      {
+       "type": "TObjectPtr<UInstancedStaticMeshComponent>",
+       "name": "Lines",
+       "spec": "VisibleAnywhere, Category = \"Holo-sim\"",
+       "replicated": null,
+       "doc": ""
+      },
+      {
+       "type": "TObjectPtr<ACelestialBody>",
+       "name": "GravityAnchor",
+       "spec": "Transient",
+       "replicated": null,
+       "doc": ""
+      }
+     ],
+     "replication": {}
+    },
+    {
+     "name": "UHoloSimWorldSubsystem",
+     "base": "UWorldSubsystem",
+     "kind": "class",
+     "uspec": "",
+     "file": "Plugins/Cosmos/Source/Cosmos/Public/HoloSimWorld.h",
+     "doc": "Holo-sim worlds: what an instance builds, what it saves, and where a returning player is put back. Added 2026-10-09 (PROJECT.md \u00a713, fortieth pass). THREE CLASSES, ONE JOB. UHoloSimWorldSubsystem SERVER ONLY. At boot, asks the hub for the sim's spec and saved state, configures the world, restores the saved build pieces, and installs the hooks that let ARSSGameModeBase (PhxAccount, which knows nothing of Cosmos) save pieces and resume locations. AHoloSimWorldInfo Replicated, always relevant. Carries the few numbers a CLIENT needs to rebuild the non-replicated parts of the world for itself (the\u2026",
+     "functions": [
+      {
+       "name": "ShouldCreateSubsystem",
+       "ret": "bool",
+       "sig": "virtual bool ShouldCreateSubsystem(UObject* Outer) const override;",
+       "params": [
+        {
+         "type": "UObject*",
+         "name": "Outer",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "OnWorldBeginPlay",
+       "ret": "void",
+       "sig": "virtual void OnWorldBeginPlay(UWorld& InWorld) override;",
+       "params": [
+        {
+         "type": "UWorld&",
+         "name": "InWorld",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "Deinitialize",
+       "ret": "void",
+       "sig": "virtual void Deinitialize() override;",
+       "params": [],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "BodyKeyOf",
+       "ret": "FString",
+       "sig": "static FString BodyKeyOf(const AActor* Body);",
+       "params": [
+        {
+         "type": "const AActor*",
+         "name": "Body",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "A name for a body that survives an instance restart, or \"\" if there is none. Builder-spawned bodies carry a \"CosmosBody:...\" tag; bodies baked into the map are net-startup actors whose names are stable by construction.",
+       "calls": 4,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "FindBodyByKey",
+       "ret": "ACelestialBody*",
+       "sig": "static ACelestialBody* FindBodyByKey(UWorld* World, const FString& Key);",
+       "params": [
+        {
+         "type": "UWorld*",
+         "name": "World",
+         "default": null
+        },
+        {
+         "type": "const FString&",
+         "name": "Key",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "PickAnchorBody",
+       "ret": "ACelestialBody*",
+       "sig": "static ACelestialBody* PickAnchorBody(UWorld* World, const FVector& WorldPos);",
+       "params": [
+        {
+         "type": "UWorld*",
+         "name": "World",
+         "default": null
+        },
+        {
+         "type": "const FVector&",
+         "name": "WorldPos",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "The body a world point should be saved relative to, or null for \"save it absolute\". Only bodies with a key qualify - the station's local gravity anchor and a grid's anchor do not, and both are static, so absolute is correct for them.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "InstallHooks",
+       "ret": "void",
+       "sig": "void InstallHooks(UWorld& InWorld);",
+       "params": [
+        {
+         "type": "UWorld&",
+         "name": "InWorld",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "FetchWorld",
+       "ret": "void",
+       "sig": "void FetchWorld();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "ConfigureWorld",
+       "ret": "void",
+       "sig": "void ConfigureWorld(const FString& Kind, const FString& SpecJson);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Kind",
+         "default": null
+        },
+        {
+         "type": "const FString&",
+         "name": "SpecJson",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "RestoreState",
+       "ret": "void",
+       "sig": "void RestoreState(const FString& StateJson);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "StateJson",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "CaptureState",
+       "ret": "bool",
+       "sig": "bool CaptureState(FString& OutJson) const;",
+       "params": [
+        {
+         "type": "FString&",
+         "name": "OutJson",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "CapturePlayer",
+       "ret": "FString",
+       "sig": "FString CapturePlayer(APlayerController* PC) const;",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PC",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "SamplePlayers",
+       "ret": "void",
+       "sig": "void SamplePlayers();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "OnCharacterReady",
+       "ret": "void",
+       "sig": "void OnCharacterReady(APlayerController* PC, const FPhxCharacter& Character);",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PC",
+         "default": null
+        },
+        {
+         "type": "const FPhxCharacter&",
+         "name": "Character",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "TryResume",
+       "ret": "void",
+       "sig": "void TryResume(TWeakObjectPtr<APlayerController> WeakPC, FString LocationJson, int32 Attempt);",
+       "params": [
+        {
+         "type": "TWeakObjectPtr<APlayerController>",
+         "name": "WeakPC",
+         "default": null
+        },
+        {
+         "type": "FString",
+         "name": "LocationJson",
+         "default": null
+        },
+        {
+         "type": "int32",
+         "name": "Attempt",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 3,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      }
+     ],
+     "properties": [],
      "replication": {}
     },
     {
@@ -17838,7 +18852,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 256,
+       "calls": 268,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -19003,7 +20017,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -19539,7 +20553,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 256,
+       "calls": 268,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -19951,7 +20965,7 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 17,
+       "calls": 21,
        "called_in": [
         "PhxAccountSubsystem.cpp",
         "RSSCharacterSelectTerminal.cpp",
@@ -20189,6 +21203,37 @@
        ]
       },
       {
+       "name": "DeleteHoloSim",
+       "ret": "void",
+       "sig": "void DeleteHoloSim(const FString& HoloSimId, const FPhxAuthDelegate& OnComplete);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "HoloSimId",
+         "default": null
+        },
+        {
+         "type": "const FPhxAuthDelegate&",
+         "name": "OnComplete",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Holo-sim\", meta = (AutoCreateRefTerm = \"OnComplete\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "of the player's channel slots. `Kind` is `planet` for a single world or `system` for a solar system. `Visibility` is `private`, `invite`, `unlisted` or `public`; it also sets the channel's publicity, since those are the same decision. A 409 means the allowance is used up, and the right response is to offer the shop rather than to retry. DELETE /api/games/{slug}/holosims/{id}. Owner only (the hub checks). Removes the sim and everything built in it and stops a running instance; the channel stays, and becomes buildable again.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimDoor.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
        "name": "LaunchHoloSim",
        "ret": "void",
        "sig": "void LaunchHoloSim(const FString& HoloSimId, const FPhxHoloSimLaunchDelegate& OnComplete);",
@@ -20213,7 +21258,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "POST /api/games/{slug}/holosims/{id}/launch \"Let me in\", not \"start me a copy\". Instances are shared - if anyone is already inside, this returns their address on the first call. Otherwise it reports Pending while a pod starts, and `PollHoloSimStatus` is how you find out when it is up.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "HoloSimDoor.cpp",
         "PhxAccountSubsystem.cpp"
@@ -20244,7 +21289,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "GET /api/games/{slug}/holosims/{id}/status - poll after a Pending launch.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "HoloSimDoor.cpp",
         "PhxAccountSubsystem.cpp"
@@ -20303,9 +21348,7 @@
        "calls": 6,
        "called_in": [
         "HoloSimDoor.cpp",
-        "PhxAccountSubsystem.cpp",
-        "RSSCharacterSelectTerminal.cpp",
-        "RSSMainMenuWidget.cpp"
+        "PhxAccountSubsystem.cpp"
        ]
       },
       {
@@ -20354,7 +21397,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Remember where to go back to. Called by the door immediately before it travels into a sim.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "HoloSimDoor.cpp",
         "PhxAccountSubsystem.cpp"
@@ -20425,9 +21468,213 @@
        "machine": null,
        "machine_note": null,
        "doc": "Leave the Holo-sim: travel back to the stashed address. Returns false, and changes nothing, when there is nowhere to return to or the travel could not be issued. The address is cleared only once travel is issued, so a failed /exit can be retried.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "EnterWorld",
+       "ret": "bool",
+       "sig": "bool EnterWorld(UObject* WorldContextObject, const FString& WorldServerAddress);",
+       "params": [
+        {
+         "type": "UObject*",
+         "name": "WorldContextObject",
+         "default": null
+        },
+        {
+         "type": "const FString&",
+         "name": "WorldServerAddress",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Travel\", meta = (WorldContext = \"WorldContextObject\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Character select -> the world. USE THIS, NOT TravelToServer, from any \"Play\" button (2026-10-09). RESUME-IN-SIM: a character whose last session ended inside a Holo-sim without /exit (FPhxCharacter::HoloSimId) goes back into that sim, with WorldServerAddress stashed as the return address so /exit still works. The sim may be cold, so this can take as long as the door does; it falls back to WorldServerAddress if the sim is gone, refuses, or never comes up. A sim that is gone or refuses also has the resume CLEARED, so the next login does not try again. Returns false only if nothing could be started at all.",
+       "calls": 7,
+       "called_in": [
+        "PhxAccountSubsystem.cpp",
+        "RSSCharacterSelectTerminal.cpp",
+        "RSSMainMenuWidget.cpp"
+       ]
+      },
+      {
+       "name": "SetCharacterAppearance",
+       "ret": "void",
+       "sig": "void SetCharacterAppearance(FName AppearanceId);",
+       "params": [
+        {
+         "type": "FName",
+         "name": "AppearanceId",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Characters\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "THE CHOSEN BODY, KEPT ON THE CHARACTER (2026-10-10). Appearance lived only on the pawn, so every new pawn - each travel between the world and a Holo-sim, each relog - came back as the default (Aurora). It is now the \"appearance\" key of the character's settings: held here for the session (this subsystem survives travel) and written to the hub so it survives a relog. The pawn re-applies it on arrival (UCosmicPlayerRepComponent).",
+       "calls": 2,
+       "called_in": [
+        "AppearanceMannequin.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "GetCharacterAppearance",
+       "ret": "FName",
+       "sig": "FName GetCharacterAppearance() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintPure, Category = \"Phx Account|Characters\"",
+       "machine": "pure",
+       "machine_note": "read-only, any machine",
+       "doc": "NAME_None when the character has never chosen one.",
+       "calls": 3,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "IsResumingHoloSim",
+       "ret": "bool",
+       "sig": "bool IsResumingHoloSim() const { return !ResumeSimId.IsEmpty(); }",
+       "params": [
+        {
+         "type": ") const { return !ResumeSimId.IsEmpty(",
+         "name": "",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": "BlueprintPure, Category = \"Phx Account|Travel\"",
+       "machine": "pure",
+       "machine_note": "read-only, any machine",
+       "doc": "True while EnterWorld is waiting for a resumed Holo-sim to come up.",
+       "calls": 5,
+       "called_in": [
+        "PhxAccountSubsystem.cpp",
+        "RSSCharacterSelectTerminal.cpp",
+        "RSSMainMenuWidget.cpp"
+       ]
+      },
+      {
+       "name": "OnResumeLaunchAnswer",
+       "ret": "void",
+       "sig": "void OnResumeLaunchAnswer(const FPhxAuthResult& Result, const FPhxHoloSimLaunch& Launch);",
+       "params": [
+        {
+         "type": "const FPhxAuthResult&",
+         "name": "Result",
+         "default": null
+        },
+        {
+         "type": "const FPhxHoloSimLaunch&",
+         "name": "Launch",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Dynamic delegates bind only to UFUNCTIONs - hence these, not lambdas.",
+       "calls": 1,
+       "called_in": [
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "PollResume",
+       "ret": "void",
+       "sig": "void PollResume();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "AbandonResume",
+       "ret": "void",
+       "sig": "void AbandonResume(const FString& Why, bool bClear);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Why",
+         "default": null
+        },
+        {
+         "type": "bool",
+         "name": "bClear",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Give up on the sim and go to the world server. bClear also forgets the resume on the hub.",
+       "calls": 4,
+       "called_in": [
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "ClearResumeOnHub",
+       "ret": "void",
+       "sig": "void ClearResumeOnHub();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "PUT .../characters/{id}/holo_location {holo_sim_id: null} with the player token.",
+       "calls": 2,
+       "called_in": [
         "PhxAccountSubsystem.cpp"
        ]
       },
@@ -20461,7 +21708,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 13,
+       "calls": 16,
        "called_in": [
         "PhxAccountSubsystem.cpp"
        ]
@@ -20496,7 +21743,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Turns a completed request into a result, handling the \"never completed\" case.",
-       "calls": 12,
+       "calls": 15,
        "called_in": [
         "PhxAccountSubsystem.cpp"
        ]
@@ -20855,7 +22102,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20933,7 +22180,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20979,6 +22226,20 @@
        "spec": "BlueprintReadOnly, Category = \"Phx Account\"",
        "replicated": null,
        "doc": "ISO-8601 as returned by the hub; empty if the character has never played."
+      },
+      {
+       "type": "FString",
+       "name": "HoloSimId",
+       "spec": "BlueprintReadOnly, Category = \"Phx Account\"",
+       "replicated": null,
+       "doc": "RESUME-IN-SIM (Ray, 2026-10-09). Non-empty when this character's last session ended inside a Holo-sim WITHOUT /exit - the next login goes back there instead of to the world server. Written only by an instance (server key); see UPhxAccountSubsystem::EnterWorld."
+      },
+      {
+       "type": "FString",
+       "name": "HoloSimLocationJson",
+       "spec": "BlueprintReadOnly, Category = \"Phx Account\"",
+       "replicated": null,
+       "doc": "Opaque to everything but UHoloSimWorldSubsystem; \"{}\" when there is none."
       }
      ],
      "replication": {}
@@ -21011,7 +22272,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -21110,7 +22371,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 202,
+       "calls": 227,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -21452,8 +22713,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 0,
-       "called_in": []
+       "calls": 1,
+       "called_in": [
+        "PhxAccountSubsystem.cpp"
+       ]
       }
      ],
      "properties": [
@@ -21703,7 +22966,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 256,
+       "calls": 268,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -21817,6 +23080,37 @@
        ]
       },
       {
+       "name": "FetchHoloSimWorld",
+       "ret": "void",
+       "sig": "void FetchHoloSimWorld(const FString& HoloSimId, FOnPhxHoloSimWorldFetched OnComplete);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "HoloSimId",
+         "default": null
+        },
+        {
+         "type": "FOnPhxHoloSimWorldFetched",
+         "name": "OnComplete",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "GET /api/games/{slug}/holosims/{sim}/world (server key) Everything an instance needs to build its sim at BOOT, before anyone has joined: the spec it was created with and its last saved state. Added 2026-10-09 - the access check carries the same two blobs, but only once a player is already connecting, which is too late to build a world.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp",
+        "PhxServerAuth.cpp"
+       ]
+      },
+      {
        "name": "IsConfigured",
        "ret": "bool",
        "sig": "bool IsConfigured() const { return !ServerApiKey.IsEmpty(); }",
@@ -21836,7 +23130,7 @@
        "machine": "server-rpc",
        "machine_note": "owning client \u2192 server",
        "doc": "False when the API key is missing, in which case no join can be validated.",
-       "calls": 10,
+       "calls": 12,
        "called_in": [
         "PhxServerAuth.cpp",
         "RSSGameModeBase.cpp"
@@ -21867,7 +23161,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 10,
+       "calls": 12,
        "called_in": [
         "PhxServerAuth.cpp"
        ]
@@ -21922,7 +23216,7 @@
      "kind": "class",
      "uspec": "Blueprintable",
      "file": "Plugins/PhxAccount/Source/PhxAccount/Public/RSSGameModeBase.h",
-     "doc": "Blueprintable is stated explicitly rather than relied on. AGameModeBase is Blueprintable and the flag does propagate to subclasses, but BP_ThirdPersonGameMode is re-parented onto this class via a CoreRedirect - and a redirect onto a non-Blueprintable class fails at load with a message that points at the asset",
+     "doc": "Phx Account - authenticating game mode. Derive your dedicated-server game mode from this (or copy the three overrides into an existing one) to get authenticated joins. The contract: * Nobody reaches PostLogin without a hub-verified account. * The character a player controls is the one the HUB says they own, loaded server-side. The client's copy is never trusted. * OnPlayerCharacterReady fires once per player with authoritative data; that is where you spawn a pawn and apply stats.",
      "functions": [
       {
        "name": "Logout",
@@ -22293,7 +23587,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Write the whole Holo-sim world back to the hub, now. Shared by the idle countdown and by an admin `shutdown` command, so the two cannot drift - an instance killed from the admin panel must save exactly as one that timed out does. Not to be confused with SaveHoloSimWorld(), which despite the name is the PER-PLAYER write and takes a controller and that player's state. Safe to call on a world server (returns immediately) and safe to call when nothing has been built (nothing to persist).",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
         "RSSGameModeBase.cpp"
        ]
@@ -22318,7 +23612,7 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 6,
+       "calls": 10,
        "called_in": [
         "RSSGameModeBase.cpp"
        ]
@@ -22421,6 +23715,133 @@
        "machine_note": null,
        "doc": "Asks the game to serialise the world right now, into OutStateJson. Called when the instance is about to shut down. Without it, everything since the last explicit save is lost when the pod exits - and since a shutdown follows an empty instance, that is exactly the moment nobody is around to press save. Return false if there is nothing worth writing.",
        "calls": 1,
+       "called_in": [
+        "RSSGameModeBase.cpp"
+       ]
+      },
+      {
+       "name": "NoteHoloSimBuild",
+       "ret": "bool",
+       "sig": "bool NoteHoloSimBuild(APlayerController* PlayerController);",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PlayerController",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "A player changed the persistent world (placed or removed a piece). Returns whether that player's changes PERSIST here - true only in a Holo-sim, and only for a player the hub granted build rights. A visitor's piece is real while they play and is never written (\u00a710, settled). When it does persist, the world is marked dirty and the autosave picks it up.",
+       "calls": 5,
+       "called_in": [
+        "BuildComponent.cpp",
+        "CosmicPlayerRepComponent.cpp",
+        "RSSGameModeBase.cpp"
+       ]
+      },
+      {
+       "name": "CanControllerPersist",
+       "ret": "bool",
+       "sig": "bool CanControllerPersist(APlayerController* PlayerController) const;",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PlayerController",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "May this connection's changes persist? Same answer NoteHoloSimBuild gives, without the side effect.",
+       "calls": 2,
+       "called_in": [
+        "RSSGameModeBase.cpp"
+       ]
+      },
+      {
+       "name": "MarkLeavingHoloSim",
+       "ret": "void",
+       "sig": "void MarkLeavingHoloSim(APlayerController* PlayerController);",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PlayerController",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "The player asked to leave with /exit. Their next Logout CLEARS the resume location instead of writing it - \"/exit\" means done, a quit means resume. The client asks the server first (and waits for the answer) precisely so this flag is set before the Logout that reads it.",
+       "calls": 2,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp",
+        "RSSGameModeBase.cpp"
+       ]
+      },
+      {
+       "name": "AutosaveHoloSim",
+       "ret": "void",
+       "sig": "void AutosaveHoloSim();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "RSSGameModeBase.cpp"
+       ]
+      },
+      {
+       "name": "SaveResumeLocation",
+       "ret": "void",
+       "sig": "void SaveResumeLocation(APlayerController* PlayerController, const FRSSPlayerSession& Session);",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PlayerController",
+         "default": null
+        },
+        {
+         "type": "const FRSSPlayerSession&",
+         "name": "Session",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Record or clear this player's resume location on the hub. From Logout.",
+       "calls": 2,
        "called_in": [
         "RSSGameModeBase.cpp"
        ]
@@ -23747,7 +25168,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Set the current state of the button.",
-       "calls": 27,
+       "calls": 31,
        "called_in": [
         "CockpitActionButton.cpp",
         "CosmicPocketDoor.cpp",
@@ -29905,7 +31326,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 65,
+       "calls": 67,
        "called_in": [
         "RSSCharacterSelectTerminal.cpp",
         "RSSLoginFormWidget.cpp",
@@ -30397,7 +31818,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 65,
+       "calls": 67,
        "called_in": [
         "RSSCharacterSelectTerminal.cpp",
         "RSSLoginFormWidget.cpp",
@@ -31233,7 +32654,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 65,
+       "calls": 67,
        "called_in": [
         "RSSCharacterSelectTerminal.cpp",
         "RSSLoginFormWidget.cpp",
@@ -32469,8 +33890,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find a server and ClientTravel into it with the selected character.",
-       "calls": 3,
+       "calls": 7,
        "called_in": [
+        "PhxAccountSubsystem.cpp",
+        "RSSCharacterSelectTerminal.cpp",
         "RSSMainMenuWidget.cpp"
        ]
       },
@@ -32560,7 +33983,7 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 4,
+       "calls": 5,
        "called_in": [
         "CosmicHUD.cpp",
         "HoloSimDoor.cpp"
@@ -32837,7 +34260,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 20,
+       "calls": 21,
        "called_in": [
         "HoloSimDoor.cpp",
         "RSSMainMenuWidget.cpp"
@@ -32893,7 +34316,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 65,
+       "calls": 67,
        "called_in": [
         "RSSCharacterSelectTerminal.cpp",
         "RSSLoginFormWidget.cpp",
@@ -34286,6 +35709,10 @@
   }
  },
  "replication_index": {
+  "ABuildablePiece": {
+   "PieceType": "COND_None",
+   "MaterialIndex": "COND_None"
+  },
   "ACelestialBody": {
    "ServerPose": "COND_None"
   },
@@ -34301,6 +35728,9 @@
    "bLocked": "COND_None",
    "LockedMessage": "COND_None"
   },
+  "AHoloSimWorldInfo": {
+   "Config": "COND_None"
+  },
   "APoolArenaManager": {
    "ArenaRadius": "COND_None",
    "SunClearance": "COND_None"
@@ -34309,8 +35739,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ e88e89d",
- "generated_at": "2026-10-10T05:07:33Z",
- "game_commit": "e88e89d",
+ "generated_from": "RaysSpaceSim @ dc2ea2c",
+ "generated_at": "2026-10-11T03:01:15Z",
+ "game_commit": "dc2ea2c",
  "game_dirty": false
 }

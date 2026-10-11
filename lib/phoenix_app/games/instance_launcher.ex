@@ -55,6 +55,9 @@ defmodule PhoenixApp.Games.InstanceLauncher do
 
   @label "holosim"
 
+  @doc "The instance port range, `{min, max}` - what makes a server row an instance's."
+  def port_range, do: config(:port_range)
+
   @doc "True when instances can actually be started. False outside a cluster."
   def available?, do: Kubernetes.in_cluster?() and not is_nil(config(:image))
 

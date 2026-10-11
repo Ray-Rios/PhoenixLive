@@ -244,6 +244,30 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
      )}
   end
 
+  # Admin delete (2026-10-10). Same effect as the owner's DELETE /holosims/:id:
+  # the sim and its saved world go, any running instance is torn down, the
+  # channel stays.
+  def handle_event("sim_delete", %{"sim-id" => sim_id}, socket) do
+    case HoloSims.get_sim(sim_id) do
+      nil ->
+        {:noreply, socket |> put_flash(:error, "That Holo-sim no longer exists.") |> load()}
+
+      sim ->
+        case HoloSims.delete_sim(sim) do
+          {:ok, _} ->
+            _ = InstanceLauncher.terminate(sim.id)
+            log_action(socket, "holosim.delete", "holo_sim", sim.id, %{"name" => sim.name})
+
+            {:noreply,
+             socket |> put_flash(:info, "Deleted Holo-sim \"#{sim.name}\".") |> load()}
+
+          {:error, reason} ->
+            {:noreply,
+             socket |> put_flash(:error, "Could not delete: #{inspect(reason)}") |> load()}
+        end
+    end
+  end
+
   def handle_event("instance_terminate", %{"sim-id" => sim_id}, socket) do
     case InstanceLauncher.terminate(sim_id) do
       :ok ->
@@ -450,6 +474,22 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
       holo_sims: sims,
       owner_names: owner_names(sims)
     )
+  rescue
+    # THIS PANEL MUST NOT TAKE THE PAGE DOWN (2026-10-10). It reads live
+    # cluster objects whose shape this code does not control, and the first
+    # time real instance Jobs existed the whole /admin/raysspacesim page went
+    # to a bare 500. Show the exception in the panel instead - it is the one
+    # place an admin is already looking.
+    e ->
+      Logger.error("raysspacesim admin: instances panel failed: " <> Exception.format(:error, e, __STACKTRACE__))
+
+      assign(socket,
+        instances: [],
+        instances_error: "Instances panel failed: " <> Exception.message(e),
+        instances_available?: false,
+        holo_sims: [],
+        owner_names: %{}
+      )
   end
 
   # Users live in the OTHER database (see PROJECT.md §4), so no join. One lookup
@@ -517,6 +557,10 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
         )
 
       game ->
+        # Dead Holo-sim instance rows are deleted, not listed - see
+        # Games.prune_dead_instances/2. Every 5 s, like the rest of this.
+        Games.prune_dead_instances(game.id, InstanceLauncher.port_range())
+
         servers = game.id |> Games.list_servers_for_admin() |> Enum.map(&decorate/1)
 
         assign(socket,
@@ -794,7 +838,7 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
               </div>
             <% end %>
 
-            <%= if (@world_logs || @world_logs_error) and @logs_title == "World server" do %>
+            <%= if (@world_logs || @world_logs_error) && @logs_title == "World server" do %>
               <div class="mt-6">
                 <div class="flex justify-between items-center mb-2">
                   <h4 class="text-sm font-medium text-white">
@@ -1183,7 +1227,7 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                 </div>
             <% end %>
 
-            <%= if (@world_logs || @world_logs_error) and @logs_title != "World server" do %>
+            <%= if (@world_logs || @world_logs_error) && @logs_title != "World server" do %>
               <div class="mt-6">
                 <div class="flex justify-between items-center mb-2">
                   <h4 class="text-sm font-medium text-white">Logs - <%= @logs_title %></h4>
@@ -1214,7 +1258,8 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                       <th class="py-2 pr-4">Kind</th>
                       <th class="py-2 pr-4">Visibility</th>
                       <th class="py-2 pr-4">Launches</th>
-                      <th class="py-2">Last launched</th>
+                      <th class="py-2 pr-4">Last launched</th>
+                      <th class="py-2"></th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-800">
@@ -1227,10 +1272,20 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                         <td class="py-2 pr-4"><%= Map.get(@owner_names, sim.owner_user_id, short(sim.owner_user_id)) %></td>
                         <td class="py-2 pr-4"><%= sim.kind %></td>
                         <td class="py-2 pr-4">
-                          <%= sim.visibility %><%= if sim.visibility == "public" and not sim.is_published, do: " (unpublished)" %>
+                          <%= sim.visibility %>
                         </td>
                         <td class="py-2 pr-4"><%= sim.launch_count %></td>
-                        <td class="py-2"><%= ago(sim.last_launched_at) %></td>
+                        <td class="py-2 pr-4"><%= ago(sim.last_launched_at) %></td>
+                        <td class="py-2">
+                          <button
+                            phx-click="sim_delete"
+                            phx-value-sim-id={sim.id}
+                            data-confirm={"Delete the Holo-sim \"#{sim.name}\" and everything built in it? Its channel stays. This cannot be undone."}
+                            class="px-2 py-1 rounded text-xs bg-red-900/40 text-red-300 hover:bg-red-900/70"
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     <% end %>
                   </tbody>

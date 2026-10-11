@@ -270,6 +270,13 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
          {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id),
          :ok <- require_owner(sim, user_id) do
       {:ok, _} = HoloSims.delete_sim(sim)
+
+      # Take a running instance down with it (2026-10-10). Without this a
+      # deleted sim's pod keeps serving a world with no row behind it until its
+      # idle timer fires, and its saves fail against a sim that is gone. The
+      # resume locations pointing at it are cleared by the FK (nilify_all).
+      _ = InstanceLauncher.terminate(sim.id)
+
       json(conn, %{success: true})
     else
       {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
