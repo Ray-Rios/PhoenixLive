@@ -472,7 +472,8 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
       instances_error: error,
       instances_available?: InstanceLauncher.available?(),
       holo_sims: sims,
-      owner_names: owner_names(sims)
+      owner_names: owner_names(sims),
+      sim_saves: sim_saves(sims)
     )
   rescue
     # THIS PANEL MUST NOT TAKE THE PAGE DOWN (2026-10-10). It reads live
@@ -488,8 +489,33 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
         instances_error: "Instances panel failed: " <> Exception.message(e),
         instances_available?: false,
         holo_sims: [],
-        owner_names: %{}
+        owner_names: %{},
+        sim_saves: %{}
       )
+  end
+
+  # WHAT THE HUB ACTUALLY HOLDS FOR EACH SIM (2026-10-11). "Pieces vanish after
+  # Terminate" cannot be diagnosed from the game once the pod is gone - its log
+  # goes with it. This is the other end of the wire: when the last save landed,
+  # how many pieces it carried, and whose build rights wrote it.
+  defp sim_saves(sims) do
+    Map.new(sims, fn sim ->
+      case HoloSims.get_state(sim.id) do
+        nil ->
+          {sim.id, nil}
+
+        st ->
+          pieces =
+            case st.state do
+              %{"pieces" => list} when is_list(list) -> length(list)
+              _ -> 0
+            end
+
+          {sim.id, %{saved_at: st.saved_at, pieces: pieces, by: st.last_saved_by_user_id}}
+      end
+    end)
+  rescue
+    _ -> %{}
   end
 
   # Users live in the OTHER database (see PROJECT.md §4), so no join. One lookup
@@ -1259,6 +1285,7 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                       <th class="py-2 pr-4">Visibility</th>
                       <th class="py-2 pr-4">Launches</th>
                       <th class="py-2 pr-4">Last launched</th>
+                      <th class="py-2 pr-4">Saved world</th>
                       <th class="py-2"></th>
                     </tr>
                   </thead>
@@ -1276,6 +1303,15 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                         </td>
                         <td class="py-2 pr-4"><%= sim.launch_count %></td>
                         <td class="py-2 pr-4"><%= ago(sim.last_launched_at) %></td>
+                        <td class="py-2 pr-4">
+                          <%= case Map.get(assigns[:sim_saves] || %{}, sim.id) do %>
+                            <% nil -> %>
+                              <span class="text-gray-500">never saved</span>
+                            <% save -> %>
+                              <div><%= save.pieces %> piece(s), <%= ago(save.saved_at) %></div>
+                              <div class="text-xs text-gray-500">by <%= Map.get(@owner_names, save.by, short(save.by)) %></div>
+                          <% end %>
+                        </td>
                         <td class="py-2">
                           <button
                             phx-click="sim_delete"

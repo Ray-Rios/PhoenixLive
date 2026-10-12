@@ -584,10 +584,19 @@ defmodule PhoenixAppWeb.Api.HoloSimController do
               error(conn, 403, "That user no longer has access to this Holo-sim")
 
             true ->
-              case HoloSims.save_state(sim, target, state) do
-                {:ok, _} -> json(conn, %{success: true})
-                {:error, :cannot_persist, message} -> error(conn, 403, message)
-                {:error, changeset} -> error(conn, 422, changeset_errors(changeset))
+              try do
+                case HoloSims.save_state(sim, target, state) do
+                  {:ok, _} -> json(conn, %{success: true})
+                  {:error, :cannot_persist, message} -> error(conn, 403, message)
+                  {:error, changeset} -> error(conn, 422, changeset_errors(changeset))
+                end
+              rescue
+                # A database exception used to surface as a bare 500 with no
+                # reason, which is all the game server could report. Say why.
+                e ->
+                  require Logger
+                  Logger.error("Holo-sim save for #{id} raised: " <> Exception.message(e))
+                  error(conn, 500, "Save failed: " <> Exception.message(e))
               end
           end
       end

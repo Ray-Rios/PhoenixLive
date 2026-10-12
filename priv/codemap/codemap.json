@@ -3125,6 +3125,13 @@
        "doc": "Optional light (beacon / lamp / teleporter glow)."
       },
       {
+       "type": "TObjectPtr<UStaticMeshComponent>",
+       "name": "Beam",
+       "spec": "VisibleAnywhere, Category = \"Build\"",
+       "replicated": null,
+       "doc": "Beacon only: a tall, thin, UNLIT emissive column - how a beacon is seen from far away now (2026-10-11). The point light used to do that job with a 6 km radius, and a field of them overflowed the forward light grid and tripled the Holo-sim frame time. An unlit mesh is one draw call, lights nothing, and glows (blooms) at any distance; the light is now a 30 m local glow only. Ignores the root's scale (absolute scale) and never collides."
+      },
+      {
        "type": "EBuildPieceType",
        "name": "PieceType",
        "spec": "ReplicatedUsing = OnRep_PieceConfig",
@@ -3413,7 +3420,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 8,
+       "calls": 9,
        "called_in": [
         "CelestialBody.cpp",
         "CelestialSubsystem.cpp",
@@ -3435,7 +3442,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
         "CelestialBody.cpp"
        ]
@@ -3548,6 +3555,45 @@
        "calls": 1,
        "called_in": [
         "CelestialBody.cpp"
+       ]
+      },
+      {
+       "name": "OnRep_BodyConfig",
+       "ret": "void",
+       "sig": "void OnRep_BodyConfig();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "",
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 1,
+       "called_in": [
+        "CelestialBody.cpp"
+       ]
+      },
+      {
+       "name": "ApplyReplicatedBodyConfig",
+       "ret": "void",
+       "sig": "virtual void ApplyReplicatedBodyConfig();",
+       "params": [],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Rebuild visuals from the current properties. APoolPlanet adds its cells.",
+       "calls": 4,
+       "called_in": [
+        "CelestialBody.cpp",
+        "PoolPlanet.cpp"
        ]
       },
       {
@@ -3726,15 +3772,15 @@
       {
        "type": "ECelestialType",
        "name": "Type",
-       "spec": "EditAnywhere, BlueprintReadOnly, Category = \"Celestial\"",
-       "replicated": null,
+       "spec": "EditAnywhere, BlueprintReadOnly, Category = \"Celestial\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": ""
       },
       {
        "type": "double",
        "name": "Radius",
-       "spec": "EditAnywhere, BlueprintReadOnly, Category = \"Celestial\"",
-       "replicated": null,
+       "spec": "EditAnywhere, BlueprintReadOnly, Category = \"Celestial\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Body radius in cm (visual + gameplay)."
       },
       {
@@ -3747,8 +3793,8 @@
       {
        "type": "double",
        "name": "SurfaceGravity",
-       "spec": "EditAnywhere, Category = \"Celestial\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Celestial\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Walking/pull gravity at the surface (cm/s^2). 980 = Earth. For black holes this is the pull at the event horizon (make it huge)."
       },
       {
@@ -3782,8 +3828,8 @@
       {
        "type": "TObjectPtr<UMaterialInterface>",
        "name": "ShellMaterial",
-       "spec": "EditAnywhere, Category = \"Rendering\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Rendering\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Optional second sphere drawn slightly above the surface: lava on stars, ocean on water planets. Enabled when ShellMaterial is set."
       },
       {
@@ -3796,43 +3842,43 @@
       {
        "type": "float",
        "name": "ShellScale",
-       "spec": "EditAnywhere, Category = \"Rendering\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Rendering\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Shell radius as a multiple of Radius (1.02 = thin ocean layer)."
       },
       {
        "type": "float",
        "name": "SurfaceSagFraction",
-       "spec": "EditAnywhere, Category = \"Rendering\", meta = (ClampMin = \"0.0\", ClampMax = \"0.01\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Rendering\", ReplicatedUsing = OnRep_BodyConfig, meta = (ClampMin = \"0.0\", ClampMax = \"0.01\"",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "How far the surface MESH sags inside its own nominal radius, as a fraction. A faceted sphere only touches Radius at its vertices; the middle of each facet sits R*(1-cos(pi/Segments)) inside it. SM_PlanetSphere has 192 segments, so 1 - cos(0.9375 deg) = 1.34e-4 - and the sun's ground probe measured 16 cm against a predicted 15. The analytic CollisionSphere is inset by this so the two colliders agree. Without it the floor steps by this amount whenever the body swaps between them, which the character feels as jitter and the build component turns into pieces floating above the ground you are standing on. Retessellate the sphere and this must follow it: 1 - cos(pi/Segments)."
       },
       {
        "type": "bool",
        "name": "bHasAtmosphere",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\"",
-       "replicated": null,
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "--- Atmosphere rendering --- Enable atmospheric scattering rendering for this planet"
       },
       {
        "type": "FLinearColor",
        "name": "AtmosphereColor",
-       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\"",
-       "replicated": null,
+       "spec": "EditAnywhere, BlueprintReadWrite, Category = \"Atmosphere\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Atmosphere tint (RGB). Drives BOTH the from-orbit shell glow and the from-ground SkyAtmosphere sky color, so the sky matches the planet's look from space. Default is Earth sky blue."
       },
       {
        "type": "float",
        "name": "AtmosphereTintStrength",
-       "spec": "EditAnywhere, Category = \"Atmosphere\", meta = (ClampMin = \"0.0\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Atmosphere\", ReplicatedUsing = OnRep_BodyConfig, meta = (ClampMin = \"0.0\"",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "colour, straight through. This was 0.0331 (RayleighReferenceScale) for one revision, on the assumption that M_Atmosphere's vector parameter is a physical Rayleigh coefficient. The asset says otherwise: it holds a Fresnel, a Multiply, a Constant, ONE texture parameter (AtmosphereLUT) and ONE vector parameter - the shape of a rim-glow shell where the vector is a straight TINT, not a coefficient. Scaling a tint by 0.0331 crushes it to near-black, which is why setting it produced no visible change at all. The physical coefficient on UAtmosphereComponent keeps RayleighReferenceScale, because there it really is one. Two different quantities, two different scales - conflating them is what cost the last two passes. Exposed so it can be dialled without a rebuild."
       },
       {
        "type": "FName",
        "name": "AtmosphereName",
-       "spec": "VisibleAnywhere, BlueprintReadOnly, Category = \"Atmosphere\"",
-       "replicated": null,
+       "spec": "VisibleAnywhere, BlueprintReadOnly, Category = \"Atmosphere\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Which named tint this body was given (\"Red\", \"Blue\", ...), or NAME_None. Gameplay asks for planets by this, never by comparing AtmosphereColor to a literal - a float compare against a colour breaks the first time a channel moves by 0.01, and it fails SILENTLY: whatever was filtering on it simply finds nothing, which looks identical to the feature not being written yet. Set from FCosmicAtmosphereTint by the world builder, from the same entry that set the colour, so the two cannot disagree."
       },
       {
@@ -3845,15 +3891,22 @@
       {
        "type": "TObjectPtr<UStaticMesh>",
        "name": "SurfaceMesh",
-       "spec": "EditAnywhere, Category = \"Rendering\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Rendering\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "ConfigureVisuals applies it before anything reads Mesh->GetStaticMesh(), which matters because the shell and the collision swap both gate on that being non-null. THE SUN WAS INVISIBLE BECAUSE NOTHING EVER SET THIS. FCosmicFixedBody had no mesh field, the C++ builder had nothing to assign, and ACelestialBody only ever COPIED Mesh's mesh onto the shell - so a body spawned by the builder had a null mesh, a null shell, and rendered nothing at all while still lighting the scene and colliding. The old Python demo scripts set the mesh by hand, which is why this only appeared once the builder took over. Left null it falls back to the engine sphere rather than staying invisible. A grey ball is a bug you can see; nothing is a bug you go looking for."
+      },
+      {
+       "type": "TObjectPtr<UMaterialInterface>",
+       "name": "SurfaceMaterial",
+       "spec": "EditAnywhere, Category = \"Rendering\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
+       "doc": "Material for slot 0 of the surface mesh, or null for the mesh's own. A PROPERTY, NOT A COMPONENT OVERRIDE (2026-10-10). The builder used to call Mesh->SetMaterial after spawning, which is invisible to replication - fine while every body was baked into Cosmos.umap, wrong for a Holo-sim field built at runtime, whose clients would get the mesh's default material. ConfigureVisuals applies it, so it survives every construction pass too."
       },
       {
        "type": "FVector",
        "name": "MeshStretch",
-       "spec": "EditAnywhere, Category = \"Rendering\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Rendering\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Non-uniform stretch on the visual mesh (a lumpy potato, not an egg). Collision stays the analytic sphere."
       },
       {
@@ -4127,14 +4180,14 @@
        "machine": null,
        "machine_note": null,
        "doc": "Body whose SURFACE is closest to the position (walkable bodies only, i.e. SurfaceGravity > 0). OutAltitude = distance above the surface (cm).",
-       "calls": 22,
+       "calls": 21,
        "called_in": [
-        "BuildComponent.cpp",
         "CelestialSubsystem.cpp",
         "CosmicDemoManager.cpp",
         "CosmicFlightComponent.cpp",
         "CosmicGroundEnemy.cpp",
-        "CosmicWeaponsComponent.cpp"
+        "CosmicWeaponsComponent.cpp",
+        "HoloSimWorld.cpp"
        ]
       },
       {
@@ -4255,8 +4308,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "All registered bodies (read-only; used for analytic hazard checks).",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
+        "BuildComponent.cpp",
         "CosmicDemoManager.cpp",
         "CosmicHUD.cpp"
        ]
@@ -4471,7 +4525,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -6535,6 +6589,42 @@
        ]
       },
       {
+       "name": "SnapCharacterToSurface",
+       "ret": "bool",
+       "sig": "bool SnapCharacterToSurface(class ACelestialBody* Body, double MaxAboveCm, const TCHAR* Why);",
+       "params": [
+        {
+         "type": "class ACelestialBody*",
+         "name": "Body",
+         "default": null
+        },
+        {
+         "type": "double",
+         "name": "MaxAboveCm",
+         "default": null
+        },
+        {
+         "type": "const TCHAR*",
+         "name": "Why",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Put the character ON the surface of Body under them, measured from OUTSIDE (2026-10-11). Traces in along the radial against the body (so it works from inside, where back faces are invisible), then down onto anything built on top of it, and seats the capsule there with zero velocity relative to the ground. Refused if the character is more than MaxAboveCm above that ground - then they are genuinely in the air and should fall. Used where a character is PLACED rather than walked: leaving the ship, and resuming a saved Holo-sim spot. Returns true when it moved them.",
+       "calls": 3,
+       "called_in": [
+        "CosmicFlightComponent.cpp",
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
        "name": "RequestRecall",
        "ret": "void",
        "sig": "void RequestRecall();",
@@ -6548,11 +6638,12 @@
        "machine": null,
        "machine_note": null,
        "doc": "Queue a recall to run at the start of the next tick. The HUD calls this (from DrawHUD) so the heavy world-origin rebase inside ForceRespawn never runs mid-render.",
-       "calls": 4,
+       "calls": 5,
        "called_in": [
         "CosmicAbilityComponent.cpp",
         "CosmicFlightComponent.cpp",
-        "CosmicHUD.cpp"
+        "CosmicHUD.cpp",
+        "HoloSimWorld.cpp"
        ]
       },
       {
@@ -8423,10 +8514,11 @@
        "machine": null,
        "machine_note": null,
        "doc": "Append a line to the event log / chat pane. Public because gameplay code outside the HUD needs to tell the player things - an ability that has no montage and no damage number (Set Home, Recall) has no other way to confirm the press registered. Long lines are word-wrapped to the pane.",
-       "calls": 23,
+       "calls": 24,
        "called_in": [
         "CosmicAbilityComponent.cpp",
         "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp",
         "CosmicStatsComponent.cpp"
        ]
       },
@@ -10192,7 +10284,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -11383,9 +11475,10 @@
        "machine": "client-rpc",
        "machine_note": "server \u2192 owning client",
        "doc": "",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
-        "CosmicPlayerRepComponent.cpp"
+        "CosmicPlayerRepComponent.cpp",
+        "HoloSimWorld.cpp"
        ]
       },
       {
@@ -11420,6 +11513,32 @@
        "doc": "Put the owning pawn back where it was when the player last left this sim. Body + RelXf when the spot was on a replicated body (uses the client's own copy of the body, so orbit latency does not move the spot); AbsXf otherwise, or if the body did not resolve.",
        "calls": 1,
        "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "Client_HoloSimNotice",
+       "ret": "void",
+       "sig": "void Client_HoloSimNotice(const FString& Text);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Text",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Client, Reliable",
+       "machine": "client-rpc",
+       "machine_note": "server \u2192 owning client",
+       "doc": "A Holo-sim persistence message for this player's chat log - saves landing or failing, what was restored at boot, a piece that will not be kept (2026-10-11). The instance log goes away with the pod; this does not.",
+       "calls": 2,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp",
         "HoloSimWorld.cpp"
        ]
       },
@@ -14703,7 +14822,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 268,
+       "calls": 272,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -14820,7 +14939,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 268,
+       "calls": 272,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -15005,6 +15124,37 @@
        ]
       },
       {
+       "name": "BuildPlanetField",
+       "ret": "FCosmosBuildResult",
+       "sig": "FCosmosBuildResult BuildPlanetField(const FSolarSystemSpec& Spec, const FPoolPlanetTuning* Tuning = nullptr);",
+       "params": [
+        {
+         "type": "const FSolarSystemSpec&",
+         "name": "Spec",
+         "default": null
+        },
+        {
+         "type": "const FPoolPlanetTuning*",
+         "name": "Tuning",
+         "default": "nullptr"
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Build ONLY the spec's procedural planet field (and its patrols) into a world that already has its star, station, arena and starfield. The solar-system Holo-sim path (2026-10-10). A sim instance boots Cosmos.umap, whose station and sun it keeps; the field is the part a player's options change. The caller removes the map's baked field first. The draws are identical to BuildSystem's: the field gets a fresh stream on Spec.Seed there too (fixed bodies and the station draw nothing), so a seed produces the same planets whichever entry point built them. Tuning, when given, is stamped on every planet before it spawns - see FPoolPlanetTuning.",
+       "calls": 2,
+       "called_in": [
+        "CosmosWorldBuilder.cpp",
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
        "name": "RebuildSystem",
        "ret": "FCosmosBuildResult",
        "sig": "FCosmosBuildResult RebuildSystem(const FSolarSystemSpec& Spec);",
@@ -15137,9 +15287,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "C++ convenience wrapper. Not exposed - see ParseSpecJson for scripting.",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
-        "CosmosWorldBuilder.cpp"
+        "CosmosWorldBuilder.cpp",
+        "HoloSimWorld.cpp"
        ]
       },
       {
@@ -15222,7 +15373,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmosWorldBuilder.cpp"
        ]
@@ -15452,7 +15603,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 6,
+       "calls": 7,
        "called_in": [
         "CosmosWorldBuilder.cpp"
        ]
@@ -16710,7 +16861,7 @@
      "kind": "class",
      "uspec": "NotPlaceable",
      "file": "Plugins/Cosmos/Source/Cosmos/Public/HoloSimWorld.h",
-     "doc": "Holo-sim worlds: what an instance builds, what it saves, and where a returning player is put back. Added 2026-10-09 (PROJECT.md \u00a713, fortieth pass). THREE CLASSES, ONE JOB. UHoloSimWorldSubsystem SERVER ONLY. At boot, asks the hub for the sim's spec and saved state, configures the world, restores the saved build pieces, and installs the hooks that let ARSSGameModeBase (PhxAccount, which knows nothing of Cosmos) save pieces and resume locations. AHoloSimWorldInfo Replicated, always relevant. Carries the few numbers a CLIENT needs to rebuild the non-replicated parts of the world for itself (the\u2026",
+     "doc": "System sims: the starfield's seed, rebuilt locally. 0 = leave the map's.",
      "functions": [
       {
        "name": "BeginPlay",
@@ -16791,8 +16942,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 0,
-       "called_in": []
+       "calls": 1,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
       },
       {
        "name": "IsApplied",
@@ -16810,6 +16963,32 @@
        "doc": "True once this machine has applied the config (floor built, station removed).",
        "calls": 0,
        "called_in": []
+      },
+      {
+       "name": "IsPlanetSim",
+       "ret": "bool",
+       "sig": "static bool IsPlanetSim(const UWorld* World);",
+       "params": [
+        {
+         "type": "const UWorld*",
+         "name": "World",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Is this world a single-planet sim? Flight is not allowed there (2026-10-10, Ray) - UCosmicFlightComponent::EnterFlight asks this.",
+       "calls": 2,
+       "called_in": [
+        "CosmicFlightComponent.cpp",
+        "HoloSimWorld.cpp"
+       ]
       },
       {
        "name": "OnRep_Config",
@@ -16908,7 +17087,7 @@
        "ufunction": null,
        "machine": null,
        "machine_note": null,
-       "doc": "Size the slab, draw the lines, and put the gravity anchor under it.",
+       "doc": "Size the slab, draw the lines, wall the edges, and put the gravity anchor under it.",
        "calls": 2,
        "called_in": [
         "HoloSimWorld.cpp"
@@ -16934,6 +17113,29 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "Tick",
+       "ret": "void",
+       "sig": "virtual void Tick(float DeltaSeconds) override;",
+       "params": [
+        {
+         "type": "float",
+         "name": "DeltaSeconds",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Owning client: anyone who gets below the grid is recalled to the start.",
        "calls": null,
        "called_in": []
       }
@@ -17194,6 +17396,66 @@
        ]
       },
       {
+       "name": "BuildSystemField",
+       "ret": "bool",
+       "sig": "bool BuildSystemField(const FString& SpecJson, int32& OutStarFieldSeed);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "SpecJson",
+         "default": null
+        },
+        {
+         "type": "int32&",
+         "name": "OutStarFieldSeed",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "System sims: swap the map's baked field for the spec's. False = kept the baked one.",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
+       "name": "NotifyPlayers",
+       "ret": "void",
+       "sig": "void NotifyPlayers(APlayerController* PC, const FString& Text) const;",
+       "params": [
+        {
+         "type": "APlayerController*",
+         "name": "PC",
+         "default": null
+        },
+        {
+         "type": "const FString&",
+         "name": "Text",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Chat-log line to one player (or all, PC null).",
+       "calls": 3,
+       "called_in": [
+        "HoloSimWorld.cpp"
+       ]
+      },
+      {
        "name": "RestoreState",
        "ret": "void",
        "sig": "void RestoreState(const FString& StateJson);",
@@ -17449,6 +17711,70 @@
      }
     },
     {
+     "name": "FPoolPlanetTuning",
+     "base": "",
+     "kind": "struct",
+     "uspec": "",
+     "file": "Plugins/Cosmos/Source/Cosmos/Public/PoolPlanet.h",
+     "doc": "The physics tuning a pool planet carries beyond what a spec describes. These are per-actor values, editable on the planets baked into Cosmos.umap and live-tuned from the dev panel. A Holo-sim that replaces the baked field with its own copies them off a baked planet first (2026-10-10), so a sim's planets move and settle like the shared world's instead of like the class defaults. Plain C++: it never crosses the wire - only the server simulates.",
+     "functions": [
+      {
+       "name": "From",
+       "ret": "FPoolPlanetTuning",
+       "sig": "static FPoolPlanetTuning From(const class APoolPlanet& Planet);",
+       "params": [
+        {
+         "type": "const class APoolPlanet&",
+         "name": "Planet",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "HoloSimWorld.cpp",
+        "PoolPlanet.cpp"
+       ]
+      },
+      {
+       "name": "ApplyTo",
+       "ret": "void",
+       "sig": "void ApplyTo(class APoolPlanet& Planet) const;",
+       "params": [
+        {
+         "type": "class APoolPlanet&",
+         "name": "Planet",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Before FinishSpawning: the box3d body is created in BeginPlay from these.",
+       "calls": 2,
+       "called_in": [
+        "CosmosWorldBuilder.cpp",
+        "PoolPlanet.cpp"
+       ]
+      }
+     ],
+     "properties": [],
+     "replication": {}
+    },
+    {
      "name": "APoolPlanet",
      "base": "ACelestialBody",
      "kind": "class",
@@ -17530,6 +17856,46 @@
          "default": null
         }
        ],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "GetLifetimeReplicatedProps",
+       "ret": "void",
+       "sig": "virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;",
+       "params": [
+        {
+         "type": "TArray<FLifetimeProperty>&",
+         "name": "OutLifetimeProps",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Shape, cells and their material replicate once with the actor, so a planet built at runtime (a Holo-sim's own field) arrives on clients as itself - see ACelestialBody::OnRep_BodyConfig.",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "ApplyReplicatedBodyConfig",
+       "ret": "void",
+       "sig": "virtual void ApplyReplicatedBodyConfig() override;",
+       "params": [],
        "const": false,
        "virtual": true,
        "static": false,
@@ -17768,7 +18134,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "CosmicFlightComponent.cpp",
         "PoolPlanet.cpp"
@@ -17788,7 +18154,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Rebuild the four cube instances from the current shape + Radius. Called on construction and whenever the shape is changed in the editor.",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
         "PoolPlanet.cpp"
        ]
@@ -17919,15 +18285,15 @@
       {
        "type": "EDieShape",
        "name": "PoolShape",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Pool\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Physics/visual shape. Sphere = analytic sphere body. Any die shape gets a box3d CONVEX HULL matching the die mesh (assign the same SM_Die_* to Mesh), so planets tumble on their real facets and the facets are walkable. Radius is the CIRCUMRADIUS (matches the 50 cm-circumradius die meshes)."
       },
       {
        "type": "ETetrominoShape",
        "name": "TetrominoShape",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Pool\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "TETROMINO planets. When this is anything but None it OVERRIDES PoolShape: the planet is built from four cube cells instead of a die, rendered as four instances and collided as four boxes on a single compound body. It has to be a separate property rather than another EDieShape entry because the two go down completely different paths - a die is one convex hull and one static mesh, a tetromino is four of each. Five of the seven pieces are concave, and a single hull of a concave piece is its filled outline: the notch would become invisible floor and pieces could never interlock. See Tetromino.h."
       },
       {
@@ -17940,15 +18306,15 @@
       {
        "type": "TObjectPtr<UStaticMesh>",
        "name": "BlockMesh",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Pool\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": "Cube mesh used for each tetromino cell. Any unit cube works; the script assigns the engine's basic cube."
       },
       {
        "type": "TObjectPtr<UMaterialInterface>",
        "name": "BlockMaterial",
-       "spec": "EditAnywhere, Category = \"Pool\"",
-       "replicated": null,
+       "spec": "EditAnywhere, Category = \"Pool\", ReplicatedUsing = OnRep_BodyConfig",
+       "replicated": "ReplicatedUsing=OnRep_BodyConfig",
        "doc": ""
       },
       {
@@ -18852,7 +19218,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 268,
+       "calls": 272,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20017,7 +20383,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20553,7 +20919,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 268,
+       "calls": 272,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -22102,7 +22468,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22180,7 +22546,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22272,7 +22638,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22371,7 +22737,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 227,
+       "calls": 233,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22966,7 +23332,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 268,
+       "calls": 272,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -23551,12 +23917,17 @@
       {
        "name": "ShutdownInstance",
        "ret": "void",
-       "sig": "void ShutdownInstance(const FString& Reason);",
+       "sig": "void ShutdownInstance(const FString& Reason, bool bForce = false);",
        "params": [
         {
          "type": "const FString&",
          "name": "Reason",
          "default": null
+        },
+        {
+         "type": "bool",
+         "name": "bForce",
+         "default": "false"
         }
        ],
        "const": false,
@@ -23612,8 +23983,9 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 10,
+       "calls": 12,
        "called_in": [
+        "CosmicPlayerRepComponent.cpp",
         "RSSGameModeBase.cpp"
        ]
       },
@@ -23791,7 +24163,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "The player asked to leave with /exit. Their next Logout CLEARS the resume location instead of writing it - \"/exit\" means done, a quit means resume. The client asks the server first (and waits for the answer) precisely so this flag is set before the Logout that reads it.",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmicPlayerRepComponent.cpp",
         "RSSGameModeBase.cpp"
@@ -24163,7 +24535,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Update cooldown/cast timers (called from ability manager).",
-       "calls": 50,
+       "calls": 52,
        "called_in": [
         "BuildablePiece.cpp",
         "CelestialBody.cpp",
@@ -35739,8 +36111,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ dc2ea2c",
- "generated_at": "2026-10-11T03:01:15Z",
- "game_commit": "dc2ea2c",
+ "generated_from": "RaysSpaceSim @ 2af24d4",
+ "generated_at": "2026-10-11T20:11:36Z",
+ "game_commit": "2af24d4",
  "game_dirty": false
 }

@@ -731,7 +731,10 @@ defmodule PhoenixApp.Games.HoloSims do
         "holo_sim_id" => sim.id,
         "state" => state,
         "saved_at" => now,
-        "last_saved_by_user_id" => saved_by_user_id
+        "last_saved_by_user_id" => saved_by_user_id,
+        # holo_sim_states.user_id is still NOT NULL on databases migrated
+        # before 20261011120000. Filling it keeps the insert valid either way.
+        "user_id" => saved_by_user_id
       }
 
       case get_state(sim.id) do
