@@ -11,5 +11,7 @@ resources:
 - phoenix-uploads-pvc.yaml
 - phoenix-models-pv.yaml
 - phoenix-models-pvc.yaml
+- phoenix-releases-pv.yaml
+- phoenix-releases-pvc.yaml
 - db-init-job.yaml
 - rbac.yaml

@@ -186,6 +186,9 @@ if kubectl get namespace phoenixapp &> /dev/null; then
             kubectl patch pv phoenix-uploads-local-pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
             print_status "Phoenix uploads PV set to Retain policy"
         fi
+        if kubectl get pv phoenix-releases-local-pv &> /dev/null; then
+            kubectl patch pv phoenix-releases-local-pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+        fi
     else
         echo "🗑️  Fresh install: PVCs will NOT be preserved"
         # Remove backup file if it exists
@@ -245,6 +248,20 @@ if kubectl get pv phoenix-models-local-pv &> /dev/null; then
         kubectl delete pv phoenix-models-local-pv
         # PV will be recreated by kustomize
         print_status "Phoenix models PV will be recreated"
+    fi
+fi
+
+# Reclaim phoenix-releases PV (launcher client blobs, manual storage).
+# Same story as uploads/models: deleting the namespace above leaves the PV
+# "Released" and still bound to the claim that no longer exists, so the new
+# claim sits Pending forever and phoenix-web never schedules. The data is on
+# the hostPath and survives the PV object being deleted and re-created.
+if kubectl get pv phoenix-releases-local-pv &> /dev/null; then
+    PV_STATUS=$(kubectl get pv phoenix-releases-local-pv -o jsonpath='{.status.phase}')
+
+    if [ "$PV_STATUS" = "Released" ]; then
+        kubectl delete pv phoenix-releases-local-pv
+        print_status "Phoenix releases PV will be recreated"
     fi
 fi
 echo "🐦‍🔥 Deploying Production"
@@ -473,6 +490,31 @@ for i in {1..10}; do
             kubectl apply -f k3s/base/phoenix-models-pvc.yaml
             sleep 3
             print_status "Phoenix models PV/PVC recreated"
+        fi
+    fi
+    echo -n "."
+    sleep 2
+done
+echo ""
+
+# Check if phoenix-releases-pvc is bound (same manual-storage quirk as above)
+echo "⏳ Checking phoenix-releases-pvc binding..."
+for i in {1..10}; do
+    RELEASES_PVC_STATUS=$(kubectl get pvc phoenix-releases-pvc -n phoenixapp -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+    if [ "$RELEASES_PVC_STATUS" = "Bound" ]; then
+        print_status "Phoenix releases PVC is bound"
+        break
+    elif [ "$RELEASES_PVC_STATUS" = "Pending" ]; then
+        if [ $i -eq 10 ]; then
+            echo "⚠️  Phoenix releases PVC stuck in Pending, attempting fix..."
+            kubectl delete pvc phoenix-releases-pvc -n phoenixapp --force --grace-period=0 2>/dev/null || true
+            sleep 2
+            kubectl delete pv phoenix-releases-local-pv --force --grace-period=0 2>/dev/null || true
+            sleep 2
+            kubectl apply -f k3s/base/phoenix-releases-pv.yaml
+            kubectl apply -f k3s/base/phoenix-releases-pvc.yaml
+            sleep 3
+            print_status "Phoenix releases PV/PVC recreated"
         fi
     fi
     echo -n "."

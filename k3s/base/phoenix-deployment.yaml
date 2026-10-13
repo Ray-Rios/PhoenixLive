@@ -20,12 +20,17 @@ spec:
       initContainers:
       - name: fix-permissions
         image: alpine:3.22
-        command: ['sh', '-c', 'chown -R 100:101 /app/uploads /app/priv/static/models && chmod -R 755 /app/uploads /app/priv/static/models']
+        command: ['sh', '-c', 'mkdir -p /app/client_releases/blobs && chown -R 100:101 /app/uploads /app/priv/static/models /app/client_releases && chmod -R 755 /app/uploads /app/priv/static/models /app/client_releases']
         volumeMounts:
         - name: uploads
           mountPath: /app/uploads
         - name: models
           mountPath: /app/priv/static/models
+        # NOT /app/releases. That is the Elixir release's own directory
+        # (start_erl.data, vm.args, ...); mounting a volume over it hides them
+        # and the app cannot boot. That took prod down on 2026-10-13.
+        - name: releases
+          mountPath: /app/client_releases
       containers:
       - name: phoenix
         image: phoenixapp:latest
@@ -82,6 +87,11 @@ spec:
           mountPath: /app/uploads
         - name: models
           mountPath: /app/priv/static/models
+        # NOT /app/releases. That is the Elixir release's own directory
+        # (start_erl.data, vm.args, ...); mounting a volume over it hides them
+        # and the app cannot boot. That took prod down on 2026-10-13.
+        - name: releases
+          mountPath: /app/client_releases
         # Temporarily removed security context to fix permission issues
         # securityContext:
         #   allowPrivilegeEscalation: false
@@ -95,6 +105,9 @@ spec:
       - name: models
         persistentVolumeClaim:
           claimName: phoenix-models-pvc
+      - name: releases
+        persistentVolumeClaim:
+          claimName: phoenix-releases-pvc
 ---
 apiVersion: v1
 kind: Service

@@ -13,8 +13,12 @@
 # k3s/overlays/prod/configmap.yaml, which this script writes.
 #
 # USAGE
-#   ./deploy-game.sh                 build the current commit and roll it out
-#   ./deploy-game.sh --build-only    build and tag; do not touch the cluster
+#   ./deploy-game.sh                 build server + client for the current commit,
+#                                    roll the server out, publish the client to
+#                                    the launcher
+#   ./deploy-game.sh --build-only    build server + client and tag; publish nothing
+#   ./deploy-game.sh --client-only   build + publish a client for the LIVE server tag
+#   ./deploy-game.sh --publish-only  re-publish the last staged client (no cook)
 #   ./deploy-game.sh --set <tag>     roll out a tag that is already built
 #   ./deploy-game.sh --list          show built tags and which one is live
 #   ./deploy-game.sh --smoke [tag]   boot the image locally and show its log
@@ -154,6 +158,77 @@ cmd_build() {
   green "Building $IMAGE_NAME:$tag"
   HOLOSIM_IMAGE_NAME="$IMAGE_NAME" HOLOSIM_IMAGE_TAG="$tag" \
     bash "$REPO_ROOT/Scripts/build_server_image.sh"
+}
+
+# ---------------------------------------------------------------------------
+# The client and the launcher
+#
+# ONE TAG, BOTH SIDES. The tag is written to Content/BuildInfo/build_id.txt
+# BEFORE either cook, so the server image and the client carry the same id.
+# The client sends it when joining and the server refuses any other (see
+# ARSSGameModeBase::PreLoginAsync) with an "UPDATE REQUIRED" message rather than
+# the replication failure a mismatched pair used to produce.
+# ---------------------------------------------------------------------------
+BUILD_ID_FILE="$GAME_ROOT/Content/BuildInfo/build_id.txt"
+CLIENT_STAGED="$GAME_ROOT/Saved/ClientBuild/Windows"
+LAUNCHER_PROJ="$GAME_ROOT/Launcher/RaysSpaceSimLauncher.csproj"
+LAUNCHER_EXE="$GAME_ROOT/Launcher/bin/RaysSpaceSimLauncher.exe"
+
+stamp_build_id() {
+  mkdir -p "$(dirname "$BUILD_ID_FILE")"
+  printf '%s' "$1" > "$BUILD_ID_FILE"
+  green "Build id stamped: $1"
+}
+
+find_dotnet() {
+  if command -v dotnet >/dev/null 2>&1; then echo dotnet; return 0; fi
+  # A source engine carries its own SDK for UBT; good enough for a net48 exe.
+  local d
+  for d in /c/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/*/win-x64/dotnet.exe \
+           /c/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/*/windows/dotnet.exe; do
+    [ -x "$d" ] && { echo "$d"; return 0; }
+  done
+  return 1
+}
+
+cmd_build_launcher() {
+  local dn
+  dn="$(find_dotnet)" || fail "No dotnet SDK found (PATH or the engine's bundled one) - cannot build the launcher."
+  green "Building the launcher"
+  "$dn" build -c Release -nologo -v:minimal "$(cygpath -w "$LAUNCHER_PROJ" 2>/dev/null || echo "$LAUNCHER_PROJ")" \
+    || fail "Launcher build failed."
+  [ -f "$LAUNCHER_EXE" ] || fail "Launcher build produced no $LAUNCHER_EXE"
+}
+
+cmd_build_client() {
+  green "Building the Windows client"
+  bash "$REPO_ROOT/scripts/build_client.sh"
+}
+
+cmd_publish_client() {
+  local tag="$1" py
+  py="$(find_python)" || fail "Publishing needs Python on PATH."
+  [ -d "$CLIENT_STAGED" ] || fail "No staged client at $CLIENT_STAGED - build it first."
+  # The staged client must carry the tag it is published under; a mismatch
+  # would publish a client every server refuses.
+  local staged_id
+  staged_id="$(cat "$CLIENT_STAGED/RaysSpaceSim/Content/BuildInfo/build_id.txt" 2>/dev/null || true)"
+  [ "$staged_id" = "$tag" ] \
+    || fail "Staged client says build '$staged_id' but this publish is '$tag'. Rebuild the client."
+  [ -f "$LAUNCHER_EXE" ] || cmd_build_launcher
+
+  green "Publishing client $tag to the launcher"
+  $py "$REPO_ROOT/scripts/publish_client_release.py" \
+    --build-id "$tag" \
+    --staged "$(cygpath -w "$CLIENT_STAGED" 2>/dev/null || echo "$CLIENT_STAGED")" \
+    --launcher "$(cygpath -w "$LAUNCHER_EXE" 2>/dev/null || echo "$LAUNCHER_EXE")" \
+    --namespace "$NAMESPACE"
+}
+
+live_tag() {
+  local img
+  img="$(live_image)"
+  echo "${img##*:}"
 }
 
 # DOES IT ACTUALLY RUN?
@@ -383,11 +458,37 @@ case "${1:-}" in
     # Computed ONCE. A dirty tag contains a timestamp, so calling current_tag()
     # again after a build that took a minute prints a tag that does not exist.
     TAG="$(current_tag)"
+    stamp_build_id "$TAG"
     cmd_build "$TAG"
+    cmd_build_client
+    cmd_build_launcher
     cmd_codemap
     echo
     echo "Not rolled out. When you want it live:"
-    echo "  ./deploy-game.sh --set $TAG"
+    echo "  ./deploy-game.sh --set $TAG && ./deploy-game.sh --publish-only"
+    ;;
+
+  --client-only)
+    # For a client that matches the server ALREADY live - e.g. the first
+    # release, or a lost publish. It is stamped with the live tag, so it is
+    # only correct when the game code has not changed since that server build.
+    TAG="$(live_tag)"
+    [ -n "$TAG" ] || fail "No live server image - run a full ./deploy-game.sh instead."
+    warn "Building a client for the live server tag $TAG."
+    warn "Only correct if the game code is unchanged since that server was built."
+    stamp_build_id "$TAG"
+    cmd_build_client
+    cmd_build_launcher
+    cmd_publish_client "$TAG"
+    ;;
+
+  --publish-only)
+    # Re-publish what is already staged (a failed upload, or a launcher-only
+    # change - the launcher is rebuilt every time).
+    TAG="$(cat "$BUILD_ID_FILE" 2>/dev/null || true)"
+    [ -n "$TAG" ] || fail "No build id stamped - nothing has been built."
+    cmd_build_launcher
+    cmd_publish_client "$TAG"
     ;;
 
   "")
@@ -398,9 +499,15 @@ case "${1:-}" in
         warn "Commit first if you want this build to be reproducible."
         ;;
     esac
+    stamp_build_id "$TAG"
     cmd_build "$TAG"
+    cmd_build_client
+    cmd_build_launcher
     cmd_codemap
     cmd_rollout "$IMAGE_NAME:$TAG"
+    # After the server, so a player who updates the moment it appears finds a
+    # server on the same build.
+    cmd_publish_client "$TAG"
     ;;
 
   *)

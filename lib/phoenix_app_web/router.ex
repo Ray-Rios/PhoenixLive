@@ -139,6 +139,7 @@ defmodule PhoenixAppWeb.Router do
     pipe_through :browser
 
     get "/auth/login_success", AuthController, :login_success
+    get "/games/:game_slug/launcher", LauncherDownloadController, :show
     get "/auth/logout", AuthController, :logout
     post "/auth/logout", AuthController, :logout
     post "/auth/2fa/verify", AuthController, :verify_2fa
@@ -231,6 +232,14 @@ defmodule PhoenixAppWeb.Router do
     get "/:game_slug/holosims/:id", Api.HoloSimController, :show
     put "/:game_slug/holosims/:id", Api.HoloSimController, :update
     delete "/:game_slug/holosims/:id", Api.HoloSimController, :delete
+
+    # Client releases for the launcher. /missing and /:build_id/live are above
+    # the bare /blobs/:sha route only for readability - none of them collide.
+    get "/:game_slug/releases/latest", Api.ReleasesController, :latest
+    get "/:game_slug/releases/blobs/:sha", Api.ReleasesController, :blob
+    post "/:game_slug/releases/missing", Api.ReleasesController, :missing
+    post "/:game_slug/releases/:build_id/live", Api.ReleasesController, :set_live
+    post "/:game_slug/releases", Api.ReleasesController, :publish
 
     get "/:game_slug/characters", Api.GamesController, :list_characters
     post "/:game_slug/characters", Api.GamesController, :create_character

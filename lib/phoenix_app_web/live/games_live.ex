@@ -82,6 +82,7 @@ defmodule PhoenixAppWeb.GamesLive do
      assign(socket,
        page_title: "Games",
        library_mode?: true,
+       rss_release: rss_live_release(),
        characters: characters,
        selected_character_id: nil,
        current_character_payload: nil,
@@ -1055,6 +1056,25 @@ defmodule PhoenixAppWeb.GamesLive do
     }
   end
   
+  # The live launcher release, or nil (no release yet, or the games database
+  # unreachable - the page must still render either way).
+  defp rss_live_release do
+    with %{} = game <- PhoenixApp.Games.get_game_by_slug("rays-space-sim"),
+         %{} = release <- PhoenixApp.Games.Releases.live_release(game.id),
+         %{"sha256" => _} <- release.manifest["launcher"] do
+      release
+    else
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp format_gb(nil), do: "?"
+  defp format_gb(bytes) when bytes >= 1_073_741_824,
+    do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"
+  defp format_gb(bytes), do: "#{div(bytes, 1_048_576)} MB"
+
   @impl true
   def render(%{library_mode?: true} = assigns) do
     ~H"""
@@ -1075,11 +1095,29 @@ defmodule PhoenixAppWeb.GamesLive do
             <p class="text-sm text-gray-400 mt-2">Multiplayer 3D arcade lobby. Create or select a character to jump in.</p>
           </button>
 
-          <div class="text-left rounded-lg p-6 border border-gray-800 opacity-50 cursor-not-allowed">
-            <div class="text-4xl mb-3">🚀</div>
-            <div class="text-xl font-semibold text-white">RaysSpaceSim</div>
-            <p class="text-sm text-gray-400 mt-2">Coming soon.</p>
-          </div>
+          <%= if @rss_release do %>
+            <%!-- A plain link, not navigate: it is a file download served by
+                  LauncherDownloadController, outside LiveView. --%>
+            <a
+              href={~p"/games/rays-space-sim/launcher"}
+              class="block text-left glass-dark rounded-lg p-6 border border-gray-700 hover:border-blue-400 transition-colors duration-300"
+            >
+              <div class="text-4xl mb-3">🚀</div>
+              <div class="text-xl font-semibold text-white">RaysSpaceSim</div>
+              <p class="text-sm text-gray-400 mt-2">
+                Download the Windows launcher. It installs the game, keeps it up to date and signs you in.
+              </p>
+              <p class="text-xs text-gray-500 mt-3">
+                Build {@rss_release.build_id} · {format_gb(@rss_release.total_bytes)} · Windows 10/11
+              </p>
+            </a>
+          <% else %>
+            <div class="text-left rounded-lg p-6 border border-gray-800 opacity-50 cursor-not-allowed">
+              <div class="text-4xl mb-3">🚀</div>
+              <div class="text-xl font-semibold text-white">RaysSpaceSim</div>
+              <p class="text-sm text-gray-400 mt-2">Coming soon.</p>
+            </div>
+          <% end %>
         </div>
       </div>
     </div>

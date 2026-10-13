@@ -5364,7 +5364,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 2,
+       "calls": 3,
        "called_in": [
         "CosmicAbilityComponent.cpp"
        ]
@@ -36303,8 +36303,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ efc19cb",
- "generated_at": "2026-10-13T05:32:24Z",
- "game_commit": "efc19cb",
+ "generated_from": "RaysSpaceSim @ cb76594",
+ "generated_at": "2026-10-13T17:42:31Z",
+ "game_commit": "cb76594",
  "game_dirty": false
 }
