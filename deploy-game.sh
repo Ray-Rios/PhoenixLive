@@ -118,6 +118,21 @@ set_live_image() {
   # rollout appears to succeed and the launcher goes on using the old value.
   kubectl rollout restart deployment/phoenix-web -n "$NAMESPACE"
   kubectl rollout status deployment/phoenix-web -n "$NAMESPACE" --timeout=300s
+
+  # THE WORLD SERVER MOVES WITH THE INSTANCES. It is the same image, and a
+  # client built from this commit cannot talk to a world server built from an
+  # older one: the server drops the connection mid-join with
+  # ObjectReplicatorReceivedBunchFail and the player lands back on the login
+  # screen, every time. Holo-sim instances pick up HOLOSIM_IMAGE on their next
+  # launch; the world Deployment only ever changes when told to, so tell it.
+  # Skipped (not failed) when an empty image disables the launcher, or when the
+  # world has never been deployed from the admin page.
+  if [ -n "$image" ] && kubectl get deployment/rss-world-server -n raysspacesim >/dev/null 2>&1; then
+    green "Moving the world server to $image"
+    kubectl set image deployment/rss-world-server world="$image" -n raysspacesim
+    kubectl rollout status deployment/rss-world-server -n raysspacesim --timeout=300s \
+      || warn "World server rollout did not finish in 5 minutes - check the admin page."
+  fi
 }
 
 cmd_list() {

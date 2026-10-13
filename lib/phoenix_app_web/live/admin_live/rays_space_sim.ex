@@ -877,7 +877,8 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                 <%= if @world_logs_error do %>
                   <p class="text-sm text-red-300"><%= @world_logs_error %></p>
                 <% else %>
-                  <pre class="bg-black/50 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto whitespace-pre"><%= @world_logs %></pre>
+                  <button id="copy-logs-a" phx-hook="CopyText" data-target="logs-a" type="button" class="mb-2 text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded">Copy</button>
+                  <pre id="logs-a" class="select-text bg-black/50 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto whitespace-pre"><%= @world_logs %></pre>
                 <% end %>
               </div>
             <% end %>
@@ -1264,7 +1265,8 @@ defmodule PhoenixAppWeb.AdminLive.RaysSpaceSim do
                 <%= if @world_logs_error do %>
                   <p class="text-sm text-red-300"><%= @world_logs_error %></p>
                 <% else %>
-                  <pre class="bg-black/50 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto whitespace-pre"><%= @world_logs %></pre>
+                  <button id="copy-logs-b" phx-hook="CopyText" data-target="logs-b" type="button" class="mb-2 text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded">Copy</button>
+                  <pre id="logs-b" class="select-text bg-black/50 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto whitespace-pre"><%= @world_logs %></pre>
                 <% end %>
               </div>
             <% end %>

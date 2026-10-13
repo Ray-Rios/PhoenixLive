@@ -106,6 +106,20 @@ async function loadHeavyModulesAndConnect() {
       ColorPicker,
       OpacitySlider,
       AudioHook,
+      // Copies the text of the element named by data-target (admin log panes).
+      CopyText: {
+        mounted(this: any) {
+          this.el.addEventListener("click", () => {
+            const target = document.getElementById(this.el.dataset.target);
+            if (!target) return;
+            navigator.clipboard.writeText(target.innerText).then(() => {
+              const label = this.el.textContent;
+              this.el.textContent = "Copied";
+              setTimeout(() => { this.el.textContent = label; }, 1500);
+            });
+          });
+        },
+      },
       // Inline hooks (defined below in this file)
       AutoDismissFlash: (window as any)._AutoDismissFlash,
       MessageReactions: (window as any)._MessageReactions,

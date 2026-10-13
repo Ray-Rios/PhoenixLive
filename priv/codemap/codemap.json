@@ -3308,7 +3308,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "True when this body has already updated its pose this frame, so the delta below describes THIS frame's motion.",
-       "calls": 4,
+       "calls": 5,
        "called_in": [
         "CelestialBody.cpp",
         "CosmicFlightComponent.cpp"
@@ -3374,7 +3374,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Transports a world-space point from where this body was at the start of the frame to where it is now - i.e. what standing on it should do to you. Returns WorldP unchanged when there is no usable delta.",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "CelestialBody.cpp",
         "CosmicFlightComponent.cpp",
@@ -4525,7 +4525,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -5327,6 +5327,63 @@
        "machine_note": null,
        "doc": "Resize Bindings / Cooldowns / WasDown to match the current slot count, seeding new slots with the default keys.",
        "calls": 2,
+       "called_in": [
+        "CosmicAbilityComponent.cpp"
+       ]
+      },
+      {
+       "name": "SaveSpellBars",
+       "ret": "void",
+       "sig": "void SaveSpellBars() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Spell bar bindings persist in the character's settings on the hub (\"spell_bars\"), because this component is rebuilt on every server travel: world -> Holo-sim wiped every slot the player had placed. Local player only; a no-op anywhere else.",
+       "calls": 2,
+       "called_in": [
+        "CosmicAbilityComponent.cpp"
+       ]
+      },
+      {
+       "name": "LoadSpellBars",
+       "ret": "void",
+       "sig": "void LoadSpellBars();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "CosmicAbilityComponent.cpp"
+       ]
+      },
+      {
+       "name": "IsLocalPlayerOwned",
+       "ret": "bool",
+       "sig": "bool IsLocalPlayerOwned() const;",
+       "params": [],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 3,
        "called_in": [
         "CosmicAbilityComponent.cpp"
        ]
@@ -6618,10 +6675,11 @@
        "machine": null,
        "machine_note": null,
        "doc": "Put the character ON the surface of Body under them, measured from OUTSIDE (2026-10-11). Traces in along the radial against the body (so it works from inside, where back faces are invisible), then down onto anything built on top of it, and seats the capsule there with zero velocity relative to the ground. Refused if the character is more than MaxAboveCm above that ground - then they are genuinely in the air and should fall. Used where a character is PLACED rather than walked: leaving the ship, and resuming a saved Holo-sim spot. Returns true when it moved them.",
-       "calls": 3,
+       "calls": 4,
        "called_in": [
         "CosmicFlightComponent.cpp",
-        "CosmicPlayerRepComponent.cpp"
+        "CosmicPlayerRepComponent.cpp",
+        "Portal.cpp"
        ]
       },
       {
@@ -10284,7 +10342,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -14822,7 +14880,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 272,
+       "calls": 274,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -14939,7 +14997,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 272,
+       "calls": 274,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -17671,6 +17729,78 @@
        "doc": "",
        "calls": null,
        "called_in": []
+      },
+      {
+       "name": "EndPlay",
+       "ret": "void",
+       "sig": "virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;",
+       "params": [
+        {
+         "type": "const EEndPlayReason::Type",
+         "name": "EndPlayReason",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": true,
+       "static": false,
+       "inline_body": false,
+       "engine_override": true,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": null,
+       "called_in": []
+      },
+      {
+       "name": "SyncObstacles",
+       "ret": "void",
+       "sig": "void SyncObstacles(double SunNoGo, const FVector& SunPos);",
+       "params": [
+        {
+         "type": "double",
+         "name": "SunNoGo",
+         "default": null
+        },
+        {
+         "type": "const FVector&",
+         "name": "SunPos",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "The sun's no-go sphere and every station, as STATIC box3d spheres - see SyncObstacles in the .cpp. Server only.",
+       "calls": 2,
+       "called_in": [
+        "PoolArenaManager.cpp"
+       ]
+      },
+      {
+       "name": "DestroyObstacles",
+       "ret": "void",
+       "sig": "void DestroyObstacles();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "",
+       "calls": 3,
+       "called_in": [
+        "PoolArenaManager.cpp"
+       ]
       }
      ],
      "properties": [
@@ -18030,8 +18160,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 3,
+       "calls": 5,
        "called_in": [
+        "BuildablePiece.cpp",
         "PoolArenaManager.cpp",
         "PoolPlanet.cpp"
        ]
@@ -18173,8 +18304,9 @@
        "machine": null,
        "machine_note": null,
        "doc": "True only where the box3d body actually lives - i.e. on the server. A client has no body on purpose (see TryCreateBody), so this is the natural \"am I the one simulating\" test for anything that reaches into box3d.",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
+        "BuildablePiece.cpp",
         "PoolArenaManager.cpp"
        ]
       },
@@ -19218,7 +19350,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 272,
+       "calls": 274,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20383,7 +20515,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -20919,7 +21051,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 272,
+       "calls": 274,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -21331,7 +21463,7 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 21,
+       "calls": 22,
        "called_in": [
         "PhxAccountSubsystem.cpp",
         "RSSCharacterSelectTerminal.cpp",
@@ -21920,6 +22052,63 @@
        ]
       },
       {
+       "name": "GetCharacterSetting",
+       "ret": "FString",
+       "sig": "FString GetCharacterSetting(const FString& Key) const;",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Key",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintPure, Category = \"Phx Account|Characters\"",
+       "machine": "pure",
+       "machine_note": "read-only, any machine",
+       "doc": "One string field of the selected character's settings blob, or empty. Generic sibling of Get/SetCharacterAppearance for client-side preferences that must survive server travel (the spell bars - see UCosmicAbilityComponent). Everything in the game world is rebuilt on every travel; this subsystem lives on the GameInstance and is not.",
+       "calls": 3,
+       "called_in": [
+        "CosmicAbilityComponent.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
+       "name": "SetCharacterSetting",
+       "ret": "void",
+       "sig": "void SetCharacterSetting(const FString& Key, const FString& Value);",
+       "params": [
+        {
+         "type": "const FString&",
+         "name": "Key",
+         "default": null
+        },
+        {
+         "type": "const FString&",
+         "name": "Value",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "BlueprintCallable, Category = \"Phx Account|Characters\"",
+       "machine": null,
+       "machine_note": null,
+       "doc": "Merge one string field into the settings blob and PUT it to the hub.",
+       "calls": 2,
+       "called_in": [
+        "CosmicAbilityComponent.cpp",
+        "PhxAccountSubsystem.cpp"
+       ]
+      },
+      {
        "name": "IsResumingHoloSim",
        "ret": "bool",
        "sig": "bool IsResumingHoloSim() const { return !ResumeSimId.IsEmpty(); }",
@@ -22074,7 +22263,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 16,
+       "calls": 17,
        "called_in": [
         "PhxAccountSubsystem.cpp"
        ]
@@ -22109,7 +22298,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Turns a completed request into a result, handling the \"never completed\" case.",
-       "calls": 15,
+       "calls": 16,
        "called_in": [
         "PhxAccountSubsystem.cpp"
        ]
@@ -22468,7 +22657,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22546,7 +22735,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22638,7 +22827,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22737,7 +22926,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 233,
+       "calls": 236,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -23332,7 +23521,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 272,
+       "calls": 274,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -35425,11 +35614,12 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 5,
+       "calls": 7,
        "called_in": [
         "Box3DBodyComponent.cpp",
         "Box3DCrowdPushProcessor.cpp",
         "Box3DPusherComponent.cpp",
+        "PoolArenaManager.cpp",
         "PoolPlanet.cpp"
        ]
       },
@@ -35669,9 +35859,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 2,
+       "calls": 4,
        "called_in": [
-        "Box3DWorldSubsystem.cpp"
+        "Box3DWorldSubsystem.cpp",
+        "PoolArenaManager.cpp"
        ]
       },
       {
@@ -35877,11 +36068,12 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 5,
+       "calls": 6,
        "called_in": [
         "Box3DBodyComponent.cpp",
         "Box3DPusherComponent.cpp",
         "Box3DWorldSubsystem.cpp",
+        "PoolArenaManager.cpp",
         "PoolPlanet.cpp"
        ]
       },
@@ -36111,8 +36303,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ 2af24d4",
- "generated_at": "2026-10-11T20:11:36Z",
- "game_commit": "2af24d4",
+ "generated_from": "RaysSpaceSim @ efc19cb",
+ "generated_at": "2026-10-13T05:32:24Z",
+ "game_commit": "efc19cb",
  "game_dirty": false
 }
