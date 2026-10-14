@@ -19,6 +19,8 @@
 #   ./deploy-game.sh --build-only    build server + client and tag; publish nothing
 #   ./deploy-game.sh --client-only   build + publish a client for the LIVE server tag
 #   ./deploy-game.sh --publish-only  re-publish the last staged client (no cook)
+#   ./deploy-game.sh --finish <tag>  finish a run whose server image built but
+#                                    whose client did not (no second server cook)
 #   ./deploy-game.sh --set <tag>     roll out a tag that is already built
 #   ./deploy-game.sh --list          show built tags and which one is live
 #   ./deploy-game.sh --smoke [tag]   boot the image locally and show its log
@@ -479,6 +481,22 @@ case "${1:-}" in
     stamp_build_id "$TAG"
     cmd_build_client
     cmd_build_launcher
+    cmd_publish_client "$TAG"
+    ;;
+
+  --finish)
+    # Pick up a run that died after the server image was built (e.g. the
+    # client build ran out of disk): build the client for THAT tag, then roll
+    # the existing image out and publish - no second server cook.
+    TAG="${2:-}"
+    [ -n "$TAG" ] || fail "Usage: ./deploy-game.sh --finish <tag>   (see ./deploy-game.sh --list)"
+    docker image inspect "$IMAGE_NAME:$TAG" >/dev/null 2>&1 \
+      || fail "No image $IMAGE_NAME:$TAG - that server was never built; run a full ./deploy-game.sh."
+    stamp_build_id "$TAG"
+    cmd_build_client
+    cmd_build_launcher
+    cmd_codemap
+    cmd_rollout "$IMAGE_NAME:$TAG"
     cmd_publish_client "$TAG"
     ;;
 

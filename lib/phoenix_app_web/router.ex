@@ -49,6 +49,18 @@ defmodule PhoenixAppWeb.Router do
     plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "api_general"
   end
 
+  # games_api without :accepts. Release blobs are binary downloads, and a
+  # client that says "Accept: application/octet-stream" (the launcher did, in
+  # its first build) is refused by accepts(["json"]) with a 406 before the
+  # controller runs - which also stopped that launcher updating itself.
+  pipeline :games_blob do
+    plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
+                                  error_handler: PhoenixAppWeb.AuthErrorHandler
+    plug Guardian.Plug.VerifyHeader, scheme: "Bearer"
+    plug Guardian.Plug.LoadResource, allow_blank: true
+    plug PhoenixAppWeb.Plugs.RateLimitPlug, endpoint: "api_general"
+  end
+
   pipeline :api_authenticated do
     plug :accepts, ["json"]
     plug Guardian.Plug.Pipeline, module: PhoenixApp.Auth.Guardian,
@@ -200,6 +212,11 @@ defmodule PhoenixAppWeb.Router do
   # Auth enforced per-request by GamesApiKeyOrAuth (player JWT or server API key)
   # --------------------
   scope "/api/games", PhoenixAppWeb do
+    pipe_through :games_blob
+    get "/:game_slug/releases/blobs/:sha", Api.ReleasesController, :blob
+  end
+
+  scope "/api/games", PhoenixAppWeb do
     pipe_through :games_api
 
     # Shard registry. `servers` is readable by any authenticated player;
@@ -236,7 +253,6 @@ defmodule PhoenixAppWeb.Router do
     # Client releases for the launcher. /missing and /:build_id/live are above
     # the bare /blobs/:sha route only for readability - none of them collide.
     get "/:game_slug/releases/latest", Api.ReleasesController, :latest
-    get "/:game_slug/releases/blobs/:sha", Api.ReleasesController, :blob
     post "/:game_slug/releases/missing", Api.ReleasesController, :missing
     post "/:game_slug/releases/:build_id/live", Api.ReleasesController, :set_live
     post "/:game_slug/releases", Api.ReleasesController, :publish

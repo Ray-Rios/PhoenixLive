@@ -263,8 +263,11 @@ win_path() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
 echo "Cooking. First run from cold is slow; later ones reuse the DDC."
 echo
 
-rm -rf "$ARCHIVE_DIR"
+# Empty it, do not delete it: Saved\ServerBuild and Saved\ClientBuild may be
+# junctions to F: (scripts/move_build_to_f.ps1), and removing the folder
+# would remove the junction and quietly put the next build back on C:.
 mkdir -p "$ARCHIVE_DIR"
+find "$ARCHIVE_DIR/" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
 #   -server -noclient   dedicated server only. Without -noclient this also
 #                       builds and cooks a Linux game CLIENT — content nobody

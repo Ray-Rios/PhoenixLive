@@ -64,8 +64,11 @@ if netstat -ano 2>/dev/null | tr -d '\r' \
   exit 1
 fi
 
-rm -rf "$ARCHIVE_DIR"
+# Empty it, do not delete it: Saved\ServerBuild and Saved\ClientBuild may be
+# junctions to F: (scripts/move_build_to_f.ps1), and removing the folder
+# would remove the junction and quietly put the next build back on C:.
 mkdir -p "$ARCHIVE_DIR"
+find "$ARCHIVE_DIR/" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
 #   -platform=Win64     what players run.
 #   -target=RSS         the Game target (there is also RSSEditor and RSSServer).

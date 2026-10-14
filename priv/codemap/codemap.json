@@ -21081,6 +21081,27 @@
         "PhxAccountSubsystem.cpp",
         "PhxServerAuth.cpp"
        ]
+      },
+      {
+       "name": "GetBuildId",
+       "ret": "const FString&",
+       "sig": "static const FString& GetBuildId();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "The build this process was packaged as: the git tag deploy-game.sh stamps into Content/BuildInfo/build_id.txt for BOTH the server image and the client release, so the two can be checked against each other at join. Empty in the editor and in any build made without the script - and an empty id on either side skips the check, so PIE keeps working against the live servers.",
+       "calls": 3,
+       "called_in": [
+        "PhxAccountSettings.cpp",
+        "PhxAccountSubsystem.cpp",
+        "RSSGameModeBase.cpp"
+       ]
       }
      ],
      "properties": [
@@ -21463,10 +21484,35 @@
        "machine": "pure",
        "machine_note": "read-only, any machine",
        "doc": "",
-       "calls": 22,
+       "calls": 21,
        "called_in": [
         "PhxAccountSubsystem.cpp",
         "RSSCharacterSelectTerminal.cpp",
+        "RSSLoginTerminal.cpp"
+       ]
+      },
+      {
+       "name": "HasSessionToken",
+       "ret": "bool",
+       "sig": "bool HasSessionToken() const { return !AuthToken.IsEmpty(); }",
+       "params": [
+        {
+         "type": ") const { return !AuthToken.IsEmpty(",
+         "name": "",
+         "default": null
+        }
+       ],
+       "const": true,
+       "virtual": false,
+       "static": false,
+       "inline_body": true,
+       "engine_override": false,
+       "ufunction": "BlueprintPure, Category = \"Phx Account|Session\"",
+       "machine": "pure",
+       "machine_note": "read-only, any machine",
+       "doc": "A token is held but not yet verified - the launcher hand-off, see Initialize.",
+       "calls": 1,
+       "called_in": [
         "RSSLoginTerminal.cpp"
        ]
       },
@@ -36303,8 +36349,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ cb76594",
- "generated_at": "2026-10-13T17:42:31Z",
- "game_commit": "cb76594",
+ "generated_from": "RaysSpaceSim @ faa7949",
+ "generated_at": "2026-10-14T04:50:22Z",
+ "game_commit": "faa7949",
  "game_dirty": false
 }
