@@ -4525,7 +4525,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -10342,7 +10342,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -11473,6 +11473,155 @@
        "calls": 1,
        "called_in": [
         "CosmicHUD.cpp"
+       ]
+      },
+      {
+       "name": "Server_RequestPoolPhysics",
+       "ret": "void",
+       "sig": "void Server_RequestPoolPhysics();",
+       "params": [],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Server, Reliable",
+       "machine": "server-rpc",
+       "machine_note": "owning client \u2192 server",
+       "doc": "THE PANEL SHOWS WHAT THE WORLD IS RUNNING - 2026-10-14. The pool knobs live on the planets/arena/solver as plain properties, and none of them replicate. A client that joins (or relogs) after someone moved a slider kept its own defaults: the world ran Max Spin 3.0 while the options panel - which seeds from the local actors - showed 0.25, and touching any slider would have sent those stale defaults back. Now the owning client asks once when it is possessed, and the server answers with what it is actually using; every accepted change is also pushed to the other players. Values are applied to the client's own actors, so the panel and any client-side use of them agree.",
+       "calls": 1,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "Client_ReceivePoolPhysics",
+       "ret": "void",
+       "sig": "void Client_ReceivePoolPhysics(const FCosmicPoolPhysics& In);",
+       "params": [
+        {
+         "type": "const FCosmicPoolPhysics&",
+         "name": "In",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": "Client, Reliable",
+       "machine": "client-rpc",
+       "machine_note": "server \u2192 owning client",
+       "doc": "",
+       "calls": 2,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "RequestPoolPhysicsWhenReady",
+       "ret": "void",
+       "sig": "void RequestPoolPhysicsWhenReady(int32 Attempt);",
+       "params": [
+        {
+         "type": "int32",
+         "name": "Attempt",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": false,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Owning client: ask for the live pool physics once possession has arrived.",
+       "calls": 3,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "ClampPoolPhysics",
+       "ret": "FCosmicPoolPhysics",
+       "sig": "static FCosmicPoolPhysics ClampPoolPhysics(const FCosmicPoolPhysics& In);",
+       "params": [
+        {
+         "type": "const FCosmicPoolPhysics&",
+         "name": "In",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Clamp to the ranges the server accepts.",
+       "calls": 3,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "ApplyPoolPhysics",
+       "ret": "int32",
+       "sig": "static int32 ApplyPoolPhysics(UWorld* World, const FCosmicPoolPhysics& P);",
+       "params": [
+        {
+         "type": "UWorld*",
+         "name": "World",
+         "default": null
+        },
+        {
+         "type": "const FCosmicPoolPhysics&",
+         "name": "P",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "Write the values into this world's solver, arenas and planets.",
+       "calls": 3,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
+       ]
+      },
+      {
+       "name": "ReadPoolPhysics",
+       "ret": "FCosmicPoolPhysics",
+       "sig": "static FCosmicPoolPhysics ReadPoolPhysics(UWorld* World);",
+       "params": [
+        {
+         "type": "UWorld*",
+         "name": "World",
+         "default": null
+        }
+       ],
+       "const": false,
+       "virtual": false,
+       "static": true,
+       "inline_body": false,
+       "engine_override": false,
+       "ufunction": null,
+       "machine": null,
+       "machine_note": null,
+       "doc": "What this world is currently running (struct defaults where nothing exists).",
+       "calls": 2,
+       "called_in": [
+        "CosmicPlayerRepComponent.cpp"
        ]
       },
       {
@@ -14880,7 +15029,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 274,
+       "calls": 275,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -14997,7 +15146,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 274,
+       "calls": 275,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -19350,7 +19499,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "Find the pawn's wardrobe, creating one if this is the first time anything has asked. Never returns null for a valid pawn.",
-       "calls": 274,
+       "calls": 275,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -20515,7 +20664,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -21051,7 +21200,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 274,
+       "calls": 275,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -22703,7 +22852,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22781,7 +22930,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22873,7 +23022,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -22972,7 +23121,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 236,
+       "calls": 237,
        "called_in": [
         "AtmosphereComponent.cpp",
         "BuildComponent.cpp",
@@ -23567,7 +23716,7 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 274,
+       "calls": 275,
        "called_in": [
         "AtmosphereComponent.cpp",
         "Box3DBodyComponent.cpp",
@@ -35717,9 +35866,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "--- Live-tunable physics (runtime options menu) ---",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
-        "CosmicHUD.cpp"
+        "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp"
        ]
       },
       {
@@ -35772,9 +35922,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
-        "CosmicHUD.cpp"
+        "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp"
        ]
       },
       {
@@ -35791,9 +35942,10 @@
        "machine": null,
        "machine_note": null,
        "doc": "",
-       "calls": 1,
+       "calls": 2,
        "called_in": [
-        "CosmicHUD.cpp"
+        "CosmicHUD.cpp",
+        "CosmicPlayerRepComponent.cpp"
        ]
       },
       {
@@ -36349,8 +36501,8 @@
    "MenuWidgetClass": "COND_None"
   }
  },
- "generated_from": "RaysSpaceSim @ faa7949",
- "generated_at": "2026-10-14T04:50:22Z",
- "game_commit": "faa7949",
+ "generated_from": "RaysSpaceSim @ 17d4ab9",
+ "generated_at": "2026-10-14T08:48:24Z",
+ "game_commit": "17d4ab9",
  "game_dirty": false
 }

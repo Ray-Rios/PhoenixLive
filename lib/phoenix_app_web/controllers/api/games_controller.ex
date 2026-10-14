@@ -226,7 +226,13 @@ defmodule PhoenixAppWeb.Api.GamesController do
       # World servers only. An instance in this list would let a player pick
       # someone else's Holo-sim pod out of the browser and sidestep the access
       # check entirely.
-      servers = Games.list_world_servers(game.id, opts)
+      # DEV SHARDS (2026-10-14). A world server Ray runs from the editor on his
+      # own machine (run_world_server.bat) heartbeats here like any other, and
+      # without this it would be offered to - and auto-picked by - players.
+      # Players never see one. An admin's editor asks with ?dev=1 and gets the
+      # dev shards first, so PIE lands on the local server rather than live.
+      {dev, live} = Enum.split_with(Games.list_world_servers(game.id, opts), &dev_server?/1)
+      servers = if wants_dev_shards?(conn, params), do: dev ++ live, else: live
 
       json(conn, %{
         success: true,
@@ -236,6 +242,22 @@ defmodule PhoenixAppWeb.Api.GamesController do
     else
       {:error, status, message} -> error_response(conn, status, message)
     end
+  end
+
+  # The game sends "dev": true from an editor-run server; it is kept in
+  # metadata so no column is needed. Only an exact true marks a shard dev.
+  defp heartbeat_metadata(params) do
+    base = if is_map(params["metadata"]), do: params["metadata"], else: %{}
+    if params["dev"] == true, do: Map.put(base, "dev", true), else: Map.delete(base, "dev")
+  end
+
+  defp dev_server?(%{metadata: %{"dev" => true}}), do: true
+  defp dev_server?(_), do: false
+
+  defp wants_dev_shards?(conn, params) do
+    params["dev"] in ["1", "true"] and
+      conn.assigns[:games_auth_mode] == :player_token and
+      match?(%{is_admin: true}, Guardian.Plug.current_resource(conn))
   end
 
   # POST /api/games/:game_slug/servers/heartbeat
@@ -259,7 +281,7 @@ defmodule PhoenixAppWeb.Api.GamesController do
         "max_players" => params["max_players"] || 64,
         "map_name" => params["map_name"],
         "version" => params["version"],
-        "metadata" => params["metadata"] || %{},
+        "metadata" => heartbeat_metadata(params),
 
         # WHO is on the server, not just how many. current_players above cannot
         # answer "which instance is this player in", which is the question the

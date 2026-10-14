@@ -13,6 +13,7 @@
 #   RaysSpaceSim\Saved\StagedBuilds                  UAT staging
 #   RaysSpaceSim\Saved\ServerBuild                   server archive (Docker build context)
 #   RaysSpaceSim\Saved\ClientBuild                   client archive (what the launcher publishes)
+#   %LOCALAPPDATA%\UnrealEngine\Common\Zen\Data      Zen: local DDC + cooked packages
 # And Unreal Build Accelerator's cache (up to 40 GB, C:\ProgramData\Epic\UnrealBuildAccelerator)
 # is pointed at F: with the UBA_ROOT variable; the old cache is just deleted.
 
@@ -37,8 +38,20 @@ $moves = @(
     @{ From = "$Project\Saved\Cooked";                     To = "$Target\Saved-Cooked" },
     @{ From = "$Project\Saved\StagedBuilds";               To = "$Target\Saved-StagedBuilds" },
     @{ From = "$Project\Saved\ServerBuild";                To = "$Target\Saved-ServerBuild" },
-    @{ From = "$Project\Saved\ClientBuild";                To = "$Target\Saved-ClientBuild" }
+    @{ From = "$Project\Saved\ClientBuild";                To = "$Target\Saved-ClientBuild" },
+    # Zen: the local DDC and, since bUseZenStore=True (2026-10-14), every cooked
+    # package for every platform. Grows with each platform cooked.
+    @{ From = "$env:LOCALAPPDATA\UnrealEngine\Common\Zen\Data"; To = "$Target\ZenData" }
 )
+
+# Zen keeps its data folder open while it runs; it restarts on its own the next
+# time the editor or a cook needs it.
+$zen = Get-Process -Name zenserver -ErrorAction SilentlyContinue
+if ($zen) {
+    Write-Host "stopping zenserver so its data folder can move"
+    $zen | Stop-Process -Force
+    Start-Sleep -Seconds 2
+}
 
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
 

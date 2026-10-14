@@ -19,6 +19,7 @@
 #   ./deploy-game.sh --build-only    build server + client and tag; publish nothing
 #   ./deploy-game.sh --client-only   build + publish a client for the LIVE server tag
 #   ./deploy-game.sh --publish-only  re-publish the last staged client (no cook)
+#   ./deploy-game.sh --server-only   build + smoke-test the server image; ship nothing
 #   ./deploy-game.sh --finish <tag>  finish a run whose server image built but
 #                                    whose client did not (no second server cook)
 #   ./deploy-game.sh --set <tag>     roll out a tag that is already built
@@ -482,6 +483,20 @@ case "${1:-}" in
     cmd_build_client
     cmd_build_launcher
     cmd_publish_client "$TAG"
+    ;;
+
+  --server-only)
+    # Build + smoke-test the Linux server image only. Nothing is rolled out and
+    # no client is built: rolling a server out without its client would lock
+    # every player out with UPDATE REQUIRED. For checking the cooked server
+    # between releases (the editor-run server is not a cooked one).
+    TAG="$(current_tag)"
+    stamp_build_id "$TAG"
+    cmd_build "$TAG"
+    cmd_smoke "$IMAGE_NAME:$TAG"
+    echo
+    echo "Not rolled out. It ships with its client in the next full ./deploy-game.sh,"
+    echo "or ./deploy-game.sh --finish $TAG builds that client and ships both."
     ;;
 
   --finish)

@@ -297,6 +297,18 @@ find "$ARCHIVE_DIR/" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 # Newlines inside an array literal need no escaping at all, so the argument list
 # cannot break whichever way the endings go. That is the point: the design does
 # not depend on a property of the file that nothing is maintaining.
+# INCREMENTAL COOK (2026-10-14). -iterate makes the cooker keep what it
+# cooked last time and redo only what changed (needs bUseZenStore=True in
+# DefaultGame.ini - without Zen the engine falls back to a full cook anyway).
+# FULL_COOK=1 throws the previous cook away, for when an incremental one is
+# suspected of being stale.
+COOK_MODE_ARGS=()
+if [ "${FULL_COOK:-0}" = "1" ]; then
+  echo "FULL_COOK=1 - cooking everything from scratch."
+else
+  COOK_MODE_ARGS+=(-iterate)
+fi
+
 UAT_ARGS=(
   BuildCookRun
   -project="$(win_path "$PROJECT")"
@@ -318,6 +330,7 @@ UAT_ARGS=(
   # in the value, so it survives bash -> RunUAT.bat -> commandlet unquoted.
   -additionalcookeroptions=-ini:EditorPerProjectUserSettings:[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]:bAutoStartServer=False
 
+  ${COOK_MODE_ARGS[@]+"${COOK_MODE_ARGS[@]}"}
   -archive
   -archivedirectory="$(win_path "$ARCHIVE_DIR")"
 )
