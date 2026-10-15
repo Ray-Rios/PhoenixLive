@@ -109,10 +109,10 @@ defmodule PhoenixAppWeb.AdminLive.Uploads do
 
   def handle_event("delete_file", %{"path" => path}, socket) do
     uploads_path = Path.join(:code.priv_dir(:phoenix_app), "static/uploads")
-    full_path = Path.join(uploads_path, path)
-    
-    # Security: Ensure the path is within uploads directory
-    if String.starts_with?(Path.expand(full_path), Path.expand(uploads_path)) do
+    # Security: confine to the uploads directory, and never rm_rf the root itself.
+    full_path = PhoenixApp.SafePath.resolve!(uploads_path, path)
+
+    if full_path && full_path != Path.expand(uploads_path) do
       case File.rm_rf(full_path) do
         {:ok, _} ->
           {:noreply,

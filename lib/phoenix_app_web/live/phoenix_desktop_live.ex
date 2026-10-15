@@ -92,25 +92,19 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
       if window_id do
         window = Enum.find(socket.assigns.windows, &(&1.id == window_id))
         if window do
-          dest_path = get_real_path(window.current_path, socket.assigns.current_user)
-          
-          # Check quota if uploading to user drive
-          quota_ok = cond do
-            String.starts_with?(window.current_path, "root://") ->
-              socket.assigns.current_user.role in ["admin", "gm"]
-            
-            String.starts_with?(window.current_path, "user://") ->
-              check_quota(socket.assigns.current_user, entry.client_size) == :ok
-            
-            true ->
-              true # Public drive has no quota? Or maybe it should. For now assume public is free.
-          end
+          user = socket.assigns.current_user
+          dest_path = get_real_path(window.current_path, user)
+
+          # Write permission per drive (public/root = staff only), then quota on
+          # the user's own drive.
+          quota_ok =
+            dest_path != nil and can_write_virtual_path?(window.current_path, user) and
+              (not String.starts_with?(window.current_path, "user://") or
+                 check_quota(user, entry.client_size) == :ok)
 
           if quota_ok do
-            consume_uploaded_entries(socket, :files, fn %{path: path}, _entry ->
-              dest = Path.join(dest_path, entry.client_name)
-              File.cp!(path, dest)
-              {:ok, dest}
+            consume_uploaded_entries(socket, :files, fn %{path: path}, e ->
+              copy_upload_to(dest_path, path, e)
             end)
             
             send(self(), {:refresh_window, window_id})
@@ -1050,13 +1044,12 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     window = Enum.find(socket.assigns.windows, &(&1.id == window_id))
     
     if window do
-      dest_path = get_file_explorer_real_path(window.current_path, socket.assigns.current_user)
-      
-      if dest_path && File.exists?(dest_path) do
+      user = socket.assigns.current_user
+      dest_path = get_file_explorer_real_path(window.current_path, user)
+
+      if dest_path && File.dir?(dest_path) && can_write_explorer_path?(window.current_path, user) do
         consume_uploaded_entries(socket, :files, fn %{path: path}, entry ->
-          dest = Path.join(dest_path, entry.client_name)
-          File.cp!(path, dest)
-          {:ok, dest}
+          copy_upload_to(dest_path, path, entry)
         end)
         
         # Refresh window
@@ -1133,13 +1126,12 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
     window = Enum.find(socket.assigns.windows, &(&1.id == window_id))
     
     if window do
-      dest_path = get_real_path(window.current_path, socket.assigns.current_user)
-      
-      if dest_path do
+      user = socket.assigns.current_user
+      dest_path = get_real_path(window.current_path, user)
+
+      if dest_path && can_write_virtual_path?(window.current_path, user) do
         consume_uploaded_entries(socket, :files, fn %{path: path}, entry ->
-          dest = Path.join(dest_path, entry.client_name)
-          File.cp!(path, dest)
-          {:ok, dest}
+          copy_upload_to(dest_path, path, entry)
         end)
         
         # Refresh window contents
@@ -1486,14 +1478,15 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         }
       end)
     else
-      real_path = get_real_path(path, user)
-      
-      # Ensure directory exists
-      if !File.exists?(real_path) do
-        File.mkdir_p!(real_path)
+      case get_real_path(path, user) do
+        nil ->
+          []
+
+        real_path ->
+          # Ensure directory exists
+          if !File.exists?(real_path), do: File.mkdir_p!(real_path)
+          list_contents(real_path, path)
       end
-      
-      list_contents(real_path, path)
     end
   end
 
@@ -1532,29 +1525,68 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         true -> Application.app_dir(:phoenix_app, "priv/static/uploads")
       end
     
+    # `path` comes from the client (window.current_path is set by fm_navigate_to).
+    # Every branch goes through SafePath so `user://../<other id>` cannot escape
+    # the drive's root. Returns nil when it would.
     cond do
-      path == "root://" && user && user.role in ["admin", "gm"] ->
-        base_path
-        
+      !is_binary(path) ->
+        nil
+
       String.starts_with?(path, "root://") && user && user.role in ["admin", "gm"] ->
-        subpath = String.replace_prefix(path, "root://", "")
-        Path.join(base_path, subpath)
-        
-      path == "public://" ->
-        Path.join(base_path, "public")
-      
+        PhoenixApp.SafePath.resolve!(base_path, String.replace_prefix(path, "root://", ""))
+
       String.starts_with?(path, "public://") ->
-        subpath = String.replace_prefix(path, "public://", "")
-        Path.join([base_path, "public", subpath])
-        
-      path == "user://" && user ->
-        Path.join([base_path, "users", "#{user.id}"])
-        
+        PhoenixApp.SafePath.resolve!(
+          Path.join(base_path, "public"),
+          String.replace_prefix(path, "public://", "")
+        )
+
       String.starts_with?(path, "user://") && user ->
-        subpath = String.replace_prefix(path, "user://", "")
-        Path.join([base_path, "users", "#{user.id}", subpath])
-        
+        PhoenixApp.SafePath.resolve!(
+          Path.join([base_path, "users", "#{user.id}"]),
+          String.replace_prefix(path, "user://", "")
+        )
+
       true -> nil
+    end
+  end
+
+  # Who may write into a drive. Public is served to everyone from our own origin,
+  # so only staff may put files there.
+  defp can_write_virtual_path?(path, user) when is_binary(path) do
+    cond do
+      is_nil(user) -> false
+      String.starts_with?(path, "root://") -> user.role in ["admin", "gm"]
+      String.starts_with?(path, "public://") -> user.role in ["admin", "gm"]
+      String.starts_with?(path, "user://") -> true
+      true -> false
+    end
+  end
+
+  defp can_write_virtual_path?(_, _), do: false
+
+  # Destination for one uploaded entry, or nil if the name is unusable or the
+  # type is active content (HTML/SVG/JS...) that would run on our origin.
+  defp upload_destination(dest_dir, client_name) do
+    with name when is_binary(name) <- PhoenixApp.SafePath.filename(client_name),
+         false <- PhoenixApp.SafePath.active_content?(name),
+         {:ok, dest} <- PhoenixApp.SafePath.resolve(dest_dir, name) do
+      dest
+    else
+      _ -> nil
+    end
+  end
+
+  # consume_uploaded_entries callback shared by the three upload handlers.
+  defp copy_upload_to(dest_dir, temp_path, entry) do
+    case upload_destination(dest_dir, entry.client_name) do
+      nil ->
+        Logger.warning("Rejected upload #{inspect(entry.client_name)}: unsafe name or type")
+        {:ok, :rejected}
+
+      dest ->
+        File.cp!(temp_path, dest)
+        {:ok, dest}
     end
   end
 
@@ -1700,8 +1732,8 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
         
       "/public/" <> subpath ->
         base_path = get_uploads_base_path()
-        real_path = Path.join([base_path, "public", subpath])
-        if File.exists?(real_path) && File.dir?(real_path) do
+        real_path = PhoenixApp.SafePath.resolve!(Path.join(base_path, "public"), subpath)
+        if real_path && File.dir?(real_path) do
           list_file_explorer_contents(real_path, path)
         else
           []
@@ -1876,23 +1908,37 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   defp get_file_explorer_real_path(path, user) do
     base_path = get_uploads_base_path()
     
+    # `path` is client-supplied; SafePath keeps `/my-files/../../x` inside the drive.
     case path do
       "/my-files" ->
         if user, do: Path.join([base_path, "users", "#{user.id}"]), else: nil
-        
+
       "/public" ->
         Path.join(base_path, "public")
-        
+
       "/public/" <> subpath ->
-        Path.join([base_path, "public", subpath])
-        
+        PhoenixApp.SafePath.resolve!(Path.join(base_path, "public"), subpath)
+
       "/my-files/" <> subpath ->
-        if user, do: Path.join([base_path, "users", "#{user.id}", subpath]), else: nil
-        
+        if user,
+          do: PhoenixApp.SafePath.resolve!(Path.join([base_path, "users", "#{user.id}"]), subpath),
+          else: nil
+
       _ ->
         nil
     end
   end
+
+  defp can_write_explorer_path?(path, user) when is_binary(path) do
+    cond do
+      is_nil(user) -> false
+      path == "/my-files" or String.starts_with?(path, "/my-files/") -> true
+      path == "/public" or String.starts_with?(path, "/public/") -> user.role in ["admin", "gm"]
+      true -> false
+    end
+  end
+
+  defp can_write_explorer_path?(_, _), do: false
 
   # Build breadcrumbs for file explorer
   defp build_file_explorer_breadcrumbs(path) do
@@ -1964,6 +2010,10 @@ defmodule PhoenixAppWeb.PhoenixDesktopLive do
   # Check if user can delete a path
   defp can_delete_path?(path, user) do
     cond do
+      not is_binary(path) -> false
+      # Belt and braces: get_file_explorer_real_path already confines the path,
+      # but never authorise anything with a parent-directory segment.
+      ".." in Path.split(path) -> false
       # Can't delete root paths
       path in ["/", "/my-files", "/public"] -> false
       # User can delete their own files

@@ -26,9 +26,16 @@ defmodule PhoenixAppWeb.Endpoint do
     longpoll: false
 
   # Serve user uploads from mounted PVC (/app/uploads) or local uploads folder
+  @uploads_root if(File.exists?("/app/uploads"), do: "/app/uploads", else: "uploads")
+
+  # Must stay directly before the /uploads Plug.Static: adds nosniff/sandbox headers
+  # to every upload and authorises private trees (users/<id>/, <id>/files/) itself
+  # so Plug.Static never serves them publicly.
+  plug PhoenixAppWeb.Plugs.UploadsGuard, root: @uploads_root, session: @session_options
+
   plug Plug.Static,
     at: "/uploads",
-    from: if(File.exists?("/app/uploads"), do: "/app/uploads", else: "uploads"),
+    from: @uploads_root,
     gzip: false,
     cache_control_for_etags: "public, max-age=31536000"
 
@@ -72,4 +79,4 @@ defmodule PhoenixAppWeb.Endpoint do
   plug Plug.Head
   plug Plug.Session, @session_options
   plug PhoenixAppWeb.Router
-end
+end

@@ -5,9 +5,10 @@ defmodule PhoenixApp.UserFileUpload do
   @versions [:original, :thumb]
 
   # Validate file types - allow common file types
-  def validate({_file, _}) do
-    # Allow most common file types
-    true
+  def validate({file, _}) do
+    # Allow most common file types, but never ones a browser executes (HTML, SVG,
+    # JS...): these are served from our own origin, so they would be stored XSS.
+    not PhoenixApp.SafePath.active_content?(file.file_name)
   end
 
   # Generate thumbnail for image files

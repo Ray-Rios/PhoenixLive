@@ -221,13 +221,16 @@ defmodule PhoenixApp.Uploads do
 
   @doc "Generate a signed URL for secure access to an uploaded file. Local fallback uses Phoenix.Token with a default TTL."
   def signed_url_for(url_path, opts \\ []) when is_binary(url_path) do
-    expires_in = Keyword.get(opts, :expires_in, 3600)
+    # Capped at one day so a signed link can never be effectively permanent.
+    expires_in = opts |> Keyword.get(:expires_in, 3600) |> min(86_400)
 
-    token = Phoenix.Token.sign(PhoenixAppWeb.Endpoint, "uploads", url_path)
+    # The lifetime is signed INTO the token. It used to travel as a separate
+    # `expires_in` query param that the controller trusted, so anyone could
+    # extend a link indefinitely by editing the URL.
+    token = Phoenix.Token.sign(PhoenixAppWeb.Endpoint, "uploads", url_path, max_age: expires_in)
 
-    # Build a proper URL query (do not use Path.join for query strings).
     # Use URI.encode_www_form/1 so token characters are safely encoded for query params.
-    "/uploads/signed?token=" <> URI.encode_www_form(token) <> "&expires_in=" <> to_string(expires_in)
+    "/uploads/signed?token=" <> URI.encode_www_form(token)
   end
 
   @doc """
@@ -319,9 +322,8 @@ defmodule PhoenixApp.Uploads do
   Gets the absolute filesystem path from a URL path.
   """
   def url_to_path(url_path) when is_binary(url_path) do
-    url_path
-    |> String.replace_prefix("/uploads/", "")
-    |> then(&Path.join([base_dir(), &1]))
+    # Confined to base_dir(): "/uploads/../config/x" must not resolve outside it.
+    PhoenixApp.SafePath.resolve!(base_dir(), String.replace_prefix(url_path, "/uploads/", ""))
   end
 
   def url_to_path(_), do: nil

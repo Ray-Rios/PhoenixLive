@@ -32,7 +32,9 @@ import urllib.request
 EXCLUDE_SUFFIXES = (".pdb", ".debug", ".sym")
 EXCLUDE_PREFIXES = ("Manifest_",)
 
-PREREQ_NAME = "UEPrereqSetup_x64.exe"
+# What -prereqs stages. UE 5.8 ships the plain VC++ redistributable; older
+# engines staged UEPrereqSetup_x64.exe. First match wins.
+PREREQ_NAMES = ("vc_redist.x64.exe", "UEPrereqSetup_x64.exe")
 
 
 def log(msg):
@@ -181,7 +183,8 @@ def main():
     if len(root_exes) != 1:
         die("expected exactly one .exe at the root of the staged client, found: %r" % root_exes)
     exe = root_exes[0]
-    prereq = next((f["path"] for f in files if f["path"].endswith("/" + PREREQ_NAME)), None)
+    prereq = next((f["path"] for name in PREREQ_NAMES for f in files
+                   if f["path"].lower().endswith("/" + name.lower())), None)
     log("  game exe: %s" % exe)
     log("  prereqs : %s" % (prereq or "(none staged)"))
 
