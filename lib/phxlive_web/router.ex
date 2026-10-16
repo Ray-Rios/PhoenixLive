@@ -133,6 +133,13 @@ defmodule PhxliveWeb.Router do
     live "/shop/product/:id", ShopLive, :product
     live "/cart", CartLive, :index
     live "/checkout", CheckoutLive, :index
+
+    # The store (PHXLIVE.md §8): Gem packs, purchase history, and the fake
+    # provider's checkout page (refuses unless the fake provider is enabled).
+    live "/store", StoreLive, :index
+    live "/store/orders", StoreOrderLive, :index
+    live "/store/orders/:id", StoreOrderLive, :show
+    live "/store/fake-checkout/:ref", FakeCheckoutLive, :show
     live "/forum", ForumLive, :index
     live "/forum/:channel_id", ForumLive, :channel
     live "/games", GamesLive, :index

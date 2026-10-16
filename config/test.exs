@@ -32,6 +32,7 @@ config :phxlive, Phxlive.Drive.Janitor, enabled: false
 config :phxlive, Phxlive.Plugins.Runtime, enabled: false
 config :phxlive, :extra_plugins, [Phxlive.Test.FixturePlugin]
 config :phxlive, :default_active_plugins, []
+config :phxlive, Phxlive.Payments, fake_enabled: true
 config :phxlive, Phxlive.Storage, root: Path.join(System.tmp_dir!(), "phxlive_test_drive")
 
 # Tests register accounts and then log in as them; without this the login gate

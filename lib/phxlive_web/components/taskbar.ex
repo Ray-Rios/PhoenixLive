@@ -129,9 +129,9 @@ defmodule PhxliveWeb.Components.Taskbar do
                   <span>🎭</span>
                   <span class="text-sm">Forum</span>
                 </.link>
-                <.link navigate={~p"/shop"} class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors">
-                  <span>💰</span>
-                  <span class="text-sm">Shop</span>
+                <.link navigate={~p"/store"} class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors">
+                  <span>💎</span>
+                  <span class="text-sm">Store</span>
                 </.link>
                 <.link navigate={~p"/blog"} class="flex items-center space-x-2 px-3 py-2 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors">
                   <span>🚬</span>

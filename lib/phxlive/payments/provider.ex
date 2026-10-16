@@ -1,0 +1,28 @@
+defmodule Phxlive.Payments.Provider do
+  @moduledoc """
+  A payment provider (PHXLIVE.md §8). Hosted checkout only: card details
+  never touch the hub. Stripe and PayPal will implement this;
+  `Phxlive.Payments.Fake` does for development and tests.
+
+  There is deliberately no refund callback: sales are final.
+  """
+  alias Phxlive.Store.Order
+
+  @doc "The provider's name, as stored on orders and events (\"stripe\")."
+  @callback name() :: String.t()
+
+  @doc """
+  Starts a hosted checkout for an order. `opts` has `:success_url` and
+  `:cancel_url`. Returns where to send the buyer and the provider's reference
+  for this checkout (matched against later events).
+  """
+  @callback create_checkout(%Order{}, opts :: keyword()) ::
+              {:ok, %{redirect_url: String.t(), provider_ref: String.t()}} | {:error, term()}
+
+  @doc """
+  Checks a webhook's signature against its raw body and turns it into an
+  event, or `:ignore` for event types the hub doesn't use.
+  """
+  @callback parse_webhook(raw_body :: binary(), headers :: [{String.t(), String.t()}]) ::
+              {:ok, Phxlive.Payments.Event.t()} | :ignore | {:error, term()}
+end

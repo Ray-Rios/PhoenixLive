@@ -25,16 +25,8 @@ defmodule PhxliveWeb.Components.Navigation do
               Phx<span class="rainbow-text">Live</span>
             </.link>
             <div class="hidden lg:flex space-x-4 flex-1 justify-center">
-              <.link navigate={~p"/shop"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
-                💰 Shop
-              </.link>
-              <.link navigate={~p"/cart"} class="text-white hover:text-blue-400 transition-colors duration-300 relative text-sm">
-                🛒 Cart
-                <%= if @current_user do %>
-                  <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                    <%= get_cart_item_count(@current_user) %>
-                  </span>
-                <% end %>
+              <.link navigate={~p"/store"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
+                💎 Store
               </.link>
               <.link navigate={~p"/forum"} class="text-white hover:text-blue-400 transition-colors duration-300 text-sm">
                 💬 Forum
@@ -191,23 +183,6 @@ defmodule PhxliveWeb.Components.Navigation do
       });
     </script>
     """
-  end
-
-  defp get_cart_item_count(user) do
-    cond do
-      is_nil(user) -> 0
-      is_binary(user) -> 
-        # Handle case where user is passed as string ID (shouldn't happen but let's be safe)
-        case Phxlive.Accounts.get_user(user) do
-          nil -> 0
-          user_struct -> get_cart_item_count(user_struct)
-        end
-      is_map(user) ->
-        # TODO: Implement cart functionality
-        # For now, return 0 until cart system is implemented
-        0
-      true -> 0
-    end
   end
 
   defp get_user_display_name(user) do

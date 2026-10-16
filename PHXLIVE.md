@@ -104,6 +104,10 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 | 2026-10-16 | **The currency is Gems: 100 Gems = US$1.** No bundle bonuses; bonuses are for promotional events. | Owner's decision. |
 | 2026-10-16 | **No refunds, ever**, for Gems, items or subscriptions. Cancelling a subscription stops the next renewal; the current period runs out. | Owner's decision. Chargebacks still happen (the bank decides those), so the ledger keeps the claw-back path. |
 | 2026-10-16 | **Stripe first, in test mode**, once an account exists; PayPal after. Until then the provider interface is built and tested against a fake provider. | No Stripe account yet. |
+| 2026-10-16 | **Launch Gem packs:** 500 ($5), 1,000 ($10), 2,500 ($25), 5,000 ($50), 10,000 ($100). Admins can change them. | Owner's decision. |
+| 2026-10-16 | **Storage tiers and VIP access are card subscriptions** (Stripe, later PayPal), billed monthly; cancelling stops the next renewal. Gems are for in-game items. | Owner's decision. |
+| 2026-10-16 | **The store is Buy buttons, no cart**: one checkout per pack or plan. The old physical-goods shop (cart, shipping statuses, download tokens) is retired. | Owner's decision. Every product is a single purchase. |
+| 2026-10-16 | **Members and up may buy** (verified email, active account); Guest and Banned can't. Same rule as storage tiers. | Owner's decision. |
 | 2026-10-16 | **CI's `staging-deploy` job is removed.** CI tests the public hub; production images come only from `deploy-prod.sh`, run from a working copy that has the private plugins. | Owner's decision. A CI-built image would ship without them. |
 | 2026-10-15 | **Plugin slug and game slug are separate.** The plugin slug is the folder name (underscores, maps to the module name); the game slug defaults to it but a plugin may keep an existing one (RaysSpaceSim stays `rays-space-sim`, which its clients use). Game slugs may now contain underscores. | Needed for `web_lobby`, and so existing game clients don't break. |
 
@@ -377,7 +381,23 @@ from the current UI and should be deleted in milestone 5.
 
 ## 8. Store, payments, currency and entitlements
 
-### Current state
+### Status
+
+**Milestone 4a, implemented 2026-10-16:** Gems and the store, with a fake payment provider.
+
+| Piece | Where |
+|---|---|
+| Double-entry Gem ledger (`wallet_accounts`, `wallet_transactions`, `wallet_entries`) | `Phxlive.Wallet`: `balance/1`, `credit_purchase/4`, `spend/3`, `grant/3`, `clawback/3`, `history/2`. Every call has an idempotency key; user rows are locked, system accounts aren't (see its moduledoc) |
+| Products and orders (`store_products`, `store_orders`) | `Phxlive.Store`: `gem_packs/0`, `can_buy/1`, `start_checkout/3`, `apply_event/1`. Packs are validated at 100 Gems/$; extra Gems only as a dated promotion (`bonus_gems`, `promo_starts_at`/`ends_at`) |
+| Event inbox (`payment_events`) | `Phxlive.Payments`: `ingest/1` stores then applies; a failed event is retried on re-delivery |
+| Providers | `Phxlive.Payments.Provider` (`create_checkout/2`, `parse_webhook/2`; no refund callback). `Payments.Fake` for dev/test, refused unless `fake_enabled` |
+| Pages | `/store` (packs, balance, "all sales are final" checkbox), `/store/orders`, `/store/orders/:id` (updates live), `/store/fake-checkout/:ref` (dev/test) |
+
+In production no provider is enabled yet, so `/store` shows the packs with "Purchases
+open soon". Next: Stripe (needs an account), webhooks with raw-body verification, then
+subscriptions for storage tiers and VIP channels, admin pages, and retiring the old shop.
+
+### The old shop (to retire)
 
 Scaffolding only. `Order` has a `stripe_payment_intent_id` column but there is no
 payment library dependency; checkout says "Payment processing will be integrated with
@@ -432,7 +452,7 @@ touches our servers.
 - A user returning from checkout sees "processing" until the webhook marks the order
   paid. Never fulfil from the redirect.
 
-**Gems.** The hub-wide currency. **100 Gems = US$1**, so a pack's price is its Gems / 100
+**Gems.** The hub-wide currency (implemented: `Phxlive.Wallet`, `Phxlive.Store`). **100 Gems = US$1**, so a pack's price is its Gems / 100
 dollars; no bonus Gems except in promotional events (a promotion is a pack with extra
 Gems and an active window, set by an admin). **No refunds, ever** (decisions log): there is
 no refund path in the code, and the store, checkout and terms say so before payment. A

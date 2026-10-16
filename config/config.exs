@@ -92,6 +92,14 @@ config :cors_plug,
 # Plugins active until an admin saves a choice on /admin/plugins (PHXLIVE.md §9).
 config :phxlive, :default_active_plugins, ["web_lobby"]
 
+# Payments (PHXLIVE.md §8). "fake" is a pretend provider for development and
+# tests; it refuses to work unless fake_enabled is true (dev.exs, test.exs).
+# Stripe gets added here once there's an account.
+config :phxlive, Phxlive.Payments,
+  default_provider: "fake",
+  providers: %{"fake" => Phxlive.Payments.Fake},
+  fake_enabled: false
+
 config :phxlive, Phxlive.Repo,
   username: System.get_env("DB_USERNAME") || "root",
   password: System.get_env("DB_PASSWORD") || "postgres",
