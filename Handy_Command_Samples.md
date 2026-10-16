@@ -34,9 +34,9 @@ mix phx.server
 pkill -f "mix phx.server"    # stop a stray local server
 ```
 
-⚠️ **Games platform has its own Ecto repo** (`PhoenixApp.GamesRepo`, migrations
+⚠️ **Games platform has its own Ecto repo** (`Phxlive.GamesRepo`, migrations
 under `priv/games_repo/migrations`). `mix ecto.migrate` only touches the main repo —
-games migrations need `mix ecto.migrate -r PhoenixApp.GamesRepo`.
+games migrations need `mix ecto.migrate -r Phxlive.GamesRepo`.
 
 ### Assets
 
@@ -161,7 +161,7 @@ docker build --no-cache -f Dockerfile.multistage -t phoenixapp:dev --build-arg M
 ```bash
 MSYS_NO_PATHCONV=1 kubectl exec -n phoenixapp \
   $(kubectl get pods -n phoenixapp -l app=phoenix-web -o name | head -1) \
-  -- /app/bin/phoenix_app eval "PhoenixApp.Release.migrate()"
+  -- /app/bin/phoenix_app eval "Phxlive.Release.migrate()"
 
 # Or as a one-shot job (what new-prod-migrations.sh does):
 kubectl apply -f k3s/jobs/run-migrations.yaml

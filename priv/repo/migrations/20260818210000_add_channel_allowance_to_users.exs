@@ -1,10 +1,10 @@
-defmodule PhoenixApp.Repo.Migrations.AddChannelAllowanceToUsers do
+defmodule Phxlive.Repo.Migrations.AddChannelAllowanceToUsers do
   use Ecto.Migration
 
   @moduledoc """
   How many channels a user may create.
 
-  Replaces a `5` hardcoded in `PhoenixApp.Forum.Channel.validate_channel_limit/1`.
+  Replaces a `5` hardcoded in `Phxlive.Forum.Channel.validate_channel_limit/1`.
   The number was already a product decision rather than a technical one, and it
   is about to become a purchasable one - /shop will sell channel slots - so it
   needs somewhere to live that a purchase can increment.

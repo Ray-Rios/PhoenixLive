@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.AddInstanceColumnsToGameServers do
+defmodule Phxlive.GamesRepo.Migrations.AddInstanceColumnsToGameServers do
   use Ecto.Migration
 
   def up do

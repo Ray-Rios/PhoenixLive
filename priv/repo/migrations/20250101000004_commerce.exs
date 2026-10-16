@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.Commerce do
+defmodule Phxlive.Repo.Migrations.Commerce do
   @moduledoc """
   ============================================================================
   COMMERCE TABLES

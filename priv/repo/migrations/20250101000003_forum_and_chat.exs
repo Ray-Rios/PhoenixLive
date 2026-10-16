@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.ForumAndChat do
+defmodule Phxlive.Repo.Migrations.ForumAndChat do
   @moduledoc """
   ============================================================================
   FORUM & CHAT TABLES

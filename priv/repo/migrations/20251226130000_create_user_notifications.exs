@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CreateUserNotifications do
+defmodule Phxlive.Repo.Migrations.CreateUserNotifications do
   use Ecto.Migration
 
   def change do

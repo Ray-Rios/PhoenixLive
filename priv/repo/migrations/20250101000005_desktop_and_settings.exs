@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.DesktopAndSettings do
+defmodule Phxlive.Repo.Migrations.DesktopAndSettings do
   @moduledoc """
   ============================================================================
   DESKTOP & SETTINGS TABLES

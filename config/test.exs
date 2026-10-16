@@ -1,7 +1,7 @@
 import Config
 
 # Minimal test configuration to allow unit tests that don't boot the DB
-config :phoenix_app, PhoenixApp.Repo,
+config :phxlive, Phxlive.Repo,
   username: System.get_env("DB_USERNAME") || "postgres",
   password: System.get_env("DB_PASSWORD") || "postgres",
   database: System.get_env("DB_NAME") || "phoenixapp_test",
@@ -10,7 +10,7 @@ config :phoenix_app, PhoenixApp.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10
 
-config :phoenix_app, PhoenixApp.GamesRepo,
+config :phxlive, Phxlive.GamesRepo,
   username: System.get_env("DB_USERNAME") || "postgres",
   password: System.get_env("DB_PASSWORD") || "postgres",
   database: System.get_env("GAMES_DB_NAME") || "phoenix_games_test",
@@ -19,11 +19,15 @@ config :phoenix_app, PhoenixApp.GamesRepo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10
 
-config :phoenix_app, PhoenixAppWeb.Endpoint,
+config :phxlive, PhxliveWeb.Endpoint,
   server: false
 
-config :logger, level: :warn
+config :logger, level: :warning
+
+# Drive: no background janitor in tests; bodies go to a throwaway directory.
+config :phxlive, Phxlive.Drive.Janitor, enabled: false
+config :phxlive, Phxlive.Storage, root: Path.join(System.tmp_dir!(), "phxlive_test_drive")
 
 # Tests register accounts and then log in as them; without this the login gate
 # on email_verified_at makes that a two-step dance in every fixture.
-config :phoenix_app, :allow_dev_verify, true
+config :phxlive, :allow_dev_verify, true

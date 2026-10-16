@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.LinkHoloSimsToChannels do
+defmodule Phxlive.GamesRepo.Migrations.LinkHoloSimsToChannels do
   use Ecto.Migration
 
   @moduledoc """
@@ -6,13 +6,13 @@ defmodule PhoenixApp.GamesRepo.Migrations.LinkHoloSimsToChannels do
 
   NO FOREIGN KEY IS POSSIBLE HERE, AND THAT IS NOT AN OVERSIGHT.
 
-  `chat_channels` lives in the main database (phoenixapp_prod, PhoenixApp.Repo).
+  `chat_channels` lives in the main database (phoenixapp_prod, Phxlive.Repo).
   `holo_sims` lives in the games database (phoenix_games_prod,
-  PhoenixApp.GamesRepo). Postgres cannot reference across databases, so this is
+  Phxlive.GamesRepo). Postgres cannot reference across databases, so this is
   a plain uuid column and integrity is the application's job. Concretely:
 
     * a channel can be deleted while a sim still points at it. Deleting a channel
-      must delete the sim explicitly - see PhoenixApp.Forum.delete_channel/1.
+      must delete the sim explicitly - see Phxlive.Forum.delete_channel/1.
     * there is no ON DELETE CASCADE to fall back on, so an orphaned sim is a
       real state the code has to handle rather than one the database prevents.
     * the two writes cannot share a transaction. Creating a channel and its sim

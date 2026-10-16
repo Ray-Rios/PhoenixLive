@@ -24,27 +24,27 @@ config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 # ----------------------------
 # Ecto Repos
 # ----------------------------
-config :phoenix_app,
-  ecto_repos: [PhoenixApp.Repo, PhoenixApp.GamesRepo], # PhoenixApp.Repo = main app, GamesRepo = isolated multiplayer game data
+config :phxlive,
+  ecto_repos: [Phxlive.Repo, Phxlive.GamesRepo], # Phxlive.Repo = main app, GamesRepo = isolated multiplayer game data
   generators: [timestamp_type: :utc_datetime]
 
 # ----------------------------
 # Phoenix Endpoint
 # ----------------------------
-config :phoenix_app, PhoenixAppWeb.Endpoint,
+config :phxlive, PhxliveWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Phoenix.Endpoint.Cowboy2Adapter,
   render_errors: [
-    formats: [html: PhoenixAppWeb.ErrorHTML, json: PhoenixAppWeb.ErrorJSON],
+    formats: [html: PhxliveWeb.ErrorHTML, json: PhxliveWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: PhoenixApp.PubSub
+  pubsub_server: Phxlive.PubSub
 
 # ----------------------------
 # Mailer (default - overridden by runtime.exs in prod)
 # Using Logger adapter as default since Local adapter causes global process conflicts in clusters
 # ----------------------------
-config :phoenix_app, PhoenixApp.Mailer,
+config :phxlive, Phxlive.Mailer,
   adapter: Swoosh.Adapters.Logger,
   level: :info
 
@@ -64,13 +64,13 @@ config :esbuild,
 # Logger
 # ----------------------------
 config :logger,
-  backends: [:console, PhoenixApp.LogBufferBackend]
+  backends: [:console, Phxlive.LogBufferBackend]
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
-config :logger, PhoenixApp.LogBufferBackend,
+config :logger, Phxlive.LogBufferBackend,
   level: :info
 
 # ----------------------------
@@ -89,7 +89,7 @@ config :cors_plug,
 # ----------------------------
 # Ecto Repo defaults
 # ----------------------------
-config :phoenix_app, PhoenixApp.Repo,
+config :phxlive, Phxlive.Repo,
   username: System.get_env("DB_USERNAME") || "root",
   password: System.get_env("DB_PASSWORD") || "postgres",
   database: System.get_env("DB_NAME") || "phoenixapp_dev",
@@ -103,7 +103,7 @@ config :phoenix_app, PhoenixApp.Repo,
 # ----------------------------
 # Games Repo defaults (isolated database for multiplayer game data - RaysSpaceSim, future games)
 # ----------------------------
-config :phoenix_app, PhoenixApp.GamesRepo,
+config :phxlive, Phxlive.GamesRepo,
   username: System.get_env("DB_USERNAME") || "root",
   password: System.get_env("DB_PASSWORD") || "postgres",
   database: System.get_env("GAMES_DB_NAME") || "phoenix_games_dev",

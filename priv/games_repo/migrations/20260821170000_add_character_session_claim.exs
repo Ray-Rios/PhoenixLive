@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.AddCharacterSessionClaim do
+defmodule Phxlive.GamesRepo.Migrations.AddCharacterSessionClaim do
   @moduledoc """
   Single-session enforcement: a character may be in at most one live world or
   instance at a time.

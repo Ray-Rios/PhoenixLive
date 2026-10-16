@@ -5,9 +5,9 @@ set -euo pipefail
 POD=$(kubectl get pods -n phoenixapp -l app=phoenix-web -o jsonpath='{.items[0].metadata.name}')
 
 kubectl exec -n phoenixapp $POD -- /app/bin/phoenix_app eval '
-{:ok, _} = Application.ensure_all_started(:phoenix_app)
-alias PhoenixApp.Scheduler
-alias PhoenixApp.Scheduler.Engine
+{:ok, _} = Application.ensure_all_started(:phxlive)
+alias Phxlive.Scheduler
+alias Phxlive.Scheduler.Engine
 start = DateTime.utc_now()
 {:ok, project} = Scheduler.create_project(%{name: "engine-smoke-$(System.os_time())", start_date: start})
 {:ok, a} = Scheduler.create_task(%{project_id: project.id, title: "A", duration_seconds: 3600})

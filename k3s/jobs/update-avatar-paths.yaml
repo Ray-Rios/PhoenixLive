@@ -40,7 +40,7 @@ spec:
                 RETURNING id, avatar_url;
               \"
               
-              case Ecto.Adapters.SQL.query(PhoenixApp.Repo, query) do
+              case Ecto.Adapters.SQL.query(Phxlive.Repo, query) do
                 {:ok, result} ->
                   IO.puts(\"Updated #{result.num_rows} avatar paths\")
                   Enum.each(result.rows, fn [id, url] ->

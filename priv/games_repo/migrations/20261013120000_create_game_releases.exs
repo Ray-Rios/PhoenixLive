@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.CreateGameReleases do
+defmodule Phxlive.GamesRepo.Migrations.CreateGameReleases do
   use Ecto.Migration
 
   @moduledoc """

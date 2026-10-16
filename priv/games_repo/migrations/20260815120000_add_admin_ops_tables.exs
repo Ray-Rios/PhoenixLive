@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.AddAdminOpsTables do
+defmodule Phxlive.GamesRepo.Migrations.AddAdminOpsTables do
   @moduledoc """
   The data behind the RaysSpaceSim admin section: who is on which instance,
   the command channel that lets an admin act on a running server, and a record

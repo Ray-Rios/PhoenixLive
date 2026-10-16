@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.GameCombatAndSpells do
+defmodule Phxlive.Repo.Migrations.GameCombatAndSpells do
   use Ecto.Migration
 
   def up do

@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CreateScheduledEventsAndProjectEvents do
+defmodule Phxlive.Repo.Migrations.CreateScheduledEventsAndProjectEvents do
   use Ecto.Migration
 
   def change do

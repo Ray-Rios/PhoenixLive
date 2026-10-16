@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.CreateHoloSims do
+defmodule Phxlive.GamesRepo.Migrations.CreateHoloSims do
   use Ecto.Migration
 
   def up do

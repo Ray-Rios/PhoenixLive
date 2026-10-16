@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CoreUsersAndSecurity do
+defmodule Phxlive.Repo.Migrations.CoreUsersAndSecurity do
   @moduledoc """
   ============================================================================
   CORE USERS & SECURITY TABLES

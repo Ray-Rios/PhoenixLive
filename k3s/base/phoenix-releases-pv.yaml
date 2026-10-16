@@ -1,7 +1,7 @@
 # Client releases for the RaysSpaceSim launcher (content-addressed blobs).
 # Kept OFF /app/uploads on purpose: that volume is served publicly by
 # Plug.Static, and every byte of the client must go through
-# PhoenixAppWeb.Api.ReleasesController, which checks the signed-in player.
+# PhxliveWeb.Api.ReleasesController, which checks the signed-in player.
 apiVersion: v1
 kind: PersistentVolume
 metadata:

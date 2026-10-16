@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CreateEmailLogs do
+defmodule Phxlive.Repo.Migrations.CreateEmailLogs do
   use Ecto.Migration
 
   def change do

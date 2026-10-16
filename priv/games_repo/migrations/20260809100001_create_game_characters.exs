@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.CreateGameCharacters do
+defmodule Phxlive.GamesRepo.Migrations.CreateGameCharacters do
   use Ecto.Migration
 
   def up do
@@ -6,7 +6,7 @@ defmodule PhoenixApp.GamesRepo.Migrations.CreateGameCharacters do
       add :id, :binary_id, primary_key: true
       add :game_id, references(:games, type: :binary_id, on_delete: :delete_all), null: false
 
-      # References PhoenixApp.Repo's users.id - no FK constraint possible cross-database
+      # References Phxlive.Repo's users.id - no FK constraint possible cross-database
       add :user_id, :binary_id, null: false
 
       add :name, :string, null: false

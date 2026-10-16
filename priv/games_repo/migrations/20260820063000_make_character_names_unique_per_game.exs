@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.MakeCharacterNamesUniquePerGame do
+defmodule Phxlive.GamesRepo.Migrations.MakeCharacterNamesUniquePerGame do
   use Ecto.Migration
 
   # Character names used to be unique per (game, user) - two different

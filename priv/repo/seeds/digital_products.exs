@@ -2,8 +2,8 @@
 # Run with: mix run priv/repo/seeds/digital_products.exs
 
 import Ecto.Query
-alias PhoenixApp.Repo
-alias PhoenixApp.Commerce.Product
+alias Phxlive.Repo
+alias Phxlive.Commerce.Product
 
 IO.puts("🌱 Seeding digital products and subscription tiers...")
 
@@ -15,8 +15,8 @@ Repo.update_all(
 
 # Helper to create or update product
 defmodule Seeds.ProductHelper do
-  alias PhoenixApp.Repo
-  alias PhoenixApp.Commerce.Product
+  alias Phxlive.Repo
+  alias Phxlive.Commerce.Product
   
   def upsert_product(attrs) do
     case Repo.get_by(Product, sku: attrs.sku) do

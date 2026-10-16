@@ -59,7 +59,7 @@ jobs:
                 containers:
                   - name: migrate
                     image: $IMAGE
-                    command: ["/app/bin/phoenix_app", "eval", "Application.ensure_all_started(:phoenix_app); PhoenixApp.Release.migrate(); :init.stop()"]
+                    command: ["/app/bin/phoenix_app", "eval", "Application.ensure_all_started(:phxlive); Phxlive.Release.migrate(); :init.stop()"]
                 restartPolicy: Never
           EOF
 

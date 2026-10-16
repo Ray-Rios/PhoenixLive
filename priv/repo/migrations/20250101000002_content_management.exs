@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.ContentManagement do
+defmodule Phxlive.Repo.Migrations.ContentManagement do
   @moduledoc """
   ============================================================================
   CONTENT MANAGEMENT TABLES

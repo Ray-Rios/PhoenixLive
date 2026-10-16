@@ -50,7 +50,7 @@ defmodule Mix.Tasks.Rss.DevUsers do
 
   use Mix.Task
 
-  alias PhoenixApp.{Accounts, Games, Repo}
+  alias Phxlive.{Accounts, Games, Repo}
 
   @requirements ["app.start"]
 

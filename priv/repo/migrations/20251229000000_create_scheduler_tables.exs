@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CreateSchedulerTables do
+defmodule Phxlive.Repo.Migrations.CreateSchedulerTables do
   use Ecto.Migration
 
   def change do

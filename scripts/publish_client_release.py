@@ -5,7 +5,7 @@
         --staged RaysSpaceSim/Saved/ClientBuild/Windows \
         --launcher RaysSpaceSim/Launcher/bin/RaysSpaceSimLauncher.exe
 
-Steps (see PhoenixApp.Games.Releases on the hub):
+Steps (see Phxlive.Games.Releases on the hub):
   1. hash every staged file (cached by path+size+mtime - the pak is GBs)
   2. ask the hub which hashes it does not have yet
   3. stream only those into the blob store with `kubectl exec -i` - no HTTP,

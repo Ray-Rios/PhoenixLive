@@ -79,12 +79,12 @@ msgid_plural "should have at most %{count} item(s)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_app_web/components/core_components.ex:50
-#: lib/phoenix_app_web/components/core_components.ex:94
-#: lib/phoenix_app_web/components/core_components.ex:373
+#: lib/phxlive_web/components/core_components.ex:50
+#: lib/phxlive_web/components/core_components.ex:94
+#: lib/phxlive_web/components/core_components.ex:373
 msgid "close"
 msgstr ""
 
-#: lib/phoenix_app_web/components/core_components.ex:373
+#: lib/phxlive_web/components/core_components.ex:373
 msgid "Actions"
 msgstr ""

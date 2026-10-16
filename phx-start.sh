@@ -158,7 +158,7 @@ if [ "$MIX_ENV" = "prod" ]; then
     echo "Starting with compiled application..."
     cd /app
     # Start the application directly without Mix's file watching
-    exec elixir --erl "-detached" -pa _build/prod/lib/*/ebin -e "Application.ensure_all_started(:phoenix_app)" --no-halt
+    exec elixir --erl "-detached" -pa _build/prod/lib/*/ebin -e "Application.ensure_all_started(:phxlive)" --no-halt
   fi
 else
   # Development mode

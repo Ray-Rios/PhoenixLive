@@ -3,8 +3,8 @@ const plugin = require("tailwindcss/plugin")
 module.exports = {
   content: [
     './js/**/*.{js,ts}',
-    '../lib/phoenix_app_web.ex',
-    '../lib/phoenix_app_web/**/*.{ex,heex,html.heex}'
+    '../lib/phxlive_web.ex',
+    '../lib/phxlive_web/**/*.{ex,heex,html.heex}'
   ],
   theme: {
     extend: {

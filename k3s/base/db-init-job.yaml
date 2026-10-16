@@ -36,15 +36,15 @@ spec:
           # rather than raising on the first one and never reaching the second.
           # That bug is why phoenix_games_prod went missing for so long: the
           # `|| echo` below hid it, and the games repo was never reached.
-          /app/bin/phoenix_app eval "PhoenixApp.Release.create_db()"
+          /app/bin/phoenix_app eval "Phxlive.Release.create_db()"
 
           echo "Migration status before:"
-          /app/bin/phoenix_app eval "PhoenixApp.Release.status()" || true
+          /app/bin/phoenix_app eval "Phxlive.Release.status()" || true
 
           echo "Running migrations..."
           migrated=0
           for i in 1 2 3; do
-            if /app/bin/phoenix_app eval "PhoenixApp.Release.migrate()"; then
+            if /app/bin/phoenix_app eval "Phxlive.Release.migrate()"; then
               echo "Migrations completed successfully"
               migrated=1
               break
@@ -62,7 +62,7 @@ spec:
           # an `if` condition is explicitly exempt from it.
           if [ "$migrated" -ne 1 ]; then
             echo "ERROR: migrations did not succeed after 3 attempts."
-            /app/bin/phoenix_app eval "PhoenixApp.Release.status()" || true
+            /app/bin/phoenix_app eval "Phxlive.Release.status()" || true
             exit 1
           fi
 

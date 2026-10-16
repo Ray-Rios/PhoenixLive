@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CreateSuspiciousRequests do
+defmodule Phxlive.Repo.Migrations.CreateSuspiciousRequests do
   use Ecto.Migration
 
   def change do

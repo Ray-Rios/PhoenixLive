@@ -1,0 +1,714 @@
+# PHXLIVE.md: engineering context for the PhxLive hub
+
+**What this file is.** The working reference for anyone changing this repository:
+maintainers, contributors and AI coding assistants. It describes how the hub is built,
+the decisions behind it, the rules that break things silently when violated, and the
+roadmap. `README.md` is the front door (what PhxLive is, how to run it). This file is
+what you read before changing it.
+
+**Rules for editing this file**
+
+- It is public. No hostnames, IPs, credentials, cluster names or anything specific to
+  one deployment. Operator notes for a particular install belong outside the repo.
+- Keep facts measured and dated. "Changed 2026-10-15" is more useful than "recently".
+- When a decision is reversed, strike it through in the decisions log, add the new one,
+  and say why. Do not silently rewrite history.
+- Code that games built on PhxLive need does not belong here. Each game keeps its own
+  notes in its own repo.
+
+Last substantive update: **2026-10-15**: rebrand to PhxLive, upload security patch,
+roadmap agreed, storage tiers decided, milestone 1 (drive) implemented and awaiting first deploy.
+
+---
+
+## Contents
+
+1. [What PhxLive is](#1-what-phxlive-is)
+2. [Decisions log](#2-decisions-log)
+3. [Architecture](#3-architecture)
+4. [Repository layout](#4-repository-layout)
+5. [Naming: code names vs stored names](#5-naming-code-names-vs-stored-names)
+6. [Invariants: break these and something fails silently](#6-invariants)
+7. [Subsystem: user storage and the file explorer](#7-user-storage-and-the-file-explorer)
+8. [Subsystem: store, payments, currency and entitlements](#8-store-payments-currency-and-entitlements)
+9. [Subsystem: games platform and plugins](#9-games-platform-and-plugins)
+10. [Subsystem: desktop shell and start menu](#10-desktop-shell-and-start-menu)
+11. [Subsystem: chat channels and VIP channels](#11-chat-channels-and-vip-channels)
+12. [Roadmap](#12-roadmap)
+13. [Known debt](#13-known-debt)
+14. [Development workflow](#14-development-workflow)
+
+---
+
+## 1. What PhxLive is
+
+A self-hostable Phoenix/LiveView server for running an online community around games:
+
+- accounts, authentication and account security
+- real-time chat channels with presence
+- a windowed "desktop" UI shell
+- user file storage
+- a storefront with a hub-wide virtual currency, subscriptions and two payment providers
+- a **games platform**: a backend that game clients and dedicated servers talk to
+  (accounts, characters, server registry, client release distribution with a
+  self-updating launcher)
+
+Games plug into the hub as **plugins** (§9), WordPress-style. The repository ships one, **Web Lobby**: a
+small in-browser 3D multiplayer arcade that serves as both the demo and the reference
+implementation of the plugin API. Larger games live in their own repositories and
+depend on the hub; nothing in this repo may depend on them.
+
+It is a monolith you fork and keep, not a generator. Subsystems are separated so that a
+fork can delete the ones it doesn't want; `README.md` lists what removing each costs.
+
+### What it is not
+
+- Not a game engine. Game clients and servers are separate programs that use the hub's
+  HTTP API.
+- Not multi-tenant. One deployment is one community.
+
+---
+
+## 2. Decisions log
+
+| Date | Decision | Why |
+|---|---|---|
+| 2026-10-15 | Rebrand `PhoenixApp` → **PhxLive**: modules `Phxlive` / `PhxliveWeb`, OTP app `:phxlive`, display name "PhxLive". | The repo is being prepared for open source under its real name. |
+| 2026-10-15 | **Code renamed now; stored names (DB, cookie, release, k8s) kept** and renamed later in one planned cutover. See §5. | Renaming stored names logs everyone out and touches live data. It needs downtime and a runbook, not a find-and-replace. |
+| 2026-10-15 | **Game-specific code moves out of this repo** into per-game plugins. The hub keeps a generic games core. See §9. | Newcomers could not tell hub from game. The repo must stand alone. |
+| 2026-10-15 | **Lobby becomes the in-repo example plugin.** | Proves the plugin API is sufficient, without shipping a commercial game. |
+| 2026-10-15 | **Payments: Stripe and PayPal, both behind a provider behaviour.** Hosted checkout flows only. See §8. | Two providers from the start forces a clean abstraction. Hosted flows keep card data off our servers. |
+| 2026-10-15 | **Store sells: in-game items, a virtual currency, subscriptions. No physical goods.** | Scope. No shipping, addresses or inventory. |
+| 2026-10-15 | **Currency is hub-wide** (one balance usable by every game). | Simpler for players. The ledger records which game each spend is for. |
+| 2026-10-15 | **Subscriptions grant storage tiers and access to VIP chat channels.** | The first two concrete entitlements. |
+| 2026-10-15 | **User storage: one storage service behind an adapter; local volume first.** S3-compatible later by configuration. See §7. | The current two-system design is both broken and insecure. |
+| 2026-10-15 | Roadmap order: storage → plugin API + Lobby → extract game code → commerce → start menu. See §12. | Storage tiers depend on storage; VIP channels and items depend on entitlements; the start menu is a view over all of it. |
+| 2026-10-15 | **Storage tiers:** Free 1 GB, Small 10, Medium 25, Large 50, XL 100, Custom (whole GB, up to 1000). **$0.50/GB/month.** A paid tier **replaces** the free tier and is priced on its full size. Defined in `Phxlive.Drive.Plans` (overridable by config). | Owner's decision. |
+| 2026-10-15 | **Quota by role:** Guest and Banned have 0 GB and cannot buy a tier; **admins are unlimited**; every other role (including gm/editor/moderator) gets Free and may buy tiers. The old per-role staff allowances are gone. | Owner's decision. |
+| 2026-10-15 | **Becoming Guest/Banned:** the drive is locked (owner can't see or share anything; staff can still read), storage tiers are revoked, all subscriptions are cancelled, and files are **purged after 30 days** unless the role is restored first. Restoring does not restore tiers. Banning **no longer deletes files immediately**. | Owner's decision. A mistaken ban must be recoverable. |
+| 2026-10-15 | **Share links:** files can be Only me / Anyone with the link / Public. | Owner's decision. |
+| 2026-10-15 | **Migration scope:** only user files move to the drive now; avatars, blog, product and forum images stay where they are. | Owner's decision. Forum attachments still need guarding before VIP channels. |
+| 2026-10-15 | **Banning still deletes posts, comments, chat messages and reactions immediately.** Only drive files get the 30-day hold. | Owner's decision: sensitive content must be gone at once. |
+| 2026-10-15 | **Largest single upload, by role:** members 25 MB, moderators 50 MB, editors and GMs 1 GB, admins unlimited, guest/banned 0. Separate from quota; a file must fit both. `Drive.Policy.max_upload_bytes/1`, enforced in `Drive.add_file/5` as well as in the upload widget. | Owner's decision. |
+| 2026-10-15 | **"My Uploads" (`/profile/uploads`) shows the drive**, not the media library. Blog/page/chat media is managed with its content. | Owner's decision. |
+| 2026-10-15 | **Plugin API routes live under `/api/games/:slug/...`**, next to the platform API, using the same pipelines (player bearer token or server key). | Owner's decision. The launcher and game servers already authenticate there. |
+| 2026-10-15 | **Lobby's game slug is `web_lobby`.** Its characters become ordinary platform `GameCharacter`s (games DB), retiring the site-DB `characters` table. | Owner's decision. Removes the duplicate `game_characters` model. |
+| 2026-10-15 | **"Plugins", not "extensions"**, and **packaged WordPress-style: in-tree folders** under `plugins/<slug>/`, compiled into the app. A private plugin is its own git repo cloned into `plugins/` and gitignored by the public repo. | Owner's decision. A Mix-package model would be circular (plugins depend on the hub). |
+| 2026-10-15 | **Web Lobby's own tables (zones, spells, character spells) move to the games DB**, next to its characters, prefixed `web_lobby_`. | Owner's decision: all game data together, so the plugin is a clean template. |
+| 2026-10-15 | **Existing Lobby characters are not migrated**; the old site-DB tables are dropped. | Owner's decision: nothing worth keeping. |
+
+---
+
+## 3. Architecture
+
+```
+                 ┌──────────────────────────── PhxliveWeb ─────────────────────────────┐
+ browser ──────▶ │ Endpoint ─ UploadsGuard ─ Plug.Static ─ Session ─ Router            │
+                 │   LiveViews (pages, admin, shop, forum, games)                      │
+                 │   PhoenixDesktopLive (global live_component on authed pages)        │
+                 │   Channels (chat, presence)        Absinthe (GraphQL)               │
+ game client ──▶ │   /api/auth/*  /api/games/:slug/*  (JSON, Guardian bearer)          │
+ game server ──▶ │   /api/games/:slug/*  with X-API-Key (server key)                   │
+                 └───────────────────────────────┬─────────────────────────────────────┘
+                                                 │
+                 ┌──────────────────────────── Phxlive (contexts) ─────────────────────┐
+                 │ Accounts  Security  Content  Forum  Commerce  Files  Scheduler      │
+                 │ Notifications  Email  Moderation/Audit  Desktop  Settings           │
+                 │ Games (platform core)            Game (Lobby - to become a plugin)  │
+                 └──────────┬──────────────────────────────────────┬───────────────────┘
+                            │                                      │
+                  Phxlive.Repo (site DB)               Phxlive.GamesRepo (games DB)
+```
+
+### Two databases
+
+| Repo | Holds | Migrations |
+|---|---|---|
+| `Phxlive.Repo` | users, content, forum/chat, commerce, files, scheduler, Lobby's tables | `priv/repo/migrations` |
+| `Phxlive.GamesRepo` | games platform: games, characters, servers, releases, per-game tables | `priv/games_repo/migrations` |
+
+Games tables cannot foreign-key to `users`, because that table is in the other database.
+Their `user_id` columns are bare `binary_id` **by design**. Integrity is enforced in the
+context functions, which always scope by the authenticated user id.
+
+### Authentication
+
+- **Browser:** session cookie holding a session token (`Accounts.get_user_by_session_token`),
+  loaded by `PhxliveWeb.Auth` (plug) and `PhxliveWeb.UserAuth` (LiveView `on_mount`).
+- **API / game clients:** Guardian JWT bearer tokens (`Phxlive.Auth.Guardian`).
+- **Dedicated game servers:** `X-API-Key` matching `GAMES_SERVER_API_KEY`, always
+  together with an explicit `user_id`. This key can act as any user, so it is read only
+  from the environment and never from a file that could be shipped to a client.
+
+**The load-bearing property of the games API: a client never asserts who it is.** It
+presents a token; the server asks the hub to turn that into a user id, then asks for
+records *scoped to that user id*. A forged or borrowed id returns 404 from the hub.
+
+---
+
+## 4. Repository layout
+
+```
+lib/
+  phxlive/                 contexts (business logic, Ecto schemas)
+    games/                 games platform: core + (for now) game-specific modules, see §9
+    game.ex, game/         Lobby (in-browser arcade): to become plugins/web_lobby
+    files.ex, files/       user files (Arc-based, being replaced, see §7)
+    commerce.ex, commerce/ products, carts, orders, subscriptions (scaffolding, see §8)
+    safe_path.ex           path confinement, used for every client-supplied path
+  phxlive_web/
+    endpoint.ex            plug order matters, see §6
+    router.ex
+    live/                  LiveViews; admin_live/ for /admin
+    live/phoenix_desktop_live.ex   the desktop shell (~2k lines)
+    plugs/uploads_guard.ex authorises /uploads, see §7
+    controllers/api/       JSON API
+priv/repo/migrations       site DB
+priv/games_repo/migrations games DB
+assets/                    esbuild + tailwind; three.js for Lobby
+k3s/                       kustomize base + overlays (dev, prod)
+config/runtime.exs         all deploy-time configuration via env vars
+```
+
+**Not part of the hub** and on their way out (§9, §13): `deploy-game.sh`,
+`scripts/build_*.sh`, `scripts/publish_client_release.py`, `scripts/move_build_to_f.ps1`,
+`k3s/raysspacesim/`, `priv/codemap/`, `lib/mix/tasks/rss.*`, and the `rays_space_sim*`
+admin LiveViews. A game repository checked out *inside* this directory is gitignored
+(`/RaysSpaceSim/`) and is not part of this repo.
+
+---
+
+## 5. Naming: code names vs stored names
+
+The 2026-10-15 rebrand renamed **code**. Names that are **stored** somewhere outside the
+source tree were deliberately kept. They are renamed in a later, planned cutover with
+downtime (§12, milestone 6).
+
+| Kept as | Where | What renaming it would do |
+|---|---|---|
+| `_phoenix_app_key`, salt `phoenix_app_session` | `endpoint.ex` session options | Invalidates every session cookie. Everyone is logged out. |
+| release `phoenix_app`, `bin/phoenix_app`, `rel/phoenix_app` | `mix.exs` `releases/0`, Dockerfiles, k8s jobs, scripts | Every job and script that runs `bin/phoenix_app eval ...` must change in the same deploy. |
+| node name `phoenix_app@<ip>`, libcluster `kubernetes_node_basename` | deployment manifest, `runtime.exs` | Pods from old and new builds cannot cluster during a rollout. |
+| `issuer: "phoenix_app"` | `config/dev.exs` | Dev tokens only. Prod sets no issuer and does not verify one. |
+| Postgres `application_name` labels | `runtime.exs` | Cosmetic (`pg_stat_activity`). Kept so monitoring queries keep matching. |
+| DB names `phoenixapp_*`, `phoenix_games_*` | config defaults, env | A data migration. |
+| k8s `phoenix-*` resources, PV/PVC names | `k3s/` | Volumes are bound by name; a rename can orphan data. |
+
+**The release name is not the app name.** The OTP application is `:phxlive`; the release
+built from it is still called `phoenix_app`. So `bin/phoenix_app eval
+"Application.ensure_all_started(:phxlive)"` is correct, not a leftover.
+
+**Ecto telemetry follows the app name.** Repo events are `[:phxlive, :repo, :query]`, so
+metric names in `telemetry.ex` are `phxlive.repo.query.*`. Old dashboards keyed on
+`phoenix_app.repo.*` stop receiving data. That's expected.
+
+`PhoenixDesktopLive` keeps its name: "Phoenix Desktop" describes the shell, not the brand.
+
+**Dead quota columns on `users`:** `storage_quota_bytes`, `storage_used_bytes`,
+`subscription_tier` and `subscription_features` predate the drive and are not used for
+quota any more (`Phxlive.Drive.quota_bytes/1` is). Drop them in the stored-name cutover.
+
+---
+
+## 6. Invariants
+
+Each of these has already cost a build, an outage, or a security hole.
+
+1. **Every client-supplied path goes through `Phxlive.SafePath`.** `Path.join/2` does not
+   resolve `..`; `Path.join(user_root, "../other_user/x")` escapes. Use `SafePath.resolve/2`
+   for paths and `SafePath.filename/1` for single names (upload `client_name`, folder
+   names). Before 2026-10-15 the file explorer let any signed-in user list, upload into,
+   and delete files outside their folder this way.
+
+2. **`UploadsGuard` sits directly before the `/uploads` `Plug.Static` in `endpoint.ex`.**
+   It is what keeps `users/<id>/` and `<id>/files/` private and what adds
+   `nosniff` / sandbox headers. Moving it after `Plug.Static`, or adding another static
+   mount over the same directory, makes private files public again. Nothing will error.
+
+3. **`Plug.Static` options are evaluated at compile time.** `@uploads_root` in
+   `endpoint.ex` is decided when the release is built (`/app/uploads` if it exists in the
+   build environment, else `uploads`). The guard and the static plug must use the same
+   value, so both read the module attribute.
+
+4. **Never serve active content inline from our origin.** HTML, SVG, XML and JS uploads are
+   refused (`SafePath.active_content?/1`), and anything already on disk with those
+   extensions is served with `Content-Security-Policy: sandbox` and
+   `Content-Disposition: attachment`. A user-uploaded `.svg` rendered inline can steal
+   sessions.
+
+5. **Signed URLs carry their lifetime inside the token.** `Uploads.signed_url_for/2`
+   signs `max_age` into the token, capped at one day; the controller verifies without
+   passing `max_age`. Never accept a lifetime from the query string. It used to, and that
+   made every signed link permanent.
+
+6. **In HEEx and conditionals, use `&&` `||` `!`, not `and` `or` `not`, on anything that
+   can be nil.** `and` raises `BadBooleanError` on nil and takes the whole page down with
+   a bare 500.
+
+7. **`POST /api/auth/dev-verify` must 404 in prod.** It marks any email verified without
+   authentication. It is enabled only by `:allow_dev_verify` in `dev.exs`/`test.exs`.
+   Do not "fix" the prod 404.
+
+8. **The games server key is environment-only.** See §3. A missing key makes every game
+   server join look like a broken join gate. The log says the variable is not set.
+
+9. **Login rate limiting is per IP.** Local testing from `127.0.0.1` with rapid restarts
+   produces `429`, which looks like a wrong password.
+
+10. **Elixir version is pinned (`~> 1.19.0` in `mix.exs`).** `elixir:latest` images are
+    newer and refuse to build. Pin Docker base images to `elixir:1.19*`.
+
+11. **The drive blob store lives on the uploads volume but must never be served by path.**
+    `Storage.Local` defaults to `<uploads>/_drive`, which is inside the directory
+    `Plug.Static` serves at `/uploads`. `UploadsGuard` answers 404 for every
+    `/uploads/_drive/...` request. Bodies are only served by `DriveController` after
+    `Drive.can_read?/3`. If you move the root, keep it out of every static mount.
+
+12. **Change roles only through `Accounts.change_role/3`.** It is what locks the drive,
+    revokes tiers and cancels subscriptions. `role` is no longer cast by the profile or
+    admin changesets, so `update_user/2` cannot change it.
+
+13. **The desktop is a LiveComponent.** It never receives `handle_info`, and
+    `send(self(), ...)` from it goes to whatever page LiveView is mounted, which doesn't
+    handle the message. Update component state directly (see
+    `refresh_file_manager/2`).
+
+14. **Line endings.** The repo stores LF. Windows checkouts use `core.autocrlf=true`.
+    Tools that rewrite files must preserve the working-tree line endings and must not leave
+    a lone `\r` (a bare CR at end of file does not parse in Elixir). If a non-Windows git
+    reads a Windows checkout it shows every line as changed; compare with
+    `git diff --ignore-cr-at-eol`.
+
+---
+
+## 7. User storage and the file explorer
+
+### Status: implemented 2026-10-15, not yet deployed
+
+Before this milestone there were two storage systems that didn't know about each other:
+Arc `UserFile` rows and the desktop explorer writing raw files under `uploads/users/<id>/`.
+Uploads to My Files never saved, because the explorer only saved uploads for the old
+`user://` paths, and refreshes never happened, because of invariant 13. Both are fixed.
+
+### Design
+
+**The database is the only source of truth**; `Phxlive.Storage` stores bodies by SHA-256
+and nothing else.
+
+| Table | Purpose |
+|---|---|
+| `drive_blobs` | one row per distinct SHA-256; `last_referenced_at` protects in-flight uploads from GC |
+| `drive_folders` | tree per owner (`parent_id` nil = root); sibling names unique |
+| `drive_files` | name, folder, blob, size, sniffed `content_type`, `visibility` (private / link / public), `share_token`, `legacy_ref` |
+| `drive_usage` | per-user `bytes_used` / `file_count` (row-locked for every change), `locked_at`, `purge_after` |
+| `entitlements` | grants; storage tiers are `kind: "storage_tier"`, `quantity` = GB (§8) |
+
+| Module | Role |
+|---|---|
+| `Phxlive.Drive` | folders, files, upload (`add_file/5`), sharing, `can_read?/3`, lock/unlock, purge, blob GC |
+| `Phxlive.Drive.Plans` | tiers and prices (decisions log) |
+| `Phxlive.Drive.Policy` | pure quota and permission rules |
+| `Phxlive.Drive.Sniff` | magic-byte type detection; only recognised types are ever served inline |
+| `Phxlive.Drive.Janitor` | hourly: purge expired 30-day holds, GC unreferenced blobs; one node at a time via a Postgres advisory lock |
+| `Phxlive.Drive.Import` | one-off legacy import, re-runnable (`mix drive.import`, or `bin/phoenix_app eval "Phxlive.Drive.Import.run()"`) |
+| `Phxlive.Storage` / `Storage.Local` | adapter behaviour; local blobs at `<root>/aa/bb/<sha>`; `DRIVE_STORAGE_ROOT` overrides the root |
+| `PhxliveWeb.DriveController` | `GET /files/:id` and `GET /s/:token`; nosniff, sandbox CSP (except PDF), inline only for recognised media, single-range requests |
+| `Phxlive.Entitlements` | `grant/2` (refuses storage tiers for ineligible users), `active/2`, `revoke_all/3` |
+
+**Concurrency.** Every change to a user's total locks their `drive_usage` row first, so
+two uploads can't both pass the quota check. An upload upserts its blob row (taking the
+row lock and bumping `last_referenced_at`) *before* making sure the body is on disk; GC
+selects blobs `FOR UPDATE SKIP LOCKED` and deletes bodies inside its transaction. Either
+the upload waits and rewrites the body, or GC skips that blob.
+
+**Over quota** (after a tier lapses, or after the import): files are kept and stay
+readable, and new uploads are refused until usage is back under the quota.
+
+**Known gaps in this milestone**
+
+- A crash between writing a body and committing can leave an unreferenced body on disk
+  with no row, which GC never sees. This is rare; an occasional disk sweep can be added.
+- No rename/move UI yet in the explorer (the context supports both).
+- Thumbnails aren't generated for drive images; the explorer shows icons.
+
+### Explorer
+
+Drives: **My Files** (the user's drive, navigated by folder names: `/my-files/Photos/2026`)
+and **Public** (still the legacy `uploads/public` directory, staff-writable, holding site
+assets). Each My Files row has a visibility selector and, when shared, a click-to-copy
+link. The old `user://` / `root://` code paths in `PhoenixDesktopLive` are unreachable
+from the current UI and should be deleted in milestone 5.
+
+### Deploying milestone 1
+
+1. Deploy (the migration runs as usual).
+2. `bin/phoenix_app eval "Phxlive.Drive.Import.run(dry_run: true)"` and check the counts.
+3. `bin/phoenix_app eval "Phxlive.Drive.Import.run()"`. Users already Guest/Banned are
+   locked by the import, which starts their 30-day hold.
+4. Legacy files stay on disk and readable through `UploadsGuard` for one release, then
+   retire them.
+
+---
+
+## 8. Store, payments, currency and entitlements
+
+### Current state
+
+Scaffolding only. `Order` has a `stripe_payment_intent_id` column but there is no
+payment library dependency; checkout says "Payment processing will be integrated with
+Stripe." Order statuses (`pending/processing/shipped/delivered/cancelled`) assume
+physical goods and have no `paid` or `refunded`. `Subscription` has Stripe ids;
+`DownloadToken` exists for digital downloads.
+
+### Target model (milestone 4)
+
+**Money** is always integer minor units plus an ISO currency code. Never floats.
+
+**Products** have a `kind`:
+
+| kind | Bought with | Grants |
+|---|---|---|
+| `currency_pack` | money | credits in the user's wallet |
+| `item` | money or credits | an entitlement (e.g. an in-game item) |
+| `subscription_plan` | money, recurring | entitlements while active (storage tier, VIP channels) |
+
+**Orders** are a state machine. Transitions happen only in `Commerce`, never in a
+LiveView:
+
+```
+draft → awaiting_payment → paid → fulfilled
+                 ↘ failed / cancelled
+paid|fulfilled → refunded | partially_refunded | disputed
+```
+
+Order items snapshot name, price and currency at purchase time.
+
+**Payment providers** implement `Phxlive.Payments.Provider`:
+
+```elixir
+@callback create_checkout(order, opts) :: {:ok, %{redirect_url: String.t(), provider_ref: String.t()}} | {:error, term}
+@callback verify_webhook(raw_body :: binary, headers :: list) :: {:ok, provider_event :: map} | {:error, term}
+@callback normalize(provider_event :: map) :: {:ok, %Phxlive.Payments.Event{}} | :ignore
+@callback refund(payment, amount_minor :: integer) :: {:ok, term} | {:error, term}
+@callback create_subscription(user, plan, opts) :: {:ok, %{redirect_url: String.t(), provider_ref: String.t()}} | {:error, term}
+@callback cancel_subscription(subscription) :: :ok | {:error, term}
+```
+
+`Payments.Stripe` (Checkout Sessions, Billing) and `Payments.PayPal` (Orders v2,
+Subscriptions) are the two built-in implementations. Hosted flows only: card data never
+touches our servers.
+
+**Webhooks are the source of truth**, not redirects.
+
+- `payment_events` is an inbox: `unique(provider, provider_event_id)`. Each event is
+  stored first, then processed. A duplicate delivery is a no-op.
+- Signature verification needs the **raw body** (Stripe), so the webhook routes use a
+  `Plug.Parsers` `body_reader` that keeps it. PayPal verification calls PayPal's
+  verify-signature API.
+- A user returning from checkout sees "processing" until the webhook marks the order
+  paid. Never fulfil from the redirect.
+
+**Wallet (hub-wide credits)** is an append-only, double-entry ledger:
+
+```
+wallet_accounts  id, owner_type (user | system), owner_id, currency ("CREDITS")
+ledger_entries   id, txn_id, account_id, amount (signed integer), kind, game_slug,
+                 reference_type, reference_id, idempotency_key, inserted_at
+                 unique(idempotency_key)
+```
+
+Every transaction writes entries that sum to zero (e.g. user +500,
+`system:currency_sales` −500). A balance is the sum of the account's entries, cached in
+a row updated in the same transaction. Spends record `game_slug`, so per-game revenue is
+a query. Balances may not go below zero through spending. A refund or chargeback of a
+currency pack **claws back** credits and may leave a negative balance, which blocks
+further spending until it is settled.
+
+Games spend credits through the hub, never locally: `POST /api/wallet/spend` with the
+server key, user id, amount, item and an idempotency key. The hub debits and grants the
+entitlement in one transaction.
+
+**Entitlements** are how anything purchased becomes access:
+
+```
+entitlements  id, user_id, kind, key, source_type, source_id,
+              starts_at, ends_at (nullable), revoked_at (nullable)
+```
+
+| kind | key | Granted by | Checked by |
+|---|---|---|---|
+| `storage_tier` | `basic` / `plus` / ... | subscription plan | storage quota (§7) |
+| `vip_channels` | `*` | subscription plan | channel listing and join (§11) |
+| `game_item` | `<game_slug>:<sku>` | item purchase | the game, via API |
+
+`Entitlements.active?(user, kind, key)` is the single check. Plugins register their
+own kinds. Subscription renewals extend `ends_at` (period end + a grace period);
+cancellation lets it lapse; refunds and chargebacks set `revoked_at`.
+
+**Subscriptions:** our DB is the source of truth for state. Each plan stores one
+provider plan id per provider (`stripe_price_id`, `paypal_plan_id`). Provider webhooks
+move our state; we never poll for it.
+
+**Not decided yet:** tax handling (Stripe Tax vs manual), refund policy text for virtual
+currency, whether credits can be gifted between users.
+
+---
+
+## 9. Games platform and plugins
+
+### Core (stays in the hub)
+
+| Module | Purpose |
+|---|---|
+| `Games.Game` | registered titles (`slug`) |
+| `Games.GameCharacter` | per-user characters; game-specific data in the `stats` / `settings` JSON columns |
+| `Games.GameServer`, heartbeat API | dedicated-server registry; servers write their own rows |
+| `Games.ServerCommand` | instructions queued for a server, delivered on its next heartbeat |
+| `Games.AdminAction` | audit trail of privileged actions on live game state |
+| `Games.GameRelease`, `Games.Releases` | client builds as SHA-256 manifests over a content-addressed blob store; launcher self-update; ranged downloads |
+| `Phxlive.Kubernetes` | small in-cluster API client using the pod's service account |
+| launcher download controller | currently hardcodes one game's launcher filename; to become per-game config |
+
+### Moves to the game's own plugin
+
+Holo-sims (`HoloSim*`, `SimAccess`, holo-sim controller and routes), `InstanceLauncher`,
+`WorldServerLauncher` (a candidate to generalise back into core later), `CodeMap` and the
+codebase admin page, the game's admin LiveView, its deploy/build scripts, its k8s
+manifests, its mix tasks, and the `HOLOSIM_*` / `WORLD_*` environment variables.
+
+### Plugins (design, milestone 2)
+
+A plugin is a folder, the way WordPress plugins are:
+
+```
+plugins/
+  web_lobby/                         folder name = slug = game slug = table prefix
+    README.md                        what it is, how to enable it
+    lib/web_lobby/plugin.ex          WebLobby.Plugin - implements Phxlive.Plugin
+    lib/web_lobby/...                contexts and schemas      (namespace: WebLobby)
+    lib/web_lobby_web/...            LiveViews, controllers    (namespace: WebLobbyWeb)
+    lib/web_lobby_web/routes.ex      WebLobbyWeb.Routes - api + browser routes
+    priv/games_repo/migrations/      tables prefixed web_lobby_
+    priv/repo/migrations/            (optional) site-DB tables
+    assets/js/index.ts               LiveView hooks, imported by assets/js/plugins.ts
+    test/                            run with the core suite
+```
+
+**Conventions** (what makes a plugin a template other people can copy):
+
+- One top-level namespace per plugin (`WebLobby`, `WebLobbyWeb`), never `Phxlive.*`.
+- The folder name is the slug. It is also the game slug (`/api/games/web_lobby`) and the
+  prefix of every table the plugin owns (`web_lobby_zones`).
+- A plugin uses the hub only through public context functions (`Phxlive.Games`,
+  `Phxlive.Drive`, `Phxlive.Entitlements`, ...). Core never references a plugin module.
+- Characters are platform `GameCharacter`s. Plugin tables may reference
+  `game_characters.id` (same database).
+
+**Installed vs active.** Every folder under `plugins/` is *installed*: `mix.exs` adds
+`plugins/*/lib` to the compile paths, and `Phxlive.Release.migrate/0` / the mix aliases add
+each plugin's migration folders. Only plugins listed in config are *active*:
+
+```elixir
+# config/plugins.exs (imported by config.exs)
+config :phxlive, plugins: [WebLobby.Plugin]
+```
+
+Active plugins get their routes mounted, their processes supervised, their game row
+registered, and their admin/desktop entries shown. *Open question: activation from an
+admin Plugins page at runtime (true WordPress style) instead of config.*
+
+**The behaviour:**
+
+```elixir
+defmodule Phxlive.Plugin do
+  @callback slug() :: String.t()                       # "web_lobby"
+  @callback name() :: String.t()
+  @callback version() :: String.t()
+  @callback description() :: String.t()
+  @callback game() :: %{name: String.t(), description: String.t(), path: String.t()} | nil
+  @callback routes() :: module() | nil                 # e.g. WebLobbyWeb.Routes
+  @callback children() :: [Supervisor.child_spec()]    # under Phxlive.PluginSupervisor
+  @callback admin_nav() :: [%{label: String.t(), path: String.t(), icon: String.t()}]
+  @callback desktop_apps() :: [Phxlive.Desktop.App.t()]   # §10
+  @callback entitlement_kinds() :: [String.t()]           # §8
+  @optional_callbacks game: 0, routes: 0, children: 0, admin_nav: 0, desktop_apps: 0, entitlement_kinds: 0
+end
+```
+
+`use Phxlive.Plugin, slug: "web_lobby", name: ..., version: ...` fills in the required
+callbacks and defaults the optional ones.
+
+**Routes.** Phoenix routes are compiled and LiveView expects one router, so a plugin's
+routes module exports `api/0` and `browser/0` macros, and the core router expands them for
+each active plugin at compile time (`Application.compile_env(:phxlive, :plugins)`):
+
+- API routes mount at `/api/games/<slug>/...` with the `:games_api` pipeline (player bearer
+  token or server key). The literal-slug scopes are expanded *before* the core
+  `/api/games/:game_slug` routes, so the dynamic segment cannot capture them.
+- Browser routes mount at `/games/<slug>/...` inside the authenticated `live_session`.
+
+Changing the active list therefore needs a recompile, the same as changing routes.
+
+**Assets.** `assets/js/plugins.ts` imports each plugin's `assets/js/index.ts` and merges
+its hooks into the LiveSocket. The Dockerfiles copy `plugins/` before building assets and
+compiling.
+
+**Done means:** Web Lobby runs entirely as `plugins/web_lobby` with no Lobby references in
+core, and a second plugin can be added by dropping in a folder and listing it in config.
+
+### Web Lobby (the template plugin)
+
+Today Lobby is `Phxlive.Game` (zones, characters, spells, combat) plus `GamesLive` (three.js
+client, presence, chat, movement validation, PvP, respawn) on the site DB. In milestone 2:
+
+| Today | Becomes |
+|---|---|
+| `characters` (site DB) | `game_characters` with `game_slug = "web_lobby"`: HP, MP, PvP in `stats`; model, type, last position and zone in `settings` |
+| `zones`, `spells`, `character_spells` (site DB) | `web_lobby_zones`, `web_lobby_spells`, `web_lobby_character_spells` (games DB), seeded by the plugin's migrations |
+| `Phxlive.Game` | `WebLobby.World` (zones, spawn) and `WebLobby.Combat` (spells, damage, respawn) |
+| `GamesLive` | core `GamesLive` = a games index built from active plugins' `game/0`; the game itself = `WebLobbyWeb.PlayLive` at `/games/web_lobby` |
+| three.js hooks in `assets/js/threejs` | `plugins/web_lobby/assets/js` |
+
+Existing Lobby characters are not migrated (decisions log); the old site-DB tables are
+dropped.
+
+## 10. Desktop shell and start menu
+
+`PhoenixDesktopLive` is a global `live_component` rendered on every authenticated page:
+a taskbar, a start menu and draggable windows. It is not a route.
+
+**Current apps:** File Explorer, Text Editor, Terminal, Calculator, Notepad, Media
+Player, Settings. Most are toys, Text Editor and Notepad overlap, and window-layout
+persistence is commented out ("TEMP DISABLED").
+
+**Target (milestone 5):** every start-menu entry opens a real hub feature.
+
+| App | Backed by |
+|---|---|
+| Files | storage service (§7) |
+| Chat | forum/channels, including VIP channels (§11) |
+| Library | owned games, entitlements, launcher downloads |
+| Store | products, cart, checkout |
+| Wallet & Orders | ledger balance, order history, subscriptions |
+| Friends | presence |
+| Forum | threads |
+| Calendar | calendar and meeting invites (exists) |
+| Notifications | `Notifications` |
+| Account & Security | profile, password, 2FA, sessions, devices |
+| Admin (staff only) | servers, moderation queue, audit log |
+
+Apps are data, not hardcoded `case` branches:
+
+```elixir
+%Phxlive.Desktop.App{
+  id: "files", title: "Files", icon: "folder",
+  component: PhxliveWeb.Desktop.FilesApp,
+  visible?: &Phxlive.Desktop.Visibility.signed_in?/1,   # or a role / entitlement check
+  default_size: {900, 600}
+}
+```
+
+Core apps come from `Phxlive.Desktop.core_apps/0`; plugins add theirs via
+`desktop_apps/0` (§9). Window-layout persistence comes back, debounced.
+
+---
+
+## 11. Chat channels and VIP channels
+
+Channels live in `Phxlive.Forum` (`channels`, `channel_members`, `messages`,
+`message_attachments`) with Phoenix Channels for real time and presence, plus an optional
+Redis bridge for cross-node delivery.
+
+**VIP channels (milestone 4):** like public channels, except
+
+- only admins create them;
+- they are **invisible** to users without an active `vip_channels` entitlement: filtered
+  in the listing query, not just hidden in the UI;
+- joining, reading history and subscribing to the socket topic all check the entitlement
+  on the server. A direct link or a hand-crafted socket join must fail;
+- when the entitlement lapses, the user is dropped from presence on the next check and
+  loses access to history;
+- attachments posted in them are served through the authorising files controller (§7),
+  never `/uploads/forum/...`.
+
+Implementation: a nullable `required_entitlement` column on `channels` (e.g.
+`"vip_channels"`), so the same mechanism can gate other channel types later.
+
+---
+
+## 12. Roadmap
+
+| # | Milestone | Done when |
+|---|---|---|
+| 1 | **Storage service + file explorer** (§7) | One storage system; explorer and profile uploads show the same files; quotas enforced transactionally; all user files served through the authorising controller; old data migrated. |
+| 2 | **Plugin API + Web Lobby on it** (§9, §10) | Lobby works with zero Lobby references in core; a plugin can add routes, admin nav, desktop apps, migrations. |
+| 3 | **Extract game-specific code** (§9) | Nothing game-specific in this repo; the game's package boots against an unmodified hub. |
+| 4 | **Commerce** (§8, §11) | Ledger + entitlements; Stripe then PayPal; currency packs, items, subscriptions; storage tiers and VIP channels driven by entitlements; webhook inbox idempotent. |
+| 5 | **Start menu redesign** (§10) | Every app maps to a real feature; apps are registered data. |
+| 6 | **Stored-name cutover** (§5) | Cookie, release, node, DB and k8s names are PhxLive; runbook written and executed. |
+
+---
+
+## 13. Known debt
+
+Ordered roughly by how much it hurts.
+
+- **`mix.lock` is not committed.** Builds resolve dependency versions fresh each time.
+  Commit it.
+- ~~The test suite can't run~~: `test/test_helper.exs` and `test/support/data_case.ex`
+  added 2026-10-15 (sandboxes both repos; `user_fixture/1`, `tmp_upload/1`).
+- ~~`subscriptions` schema didn't match the table~~ (fixed 2026-10-15): the schema
+  said `cancelled_at`, the column is `canceled_at` (now `source: :canceled_at`), and
+  seven declared fields had no column, so **every** subscription query failed on a
+  database built from migrations. `20261015210000_align_subscriptions_with_schema`
+  adds them with `IF NOT EXISTS`. Commerce is redesigned in milestone 4 anyway.
+- **The root `Dockerfile` uses `FROM elixir:latest`**, which is now newer than
+  `mix.exs` allows. Pin it to `elixir:1.19`. (`Dockerfile.multistage` is already pinned.)
+- **Forum attachments are public by URL** (§7), which blocks VIP channels.
+
+- Two storage systems (§7) and two `game_characters` tables (§9).
+- `Files` has a `:timer.sleep(10000)` in an upload path.
+- The admin files page links to `/uploads/user_files/...`, which is not where files are
+  stored.
+- `PhxliveWeb.RoomChannel` is referenced (commented out) but doesn't exist.
+- `phoenix_desktop_live.ex` is ~2,000 lines; the explorer, uploads, calendar and audio
+  should become separate app components (milestone 5).
+- Repo-root files that are operator-specific belong outside the repo:
+  `Handy_Command_Samples.md`, and any local secrets file (even when gitignored, keep
+  secrets outside the working tree).
+- Tracked dev secrets in `k3s/overlays/dev/secrets.yaml` should all be obvious
+  placeholders.
+
+---
+
+## 14. Development workflow
+
+- **Elixir 1.19.** If you don't have it locally, compile in Docker without touching the
+  host tree (deps and build in throwaway volumes):
+
+  ```sh
+  docker run --rm -v "$PWD:/app" -v phx_deps:/app/deps -v phx_build:/app/_build \
+    -w /app -e MIX_ENV=dev elixir:1.19 \
+    sh -c 'mix local.hex --force && mix local.rebar --force && mix deps.get && mix compile --warnings-as-errors'
+  ```
+
+  Warnings printed while compiling *dependencies* (e.g. Phoenix struct-update type
+  warnings on 1.19) do not fail the build; only `==> phxlive` output matters.
+- **Tests** need Postgres and nothing else. Since 2026-10-15 `runtime.exs` uses fixed
+  dev/test secrets and the `*_test` databases when `MIX_ENV=test`:
+
+  ```sh
+  docker network create phxchk
+  docker run -d --rm --name phxchk-pg --network phxchk -e POSTGRES_PASSWORD=postgres postgres:16
+  docker run --rm --network phxchk -v "$PWD:/app" -v phx_deps:/app/deps -v phx_build:/app/_build \
+    -w /app -e MIX_ENV=test -e DB_HOST=phxchk-pg elixir:1.19 \
+    sh -c 'mix local.hex --force && mix local.rebar --force && mix deps.get && mix test'
+  docker stop phxchk-pg && docker network rm phxchk
+  ```
+- **Before committing:** `mix compile --warnings-as-errors`, `mix format --check-formatted`.
+  `mix lint` runs format, credo, sobelow and dialyzer.
+- **Security-sensitive areas** (anything touching paths, uploads, auth, payments,
+  webhooks, the games server key) get a second reviewer, human or tool, who did not write
+  the change.
+- **Deployment** is via the kustomize overlays in `k3s/`. `README.md` covers it; anything
+  specific to one installation stays out of this repo.

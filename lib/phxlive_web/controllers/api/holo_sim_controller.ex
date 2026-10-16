@@ -1,0 +1,719 @@
+defmodule PhxliveWeb.Api.HoloSimController do
+  @moduledoc """
+  Holo-sim API — `/api/games/:game_slug/holosims`.
+
+  Authorised the same way as the rest of the games API: a player's Guardian
+  bearer token, or a trusted game server presenting the server API key and
+  naming the user it acted for.
+
+  Every access decision delegates to `HoloSims.can_access?/2`. Nothing in this
+  module re-derives the rules — a second implementation would eventually drift
+  from the first, and the drift would be a security hole rather than a bug.
+  """
+
+  use PhxliveWeb, :controller
+
+  alias Phxlive.Games
+  alias Phxlive.Games.HoloSims
+  alias Phxlive.Games.HoloSimSpec
+  alias Phxlive.Games.InstanceLauncher
+
+  plug PhxliveWeb.Plugs.GamesApiKeyOrAuth
+
+  # ---------------------------------------------------------------------
+  # Player endpoints
+  # ---------------------------------------------------------------------
+
+  # GET /holosims — mine, shared with me, and public
+  def index(conn, %{"game_slug" => slug} = params) do
+    with {:ok, game} <- fetch_game(slug),
+         {:ok, user_id} <- resolve_user_id(conn, params) do
+      owned_channels = Phxlive.Forum.list_owned_channels_with_sims(user_id)
+      allowance = Phxlive.Forum.channel_allowance(user_id)
+
+      json(conn, %{
+        success: true,
+        owned: Enum.map(HoloSims.list_owned(game.id, user_id), &sim_json(&1, user_id)),
+        shared: Enum.map(HoloSims.list_shared(game.id, user_id), &sim_json(&1, user_id)),
+        public: Enum.map(HoloSims.list_public(game.id), &sim_json(&1, user_id)),
+
+        # Channels the player owns that have no world yet. This is what the door
+        # offers on "build a new one" - every channel made on the website starts
+        # here, and picking one costs nothing against the allowance because the
+        # channel was already paid for when it was created.
+        buildable_channels:
+          owned_channels
+          |> Enum.reject(& &1.has_sim)
+          |> Enum.map(fn %{channel: c} ->
+            %{id: c.id, name: c.name, is_public: c.is_public, icon_path: c.icon_path}
+          end),
+
+        # Used/total drives whether the client shows "new channel" or the shop.
+        channels: %{used: length(owned_channels), total: allowance}
+      })
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # POST /holosims
+  #
+  # TWO SHAPES, ONE ENDPOINT.
+  #
+  #   channel_id present — build a world in a channel that already exists. This
+  #                        is every channel on the website: they were all made
+  #                        before Holo-sims existed and have none.
+  #   channel_id absent  — make a new channel and its world together, which is
+  #                        the in-game "new sim" button.
+  #
+  # Both end with a sim that has a channel. There is no path to a sim without
+  # one, because a sim without one has no access control list.
+  #
+  # THE WORLD COMES FROM `options`, NEVER FROM A CLIENT `spec` (2026-10-08).
+  # HoloSimSpec builds the spec from a closed set of choices; a `spec` or
+  # `template_id` in the request is ignored. See that module's moduledoc.
+  def create(conn, %{"game_slug" => slug} = params) do
+    with {:ok, game} <- fetch_game(slug),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         :ok <- check_public_on_create(user_id, params),
+         {:ok, spec} <- build_spec(params) do
+      attrs =
+        params
+        |> Map.take(["name", "description", "visibility", "kind", "visitors_can_build"])
+        |> Map.put("spec", spec)
+
+      result =
+        case params["channel_id"] do
+          nil ->
+            case Phxlive.Accounts.get_user(user_id) do
+              nil -> {:error, :forbidden, "Unknown account."}
+              user -> HoloSims.create_for_channel(game.id, user, attrs)
+            end
+
+          channel_id ->
+            HoloSims.create_for_existing_channel(game.id, user_id, channel_id, attrs)
+        end
+
+      # Both create paths end here with a sim whose spec has no SystemId yet.
+      result =
+        case result do
+          {:ok, sim, _channel} -> {:ok, sim}
+          other -> other
+        end
+
+      case result do
+        {:ok, %{} = sim} ->
+          sim =
+            case HoloSims.stamp_system_id(sim) do
+              {:ok, stamped} -> stamped
+              _ -> sim
+            end
+
+          conn |> put_status(:created) |> json(%{success: true, sim: sim_json(sim, user_id)})
+
+        {:error, :already_exists, message} ->
+          error(conn, 409, message)
+
+        {:error, :name_taken, message} ->
+          error(conn, 409, message)
+
+        {:error, :forbidden, message} ->
+          error(conn, 403, message)
+
+        {:error, :no_channel, message} ->
+          error(conn, 422, message)
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          # The allowance failure arrives here, as an error on the channel's
+          # owner_id. Surfaced as 409 rather than 422 because it is not a
+          # malformed request - it is a correct request the account cannot
+          # afford, and the client should offer the shop rather than a
+          # validation message.
+          if allowance_error?(changeset) do
+            error(conn, 409, changeset_errors(changeset))
+          else
+            error(conn, 422, changeset_errors(changeset))
+          end
+
+        {:error, other} ->
+          error(conn, 422, inspect(other))
+      end
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # Public sims follow the website's public-channel rule (2026-10-09). Checked
+  # BEFORE anything is created, because the new-channel path creates the channel
+  # first and a refusal after that would leave one behind.
+  defp check_public_on_create(user_id, %{"visibility" => "public"} = params) do
+    already_public? =
+      case params["channel_id"] do
+        id when is_binary(id) ->
+          match?(%{is_public: true}, Phxlive.Repo.get(Phxlive.Forum.Channel, id))
+
+        _ ->
+          false
+      end
+
+    if HoloSims.may_make_public?(user_id, already_public?),
+      do: :ok,
+      else: {:error, 403, HoloSims.public_refusal()}
+  end
+
+  defp check_public_on_create(_user_id, _params), do: :ok
+
+  # Re-saving a sim that is already public is not "making" it public.
+  defp check_public_on_update(user_id, sim, %{"visibility" => "public"}) do
+    if HoloSims.may_make_public?(user_id, sim.visibility == "public"),
+      do: :ok,
+      else: {:error, 403, HoloSims.public_refusal()}
+  end
+
+  defp check_public_on_update(_user_id, _sim, _params), do: :ok
+
+  defp build_spec(params) do
+    case HoloSimSpec.build(params["kind"], params["options"] || %{}, nil, params["name"]) do
+      {:ok, spec} -> {:ok, spec}
+      {:error, message} -> {:error, 422, message}
+    end
+  end
+
+  # GET /holosims/options - what the door's creation form offers. Served by the
+  # hub rather than hard-coded in the client so the two cannot disagree about
+  # which choices are valid: the hub is the one that will reject a bad one.
+  def options(conn, _params) do
+    json(conn, %{success: true, options: HoloSimSpec.catalog()})
+  end
+
+  # GET /holosims/:id/world - SERVER KEY ONLY. What an instance needs to build
+  # its sim at boot: the spec it was created with and the last saved state.
+  # Separate from `show` because `show` is access-checked against a player and
+  # strips nothing; an instance is not a player and needs both halves at once.
+  def world(conn, %{"id" => id} = params) do
+    with :ok <- require_server_auth(conn),
+         {:ok, _game} <- fetch_game(params["game_slug"]) do
+      case HoloSims.get_sim(id) do
+        nil ->
+          error(conn, 404, "Holo-sim not found")
+
+        sim ->
+          state = HoloSims.get_state(sim.id)
+
+          json(conn, %{
+            success: true,
+            sim: sim_json(sim, nil),
+            spec: sim.spec,
+            state: state && state.state,
+            state_saved_at: state && state.saved_at
+          })
+      end
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  defp allowance_error?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn
+      {:owner_id, {msg, _}} -> String.contains?(msg, "channels")
+      _ -> false
+    end)
+  end
+
+  defp allowance_error?(_), do: false
+
+  # GET /holosims/:id — includes the spec, so it is gated on access
+  def show(conn, %{"id" => id} = params) do
+    with {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id) do
+      json(conn, %{
+        success: true,
+        sim: sim_json(sim, user_id),
+        spec: sim.spec,
+        members: if(sim.owner_user_id == user_id, do: members_json(sim.id), else: nil),
+        has_saved_state: HoloSims.get_state(sim.id) != nil
+      })
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # PUT /holosims/:id
+  def update(conn, %{"id" => id} = params) do
+    with {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id),
+         :ok <- require_edit(sim, user_id),
+         :ok <- check_public_on_update(user_id, sim, params) do
+      # Options are fixed once a sim exists (Ray, 2026-10-08): no kind, spec or
+      # template here. Name and visibility carry through to the channel.
+      attrs = Map.take(params, ["name", "description", "visibility", "visitors_can_build"])
+
+      case HoloSims.update_sim(sim, attrs) do
+        {:ok, updated} -> json(conn, %{success: true, sim: sim_json(updated, user_id)})
+        {:error, changeset} -> error(conn, 422, changeset_errors(changeset))
+      end
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # DELETE /holosims/:id
+  def delete(conn, %{"id" => id} = params) do
+    with {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id),
+         :ok <- require_owner(sim, user_id) do
+      {:ok, _} = HoloSims.delete_sim(sim)
+
+      # Take a running instance down with it (2026-10-10). Without this a
+      # deleted sim's pod keeps serving a world with no row behind it until its
+      # idle timer fires, and its saves fail against a sim that is gone. The
+      # resume locations pointing at it are cleared by the FK (nilify_all).
+      _ = InstanceLauncher.terminate(sim.id)
+
+      json(conn, %{success: true})
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # ---------------------------------------------------------------------
+  # Members
+  # ---------------------------------------------------------------------
+
+  # POST /holosims/:id/members
+  def add_member(conn, %{"id" => id} = params) do
+    with {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id),
+         :ok <- require_owner(sim, user_id),
+         {:ok, invitee} <- fetch_required(params, "user_id") do
+      case HoloSims.invite_member(sim, invitee, user_id, params["role"] || "viewer") do
+        {:ok, member} ->
+          conn |> put_status(:created) |> json(%{success: true, member: member_json(member)})
+
+        {:error, :already_owner, message} ->
+          error(conn, 409, message)
+
+        {:error, :no_channel, message} ->
+          error(conn, 409, message)
+
+        {:error, changeset} ->
+          error(conn, 422, changeset_errors(changeset))
+      end
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # DELETE /holosims/:id/members/:user_id
+  #
+  # The owner may remove anyone; a member may remove themselves. That second
+  # case matters - being unable to leave someone else's sim is the kind of thing
+  # that turns into a support ticket.
+  def remove_member(conn, %{"id" => id, "member_user_id" => target} = params) do
+    with {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id) do
+      if sim.owner_user_id == user_id or target == user_id do
+        case HoloSims.remove_member(sim.id, target) do
+          {:ok, _} ->
+            json(conn, %{success: true})
+
+          {:error, :not_found} ->
+            error(conn, 404, "That player is not a member")
+
+          # The owner's access does not come from a membership row, so there is
+          # nothing to remove and removing it would lock them out of their own
+          # world. Deleting the sim is the action they actually want.
+          {:error, :cannot_remove_owner} ->
+            error(conn, 409, "The owner cannot be removed. Delete the Holo-sim instead.")
+
+          {:error, changeset} ->
+            error(conn, 422, changeset_errors(changeset))
+        end
+      else
+        error(conn, 403, "Only the owner can remove other members")
+      end
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # POST /holosims/:id/accept
+  def accept(conn, %{"id" => id} = params) do
+    with {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params) do
+      case HoloSims.accept_invite(id, user_id) do
+        # Channel-backed sims have no acceptance step - being in the channel IS
+        # the access. Answered as success so an older client's accept call does
+        # not present a failure for something that already worked.
+        {:ok, :already_active} ->
+          json(conn, %{success: true, member: nil})
+
+        {:ok, member} ->
+          json(conn, %{success: true, member: member_json(member)})
+
+        {:error, :not_found} ->
+          error(conn, 404, "No invitation found")
+
+        {:error, changeset} ->
+          error(conn, 422, changeset_errors(changeset))
+      end
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # ---------------------------------------------------------------------
+  # Launch
+  # ---------------------------------------------------------------------
+
+  # POST /holosims/:id/launch
+  #
+  # Asks for a running instance of this sim. Returns `ready` with an address, or
+  # `pending` while a pod comes up.
+  #
+  # INSTANCES ARE SHARED. One sim, one instance, however many players are in it.
+  # So a launch is really "join, starting one first if nobody has": if an
+  # instance is already live, everyone who passes the access check gets the same
+  # address. That is what makes public sims social rather than a hundred lonely
+  # copies of the same world.
+  #
+  # There is deliberately NO cap on how many instances one account can be
+  # responsible for. An earlier draft refused a second launch while the player's
+  # first was still running, which had an obvious bug: leaving a popular public
+  # sim that others were still enjoying would lock the owner out of their own
+  # library. Occupancy already bounds cost - an empty pod shuts down, a busy one
+  # is busy because people are in it - so the only thing left worth limiting is
+  # the rate of starts.
+  def launch(conn, %{"id" => id} = params) do
+    with {:ok, game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id) do
+      case Games.get_instance_for_sim(game.id, id) do
+        # Already running - join it. No second pod, no waiting.
+        %{} = server ->
+          json(conn, launch_json(:ready, sim, server))
+
+        nil ->
+          case HoloSims.launch_allowed?(game.id, user_id) do
+            :ok -> begin_launch(conn, game, sim, user_id)
+            {:error, :rate_limited, message} -> error(conn, 429, message)
+          end
+      end
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # GET /holosims/:id/status - poll while the door animation plays
+  def status(conn, %{"id" => id} = params) do
+    with {:ok, game} <- fetch_game(params["game_slug"]),
+         {:ok, user_id} <- resolve_user_id(conn, params),
+         {:ok, sim} <- HoloSims.get_sim_for_user(id, user_id) do
+      case Games.get_instance_for_sim(game.id, id) do
+        nil -> json(conn, %{success: true, status: "pending", holo_sim_id: sim.id})
+        server -> json(conn, launch_json(:ready, sim, server))
+      end
+    else
+      {:error, :not_found} -> error(conn, 404, "Holo-sim not found")
+      {:error, :forbidden} -> error(conn, 403, "You do not have access to this Holo-sim")
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # M5: create a Kubernetes Job. Nothing else about launching moved - the client
+  # already polls /status, the access check already guarded the door, and the
+  # instance still announces itself by heartbeat.
+  #
+  # The M4 path is kept as the fallback, not as dead code: outside a cluster, or
+  # before an instance image exists, the hub records the intent and reports
+  # `pending` so a server started by hand with -HoloSimId= is still found by the
+  # next poll. That is the development loop, and it must keep working.
+  defp begin_launch(conn, _game, sim, user_id) do
+    {:ok, sim} = HoloSims.record_launch(sim)
+
+    result =
+      if InstanceLauncher.available?() do
+        InstanceLauncher.launch(%{id: sim.game_id}, sim, user_id)
+      else
+        {:ok, :manual}
+      end
+
+    case result do
+      {:ok, :manual} ->
+        conn
+        |> put_status(202)
+        |> json(%{
+          success: true,
+          status: "pending",
+          holo_sim_id: sim.id,
+          message: "Instance requested. Poll /status until it reports ready."
+        })
+
+      {:ok, started} when started in [:started, :already_starting] ->
+        conn
+        |> put_status(202)
+        |> json(%{
+          success: true,
+          status: "pending",
+          holo_sim_id: sim.id,
+          message: "Instance starting. Poll /status until it reports ready."
+        })
+
+      {:error, reason} ->
+        # 503, not 500. The request was valid and the player did nothing wrong -
+        # the cluster could not start a process right now, and a retry is a
+        # reasonable thing for the client to do.
+        conn
+        |> put_status(503)
+        |> json(%{
+          success: false,
+          status: "failed",
+          holo_sim_id: sim.id,
+          error: launch_error_message(reason)
+        })
+    end
+  end
+
+  defp launch_error_message(:no_free_port),
+    do: "No instance capacity available right now. Try again shortly."
+
+  defp launch_error_message(:no_image_configured),
+    do: "Instance orchestration is not configured on this server."
+
+  defp launch_error_message(:previous_instance_ending),
+    do: "This Holo-sim's last instance is still shutting down. Try the door again in a few seconds."
+
+  # The instance could not be given a reachable port. Its Job has already been
+  # deleted - see InstanceLauncher.expose/4 - so retrying is safe.
+  defp launch_error_message({:service, _}),
+    do: "Could not open a network port for the Holo-sim. Try again shortly."
+
+  defp launch_error_message(_), do: "Could not start an instance. Try again shortly."
+
+  defp launch_json(:ready, sim, server) do
+    %{
+      success: true,
+      status: "ready",
+      holo_sim_id: sim.id,
+      address: "#{server.host}:#{server.port}",
+      host: server.host,
+      port: server.port,
+      map_name: server.map_name,
+      current_players: server.current_players,
+      max_players: server.max_players
+    }
+  end
+
+  # ---------------------------------------------------------------------
+  # Server-only
+  # ---------------------------------------------------------------------
+
+  # GET /holosims/:id/access/:target_user_id
+  #
+  # THE SECURITY BOUNDARY for per-sim instances.
+  #
+  # With one server process per sim, a player who learns another sim's host:port
+  # could otherwise connect straight to it. The instance server calls this in
+  # PreLoginAsync and refuses anyone it says no to. Server API key only - a
+  # player token must never be able to ask this question about other people, and
+  # must never be able to answer it about themselves.
+  def check_access(conn, %{"id" => id, "target_user_id" => target} = params) do
+    with :ok <- require_server_auth(conn),
+         {:ok, _game} <- fetch_game(params["game_slug"]) do
+      case HoloSims.get_sim(id) do
+        nil ->
+          error(conn, 404, "Holo-sim not found")
+
+        sim ->
+          json(conn, %{
+            success: true,
+            allowed: HoloSims.can_access?(sim, target),
+            is_owner: sim.owner_user_id == target,
+            visibility: sim.visibility,
+            spec: sim.spec,
+            # The instance enforces this in-game: a visitor with build rights
+            # off can interact but cannot leave a permanent mark.
+            visitors_can_build: sim.visitors_can_build,
+            can_persist: HoloSims.can_persist?(sim, target),
+            state: (HoloSims.get_state(id) || %{state: %{}}).state
+          })
+      end
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # PUT /holosims/:id/state - instance server checkpoints the world
+  #
+  # One row per sim: a shared instance holds one world, so there is one state.
+  # Whether a given player's session may cause that write is decided by
+  # HoloSims.can_persist?/2, which honours the owner's visitors_can_build
+  # setting.
+  def save_state(conn, %{"id" => id} = params) do
+    with :ok <- require_server_auth(conn),
+         {:ok, _game} <- fetch_game(params["game_slug"]),
+         {:ok, target} <- fetch_required(params, "user_id") do
+      state = params["state"] || %{}
+
+      case HoloSims.get_sim(id) do
+        nil ->
+          error(conn, 404, "Holo-sim not found")
+
+        sim ->
+          # Re-check access on write. A pod that has outlived a revoked
+          # invitation must not keep writing into someone else's sim.
+          cond do
+            not HoloSims.can_access?(sim, target) ->
+              error(conn, 403, "That user no longer has access to this Holo-sim")
+
+            true ->
+              try do
+                case HoloSims.save_state(sim, target, state) do
+                  {:ok, _} -> json(conn, %{success: true})
+                  {:error, :cannot_persist, message} -> error(conn, 403, message)
+                  {:error, changeset} -> error(conn, 422, changeset_errors(changeset))
+                end
+              rescue
+                # A database exception used to surface as a bare 500 with no
+                # reason, which is all the game server could report. Say why.
+                e ->
+                  require Logger
+                  Logger.error("Holo-sim save for #{id} raised: " <> Exception.message(e))
+                  error(conn, 500, "Save failed: " <> Exception.message(e))
+              end
+          end
+      end
+    else
+      {:error, status, message} -> error(conn, status, message)
+    end
+  end
+
+  # ---------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------
+
+  defp fetch_game(slug) do
+    case Games.get_game_by_slug(slug) do
+      nil -> {:error, 404, "Unknown game: #{slug}"}
+      game -> if game.is_active, do: {:ok, game}, else: {:error, 403, "Game is not active"}
+    end
+  end
+
+  defp resolve_user_id(conn, params) do
+    case conn.assigns[:games_auth_mode] do
+      :player_token ->
+        {:ok, Guardian.Plug.current_resource(conn).id}
+
+      :server_api_key ->
+        case params["user_id"] do
+          nil -> {:error, 400, "user_id is required when authenticating via server API key"}
+          user_id -> {:ok, user_id}
+        end
+    end
+  end
+
+  defp require_server_auth(conn) do
+    case conn.assigns[:games_auth_mode] do
+      :server_api_key -> :ok
+      _ -> {:error, 403, "This endpoint requires a server API key"}
+    end
+  end
+
+  defp require_owner(sim, user_id) do
+    if sim.owner_user_id == user_id, do: :ok, else: {:error, 403, "Only the owner can do that"}
+  end
+
+  defp require_edit(sim, user_id) do
+    cond do
+      sim.owner_user_id != user_id -> {:error, 403, "Only the owner can edit this Holo-sim"}
+      sim.is_locked -> {:error, 423, "This Holo-sim is locked pending moderation"}
+      true -> :ok
+    end
+  end
+
+  defp fetch_required(params, key) do
+    case params[key] do
+      nil -> {:error, 400, "#{key} is required"}
+      "" -> {:error, 400, "#{key} is required"}
+      value -> {:ok, value}
+    end
+  end
+
+  # The spec is deliberately NOT included in list responses. It is the largest
+  # field by far and the door list only needs names and metadata; sending a
+  # hundred specs to render a menu would be wasteful. `show` returns it.
+  defp sim_json(sim, viewer_id) do
+    %{
+      id: sim.id,
+      name: sim.name,
+      description: sim.description,
+      # The channel is the sim's access control list and its chat. Sent so the
+      # client can deep-link to the forum, and so "who can enter this" has an
+      # answer the player can act on rather than a list they cannot change here.
+      channel_id: sim.channel_id,
+      visibility: sim.visibility,
+      kind: sim.kind,
+      # The choices the world was generated from, read back out of the spec's
+      # Metadata - so the door can say "50 planets, dice" without the spec.
+      options: HoloSimSpec.options(sim.spec),
+      template_id: sim.template_id,
+      is_published: sim.is_published,
+      is_locked: sim.is_locked,
+      is_owner: sim.owner_user_id == viewer_id,
+      visitors_can_build: sim.visitors_can_build,
+      owner_user_id: sim.owner_user_id,
+      last_launched_at: sim.last_launched_at,
+      launch_count: sim.launch_count,
+      inserted_at: sim.inserted_at,
+      updated_at: sim.updated_at
+    }
+  end
+
+  defp members_json(sim_id) do
+    Enum.map(HoloSims.list_members(sim_id), &member_json/1)
+  end
+
+  # TWO SHAPES ARRIVE HERE. A channel-backed sim returns ChannelMember structs;
+  # a sim that predates the link returns HoloSimMember structs. They share
+  # user_id and role and nothing else, so the rest is read defensively rather
+  # than by assuming a field exists - getting that wrong is a 500 on the door.
+  defp member_json(member) do
+    %{
+      user_id: member.user_id,
+      role: member.role,
+      joined_at: Map.get(member, :joined_at) || Map.get(member, :invited_at),
+      is_banned: Map.get(member, :is_banned, false),
+      # Legacy only; a channel member has no separate acceptance step.
+      accepted_at: Map.get(member, :accepted_at)
+    }
+  end
+
+  defp changeset_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {key, value}, acc ->
+        String.replace(acc, "%{#{key}}", to_string(value))
+      end)
+    end)
+  end
+
+  defp error(conn, status, message) do
+    conn |> put_status(status) |> json(%{success: false, message: message})
+  end
+end

@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.AddCharacterHoloSimLocation do
+defmodule Phxlive.GamesRepo.Migrations.AddCharacterHoloSimLocation do
   @moduledoc """
   Resume-in-sim (Ray, 2026-10-09): "if a character is logged out while in a
   holo-sim, they should log back in to the same spot, but not if they've chosen

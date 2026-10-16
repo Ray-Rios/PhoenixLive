@@ -1,4 +1,4 @@
-# PhoenixApp
+# PhxLive
 
 A batteries-included Phoenix 1.7 / LiveView 1.0 application: authentication and
 account security, a CMS, a storefront, a forum, real-time chat, a windowed
@@ -35,20 +35,20 @@ practical: each subsystem says what it is and roughly what removing it costs.
 
 | Subsystem | What it gives you | Where |
 |---|---|---|
-| **Accounts & auth** | Registration, email verification by 6-digit code, login by email *or* username, password reset, Guardian JWT sessions, 2FA scaffolding | `lib/phoenix_app/accounts`, `auth` |
-| **Account security** | Login-attempt tracking, lockout after repeated failures, device fingerprinting, block/allow identifier lists, behavioural bot signals, IP rate limiting | `lib/phoenix_app/security`, `rate_limiter.ex` |
-| **Content / CMS** | Posts, pages, comments, media library with tags, plus a WordPress-shaped `cms_*` set (posts, terms, taxonomies, meta) | `lib/phoenix_app/content` |
-| **Commerce** | Products, categories, carts, orders, order items, checkout LiveView | `lib/phoenix_app/commerce` |
-| **Forum & social** | Channels, threads, attachments, presence | `lib/phoenix_app/forum`, `social` |
-| **Chat** | Phoenix Channels with presence, optional Redis bridge for cross-pod delivery | `lib/phoenix_app_web/channels`, `redis_pubsub.ex` |
-| **Desktop UI** | A taskbar-and-windows shell rendered as a global `live_component` on every authenticated page — not a route | `lib/phoenix_app/desktop`, `phoenix_desktop_live.ex` |
-| **Scheduler** | Recurring events, manual run/pause/resume, and a secret-authenticated webhook trigger | `lib/phoenix_app/scheduler` |
-| **Files & media** | Uploads via Arc, image processing, avatars, user file storage | `lib/phoenix_app/files`, `media_processor.ex` |
-| **Notifications & email** | Swoosh + SMTP, HTML templates, delivery logging | `lib/phoenix_app/email`, `notifications` |
-| **Moderation & audit** | Audit log, moderation queue, admin LiveViews | `lib/phoenix_app/moderation`, `audit.ex` |
-| **GraphQL** | Absinthe schema with Dataloader | `lib/phoenix_app_web/schema.ex`, `resolvers` |
-| **Games platform** | Accounts→characters→shards→player-authored world instances, with a Kubernetes launcher. **Its own database.** | `lib/phoenix_app/games` |
-| **Kubernetes** | An ~80-line in-cluster API client using the pod's own service account | `lib/phoenix_app/kubernetes.ex` |
+| **Accounts & auth** | Registration, email verification by 6-digit code, login by email *or* username, password reset, Guardian JWT sessions, 2FA scaffolding | `lib/phxlive/accounts`, `auth` |
+| **Account security** | Login-attempt tracking, lockout after repeated failures, device fingerprinting, block/allow identifier lists, behavioural bot signals, IP rate limiting | `lib/phxlive/security`, `rate_limiter.ex` |
+| **Content / CMS** | Posts, pages, comments, media library with tags, plus a WordPress-shaped `cms_*` set (posts, terms, taxonomies, meta) | `lib/phxlive/content` |
+| **Commerce** | Products, categories, carts, orders, order items, checkout LiveView | `lib/phxlive/commerce` |
+| **Forum & social** | Channels, threads, attachments, presence | `lib/phxlive/forum`, `social` |
+| **Chat** | Phoenix Channels with presence, optional Redis bridge for cross-pod delivery | `lib/phxlive_web/channels`, `redis_pubsub.ex` |
+| **Desktop UI** | A taskbar-and-windows shell rendered as a global `live_component` on every authenticated page — not a route | `lib/phxlive/desktop`, `phoenix_desktop_live.ex` |
+| **Scheduler** | Recurring events, manual run/pause/resume, and a secret-authenticated webhook trigger | `lib/phxlive/scheduler` |
+| **Files & media** | Uploads via Arc, image processing, avatars, user file storage | `lib/phxlive/files`, `media_processor.ex` |
+| **Notifications & email** | Swoosh + SMTP, HTML templates, delivery logging | `lib/phxlive/email`, `notifications` |
+| **Moderation & audit** | Audit log, moderation queue, admin LiveViews | `lib/phxlive/moderation`, `audit.ex` |
+| **GraphQL** | Absinthe schema with Dataloader | `lib/phxlive_web/schema.ex`, `resolvers` |
+| **Games platform** | Accounts→characters→shards→player-authored world instances, with a Kubernetes launcher. **Its own database.** | `lib/phxlive/games` |
+| **Kubernetes** | An ~80-line in-cluster API client using the pod's own service account | `lib/phxlive/kubernetes.ex` |
 
 The **games platform** is the least generic and the most actively developed part.
 If you are here for a web app, it is the first thing to delete — it is cleanly
@@ -181,8 +181,8 @@ Only read when the app is running inside a cluster.
 ### Two databases, on purpose
 
 ```
-PhoenixApp.Repo          phoenixapp_dev        site: users, content, commerce, forum, …
-PhoenixApp.GamesRepo     phoenix_games_dev     games: games, characters, servers, world instances
+Phxlive.Repo          phoenixapp_dev        site: users, content, commerce, forum, …
+Phxlive.GamesRepo     phoenix_games_dev     games: games, characters, servers, world instances
                          priv/games_repo/migrations
 ```
 
@@ -205,7 +205,7 @@ outward as well, so several pods see each other's events. Nothing else changes.
 
 ### Kubernetes client
 
-`PhoenixApp.Kubernetes` is deliberately ~80 lines against one resource: create a
+`Phxlive.Kubernetes` is deliberately ~80 lines against one resource: create a
 Job, ask whether it started, delete it. It authenticates with the pod's own
 projected service account — nothing to configure, no secret to rotate, identical
 in k3s and managed clusters. **It verifies the cluster CA.** Outside a pod,
@@ -337,7 +337,7 @@ Migrations run through the release, not through mix:
 
 ```bash
 kubectl exec -n phoenixapp deploy/phoenix-web -- \
-  /app/bin/phoenix_app eval "PhoenixApp.Release.migrate()"
+  /app/bin/phoenix_app eval "Phxlive.Release.migrate()"
 ```
 
 **`k3s/overlays/prod/secrets.yaml`, `ingress.yaml` and `mailhog-auth-secret.yaml`
@@ -386,7 +386,7 @@ An honest map of what it costs to remove each piece, largest win first:
 
 | Remove | Effort | Notes |
 |---|---|---|
-| Games platform | **Low** | Own repo, own router scope, own migrations. Delete `lib/phoenix_app/games`, `games_repo.ex`, `priv/games_repo`, the `/api/games` scope, and drop `PhoenixApp.GamesRepo` from `ecto_repos` |
+| Games platform | **Low** | Own repo, own router scope, own migrations. Delete `lib/phxlive/games`, `games_repo.ex`, `priv/games_repo`, the `/api/games` scope, and drop `Phxlive.GamesRepo` from `ecto_repos` |
 | Commerce | Low | Contexts, LiveViews and tables are self-contained; check the profile page for order links |
 | Forum / social | Low–medium | Shares presence and notifications with chat |
 | Desktop UI | Medium | It is rendered from the app layout on every authenticated page, so removal is a layout edit plus the component tree |

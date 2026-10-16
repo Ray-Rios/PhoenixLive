@@ -11,7 +11,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // App version for cache debugging
 const APP_VERSION = "2025.12.21.2";
-console.log(`🔧 PhoenixApp v${APP_VERSION}`);
+console.log(`🔧 Phxlive v${APP_VERSION}`);
 
 // Phoenix LiveView - import but DON'T connect until hooks are ready
 import { Socket } from "phoenix";

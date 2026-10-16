@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.CreateTaskDependencies do
+defmodule Phxlive.Repo.Migrations.CreateTaskDependencies do
   use Ecto.Migration
 
   def change do

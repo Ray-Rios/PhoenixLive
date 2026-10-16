@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.HoloSimsSharedInstances do
+defmodule Phxlive.GamesRepo.Migrations.HoloSimsSharedInstances do
   use Ecto.Migration
 
   @moduledoc """

@@ -1,4 +1,4 @@
-defmodule PhoenixApp.GamesRepo.Migrations.HoloSimStatesUserIdNullable do
+defmodule Phxlive.GamesRepo.Migrations.HoloSimStatesUserIdNullable do
   use Ecto.Migration
 
   # holo_sim_states.user_id was the per-player key before instances became

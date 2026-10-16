@@ -17,4 +17,4 @@ spec:
                 name: phoenix-config
             - secretRef:
                 name: phoenix-secrets
-          command: ["/app/bin/phoenix_app", "eval", "PhoenixApp.Release.migrate()"]
+          command: ["/app/bin/phoenix_app", "eval", "Phxlive.Release.migrate()"]

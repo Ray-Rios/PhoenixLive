@@ -3,7 +3,7 @@ import Config
 # ----------------------------
 # Guardian (dev)
 # ----------------------------
-config :phoenix_app, PhoenixApp.Auth.Guardian,
+config :phxlive, Phxlive.Auth.Guardian,
   issuer: "phoenix_app",
   # Secret picked up from runtime.exs
   secret_key: System.get_env("GUARDIAN_SECRET_KEY") || "dev_guardian_secret_placeholder"
@@ -11,7 +11,7 @@ config :phoenix_app, PhoenixApp.Auth.Guardian,
 # ----------------------------
 # Endpoint
 # ----------------------------
-config :phoenix_app, PhoenixAppWeb.Endpoint,
+config :phxlive, PhxliveWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: 4000],
   check_origin: false,
   code_reloader: true,
@@ -24,14 +24,14 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
     patterns: [
       ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
       ~r"priv/gettext/.*(po)$",
-      ~r"lib/phoenix_app_web/(controllers|live|components)/.*(ex|heex)$"
+      ~r"lib/phxlive_web/(controllers|live|components)/.*(ex|heex)$"
     ]
   ]
 
 # ----------------------------
 # Dev routes & logging
 # ----------------------------
-config :phoenix_app, dev_routes: true
+config :phxlive, dev_routes: true
 config :logger, :console, format: "[$level] $message\n"
 config :phoenix, :stacktrace_depth, 20
 config :phoenix, :plug_init_mode, :runtime
@@ -40,12 +40,12 @@ config :swoosh, :api_client, false
 # ----------------------------
 # Redis & Mail (dev)
 # ----------------------------
-config :phoenix_app, :redis_url,
+config :phxlive, :redis_url,
   System.get_env("REDIS_URL") || "redis://redis:6379/0"
 
-config :phoenix_app, :enable_redis, true
+config :phxlive, :enable_redis, true
 
-config :phoenix_app, PhoenixApp.Mailer,
+config :phxlive, Phxlive.Mailer,
   adapter: Swoosh.Adapters.SMTP,
   relay: System.get_env("SMTP_HOST") || "mailhog",
   port: String.to_integer(System.get_env("SMTP_PORT") || "1025"),
@@ -69,4 +69,4 @@ config :pbkdf2_elixir, :rounds, 1  # Fast for development (default is 160000)
 #
 # Set ONLY here. In prod the endpoint 404s, which is what you want - it takes an
 # unauthenticated email and grants it exactly what verification exists to prove.
-config :phoenix_app, :allow_dev_verify, true
+config :phxlive, :allow_dev_verify, true

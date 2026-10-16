@@ -1,9 +1,9 @@
-defmodule PhoenixApp.MixProject do
+defmodule Phxlive.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :phoenix_app,
+      app: :phxlive,
       version: "0.1.0",
       elixir: "~> 1.19.0",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -25,7 +25,7 @@ defmodule PhoenixApp.MixProject do
 
   def application do
     [
-      mod: {PhoenixApp.Application, []},
+      mod: {Phxlive.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end

@@ -162,7 +162,7 @@ COPY priv/repo ./priv/repo
 # database, and the app boots with no schema; it surfaces much later as
 # `relation "games" does not exist`, which looks nothing like a packaging bug.
 #
-# `PhoenixApp.Release.status()` prints the file count per repo precisely so this
+# `Phxlive.Release.status()` prints the file count per repo precisely so this
 # is one command to spot rather than an afternoon.
 COPY priv/games_repo ./priv/games_repo
 COPY priv/gettext ./priv/gettext

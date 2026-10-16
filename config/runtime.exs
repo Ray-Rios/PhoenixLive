@@ -7,17 +7,23 @@ import Config
 config :swoosh, :api_client, false
 
 # Optional Projects API key used by Taskbar calendar to fetch project items
-config :phoenix_app, projects_api_key: System.get_env("PROJECTS_API_KEY") || ""
+config :phxlive, projects_api_key: System.get_env("PROJECTS_API_KEY") || ""
 
 # API key used by trusted dedicated game servers (e.g. RaysSpaceSim) to act on behalf of players
-config :phoenix_app, games_server_api_key: System.get_env("GAMES_SERVER_API_KEY") || ""
+# Drive storage (PHXLIVE.md §7). Defaults to <uploads volume>/_drive, which
+# UploadsGuard keeps from ever being served by /uploads.
+if drive_root = System.get_env("DRIVE_STORAGE_ROOT") do
+  config :phxlive, Phxlive.Storage, root: drive_root
+end
+
+config :phxlive, games_server_api_key: System.get_env("GAMES_SERVER_API_KEY") || ""
 
 # -------------------------------------------------
 # SECRET_KEY_BASE
 # -------------------------------------------------
 secret_key_base =
   System.get_env("SECRET_KEY_BASE") ||
-    if config_env() == :dev do
+    if config_env() in [:dev, :test] do
       # Dev default - fixed key for development
       "sX9/Rn5BIxDT+OD20jOYEYImGrN9SR7F9NLC1av9z+aip2mySJdALjSICoNOX5Hc"
     else
@@ -32,7 +38,7 @@ secret_key_base =
 # -------------------------------------------------
 live_view_salt =
   System.get_env("LIVE_VIEW_SIGNING_SALT") ||
-    if config_env() == :dev do
+    if config_env() in [:dev, :test] do
       "dev_live_view_salt_#{:crypto.strong_rand_bytes(8) |> Base.encode64()}"
     else
       raise """
@@ -46,7 +52,7 @@ live_view_salt =
 # -------------------------------------------------
 guardian_secret =
   System.get_env("GUARDIAN_SECRET_KEY") ||
-    if config_env() == :dev do
+    if config_env() in [:dev, :test] do
       "dev_guardian_secret_#{:crypto.strong_rand_bytes(16) |> Base.encode64()}"
     else
       raise """
@@ -60,16 +66,17 @@ guardian_secret =
 # -------------------------------------------------
 db_username = System.get_env("DB_USERNAME") || "postgres"
 db_password = System.get_env("DB_PASSWORD") || "postgres"
-db_host = System.get_env("DB_HOST") || if(config_env() == :dev, do: "localhost", else: "db")
+db_host = System.get_env("DB_HOST") || if(config_env() in [:dev, :test], do: "localhost", else: "db")
 db_port = String.to_integer(System.get_env("DB_PORT") || if(config_env() == :dev, do: "5432", else: "5432"))
-db_name = System.get_env("DB_NAME") || "phoenixapp_dev"
+# test.exs names the test databases; this URL would otherwise point tests at dev.
+db_name = System.get_env("DB_NAME") || if(config_env() == :test, do: "phoenixapp_test", else: "phoenixapp_dev")
 db_pool = String.to_integer(System.get_env("POOL_SIZE") || "10")
 
 database_url = 
   System.get_env("DATABASE_URL") || 
   "postgresql://#{db_username}:#{db_password}@#{db_host}:#{db_port}/#{db_name}"
 
-config :phoenix_app, PhoenixApp.Repo,
+config :phxlive, Phxlive.Repo,
   adapter: Ecto.Adapters.Postgres,
   url: database_url,
   pool_size: db_pool,
@@ -86,7 +93,7 @@ config :phoenix_app, PhoenixApp.Repo,
 # -------------------------------------------------
 # Games Repo Database URL (isolated multiplayer game data)
 # -------------------------------------------------
-games_db_name = System.get_env("GAMES_DB_NAME") || "phoenix_games_dev"
+games_db_name = System.get_env("GAMES_DB_NAME") || if(config_env() == :test, do: "phoenix_games_test", else: "phoenix_games_dev")
 
 games_database_url =
   System.get_env("GAMES_DATABASE_URL") ||
@@ -135,7 +142,7 @@ holosim_command =
 holosim_port_min = String.to_integer(System.get_env("HOLOSIM_PORT_MIN", "7800"))
 holosim_port_max = String.to_integer(System.get_env("HOLOSIM_PORT_MAX", "7899"))
 
-config :phoenix_app, PhoenixApp.Games.InstanceLauncher,
+config :phxlive, Phxlive.Games.InstanceLauncher,
   # The packaged Linux dedicated server image. Until this exists, leave it unset.
   image: System.get_env("HOLOSIM_IMAGE"),
   image_pull_policy: System.get_env("HOLOSIM_IMAGE_PULL_POLICY", "IfNotPresent"),
@@ -209,7 +216,7 @@ world_public_port =
     value -> String.to_integer(value)
   end
 
-config :phoenix_app, PhoenixApp.Games.WorldServerLauncher,
+config :phxlive, Phxlive.Games.WorldServerLauncher,
   # The same packaged image the Holo-sims use. A world server is that image
   # WITHOUT -HoloSimId=, so there is no second thing to build or keep in step.
   image: System.get_env("WORLD_IMAGE") || System.get_env("HOLOSIM_IMAGE"),
@@ -247,7 +254,7 @@ config :phoenix_app, PhoenixApp.Games.WorldServerLauncher,
       "http://phoenix-web.phoenixapp.svc.cluster.local"
     )
 
-config :phoenix_app, PhoenixApp.GamesRepo,
+config :phxlive, Phxlive.GamesRepo,
   adapter: Ecto.Adapters.Postgres,
   url: games_database_url,
   pool_size: db_pool,
@@ -268,7 +275,7 @@ config :phoenix_app, PhoenixApp.GamesRepo,
 http_port = String.to_integer(System.get_env("PORT") || "4000")
 
 
-config :phoenix_app, PhoenixAppWeb.Endpoint,
+config :phxlive, PhxliveWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: http_port],
   secret_key_base: secret_key_base,
   live_view: [signing_salt: live_view_salt],
@@ -292,16 +299,16 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
 # -------------------------------------------------
 # Guardian runtime config
 # -------------------------------------------------
-config :phoenix_app, PhoenixApp.Auth.Guardian,
+config :phxlive, Phxlive.Auth.Guardian,
   secret_key: guardian_secret
 
 # -------------------------------------------------
 # Redis
 # -------------------------------------------------
-config :phoenix_app, :redis_url,
+config :phxlive, :redis_url,
   System.get_env("REDIS_URL") || if(config_env() == :dev, do: "redis://localhost:6379/0", else: "redis://redis:6379/0")
 
-config :phoenix_app, :enable_redis,
+config :phxlive, :enable_redis,
   System.get_env("ENABLE_REDIS", "false") == "true"
 
 # -------------------------------------------------
@@ -347,7 +354,7 @@ if smtp_host != "" do
       [verify: :verify_none]
     end
 
-  config :phoenix_app, PhoenixApp.Mailer,
+  config :phxlive, Phxlive.Mailer,
     adapter: Swoosh.Adapters.SMTP,
     relay: smtp_host,
     port: parsed_port,
@@ -362,7 +369,7 @@ if smtp_host != "" do
 else
   # No SMTP configured: use Logger adapter (cluster-safe, just logs emails)
   # Note: Swoosh.Adapters.Local uses global processes which cause conflicts in clustered deployments
-  config :phoenix_app, PhoenixApp.Mailer,
+  config :phxlive, Phxlive.Mailer,
     adapter: Swoosh.Adapters.Logger,
     level: :info
 end

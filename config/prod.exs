@@ -3,7 +3,7 @@ import Config
 # ----------------------------
 # Endpoint
 # ----------------------------
-config :phoenix_app, PhoenixAppWeb.Endpoint,
+config :phxlive, PhxliveWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4000")],
   url: [host: System.get_env("PHOENIX_HOST") || "phxlive.net", port: 443, scheme: "https"],
   # Allow all origins to support local network access (e.g. 192.168.x.x)
@@ -92,27 +92,27 @@ config :cors_plug,
 # ----------------------------
 # Guardian (prod)
 # ----------------------------
-config :phoenix_app, PhoenixApp.Auth.Guardian,
+config :phxlive, Phxlive.Auth.Guardian,
   secret_key: (System.get_env("GUARDIAN_SECRET_KEY") ||
     raise("GUARDIAN_SECRET_KEY is missing. Generate with `mix guardian.gen.secret`"))
 
 # ----------------------------
 # Redis & Mail
 # ----------------------------
-config :phoenix_app, :redis_url,
+config :phxlive, :redis_url,
   System.get_env("REDIS_URL") || "redis://redis:6379/0"
 
-config :phoenix_app, :enable_redis, 
+config :phxlive, :enable_redis, 
   System.get_env("ENABLE_REDIS", "true") == "true"
 
 # For now, use Logger adapter to log emails (until SMTP is configured via env vars)
 # Note: Swoosh.Adapters.Local causes global process conflicts in clustered deployments
 # The actual adapter is configured in runtime.exs based on SMTP_HOST env var
-# config :phoenix_app, PhoenixApp.Mailer,
+# config :phxlive, Phxlive.Mailer,
 #   adapter: Swoosh.Adapters.Logger
 
 # SMTP alternative (uncomment and configure if you prefer SMTP over SendGrid):
-# config :phoenix_app, PhoenixApp.Mailer,
+# config :phxlive, Phxlive.Mailer,
 #   adapter: Swoosh.Adapters.SMTP,
 #   relay: System.get_env("SMTP_HOST") || "smtp.yourprovider.com",
 #   port: String.to_integer(System.get_env("SMTP_PORT") || "587"),

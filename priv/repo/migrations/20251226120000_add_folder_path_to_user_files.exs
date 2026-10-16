@@ -1,4 +1,4 @@
-defmodule PhoenixApp.Repo.Migrations.AddFolderPathToUserFiles do
+defmodule Phxlive.Repo.Migrations.AddFolderPathToUserFiles do
   use Ecto.Migration
 
   def change do
