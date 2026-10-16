@@ -36,13 +36,18 @@ defmodule Phxlive.MixProject do
   defp elixirc_paths(_), do: ["lib" | plugin_paths("lib")]
 
   # Installed plugins are folders under plugins/ (PHXLIVE.md §9). Returns
-  # plugins/<slug>/<sub> for each plugin that has it. Folder names that aren't
-  # valid slugs (e.g. "_template") are skipped, matching Phxlive.Plugins.Discovery.
+  # plugins/<slug>/<sub> for each plugin that has it. Same rules as
+  # Phxlive.Plugins.Discovery: the folder name must be a valid slug (so
+  # "_template" is skipped) and lib/<slug>/plugin.ex must exist (so an empty
+  # or half-finished clone is skipped rather than half-compiled).
   defp plugin_paths(sub) do
     "plugins/*/#{sub}"
     |> Path.wildcard()
     |> Enum.filter(&File.dir?/1)
-    |> Enum.filter(fn path -> Regex.match?(~r/\A[a-z][a-z0-9_]*\z/, path |> Path.split() |> Enum.at(1)) end)
+    |> Enum.filter(fn path ->
+      slug = path |> Path.split() |> Enum.at(1)
+      Regex.match?(~r/\A[a-z][a-z0-9_]*\z/, slug) and File.regular?(Path.join(["plugins", slug, "lib", slug, "plugin.ex"]))
+    end)
     |> Enum.sort()
   end
 

@@ -529,7 +529,9 @@ plugins/
 - Characters are platform `GameCharacter`s. Plugin tables may reference
   `game_characters.id` (same database).
 
-**Installed vs active.** Every folder under `plugins/` is *installed*: `mix.exs` adds
+**Installed vs active.** Every folder under `plugins/` whose name is a slug and that has
+`lib/<slug>/plugin.ex` is *installed* (anything else, like an empty or half-finished clone,
+is skipped with a warning on stderr rather than breaking the build): `mix.exs` adds
 `plugins/*/lib` to the compile paths and `plugins/*/test` to the test paths, all its
 routes are compiled into the router, and its migrations run (`Phxlive.Release.migrate/0`
 in production, `mix phxlive.migrate` in development; plain `mix ecto.migrate` only sees

@@ -128,6 +128,24 @@ defmodule Phxlive.PluginsTest do
     assert {:cont, _} = PhxliveWeb.PluginGate.on_mount({"fixture_plugin", "/admin/plugins"}, %{}, %{}, socket)
   end
 
+  test "discovery skips folders that aren't finished plugins" do
+    dir = Path.join(System.tmp_dir!(), "phxlive_plugins_#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    File.mkdir_p!(Path.join(dir, "empty_clone"))
+    File.mkdir_p!(Path.join([dir, "half_done", "lib"]))
+    File.mkdir_p!(Path.join([dir, "_template", "lib", "_template"]))
+    File.mkdir_p!(Path.join([dir, "real_one", "lib", "real_one"]))
+    File.write!(Path.join([dir, "real_one", "lib", "real_one", "plugin.ex"]), "# a plugin")
+
+    {result, stderr} =
+      ExUnit.CaptureIO.with_io(:stderr, fn -> Phxlive.Plugins.Discovery.discover(dir) end)
+
+    assert [%{slug: "real_one", module: RealOne.Plugin}] = result
+    assert stderr =~ "plugins/empty_clone has no lib/empty_clone/plugin.ex"
+    assert stderr =~ "plugins/half_done"
+  end
+
   test "priv_dir points at a plugin's priv folder" do
     assert Plugins.priv_dir("web_lobby") |> String.ends_with?(Path.join(["web_lobby", "priv"]))
   end
