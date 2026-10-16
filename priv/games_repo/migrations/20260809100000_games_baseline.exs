@@ -171,7 +171,8 @@ defmodule Phxlive.GamesRepo.Migrations.GamesBaseline do
   """
 
   def up do
-    for statement <- String.split(@sql, "\n--;;\n", trim: true), do: execute(statement)
+    # A Windows checkout has CRLF line endings, so accept either.
+    for statement <- String.split(@sql, ~r/\r?\n--;;\r?\n/, trim: true), do: execute(statement)
   end
 
   def down, do: raise("The baseline can't be rolled back; drop the database instead.")
