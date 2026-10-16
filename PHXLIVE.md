@@ -707,13 +707,15 @@ Ordered roughly by how much it hurts.
   Commit it.
 - ~~The test suite can't run~~: `test/test_helper.exs` and `test/support/data_case.ex`
   added 2026-10-15 (sandboxes both repos; `user_fixture/1`, `tmp_upload/1`).
-- **`cms_options` schema and migration disagree** (found 2026-10-15, pre-existing):
-  `Settings.Option` uses `option_name` / `option_value` / `autoload` (string), but
-  `20250101000005_desktop_and_settings.exs` creates `key` / `value` / `autoload` (boolean) /
-  `category`. On a database built from the migrations every `Phxlive.Settings` call fails,
-  including the default-user-role setting in admin user management. The migration uses
-  `create_if_not_exists`, so **prod may differ**: check prod's actual columns before choosing
-  whether to fix the schema (`source:` mappings) or the migration.
+- ~~`cms_options` schema and migration disagreed~~ (fixed 2026-10-15):
+  `20250101000005_desktop_and_settings` created a table `Settings.Option` can't use
+  (uuid id with no default, `key` / `value` / boolean `autoload`, no `option_name`), so on a
+  database built from migrations every `Phxlive.Settings` call failed. Production's table
+  predates it and matched the schema, but had gained `key` NOT NULL DEFAULT '' with a unique
+  index that nothing sets, so the second new option ever saved would fail.
+  `20261016010000_fix_cms_options` converges both on the schema's shape (rebuilding the
+  migration-built table, dropping `key` and the unused `value` / `category` from older
+  ones, keeping any column that holds real data).
 - ~~Scheduler engine wrote a column that didn't exist~~ (fixed 2026-10-15):
   `earliest_finish_at` added to `tasks` and `Scheduler.Task`.
 - ~~`subscriptions` schema didn't match the table~~ (fixed 2026-10-15): the schema
