@@ -44,8 +44,19 @@ defmodule Phxlive.Plugins.Discovery do
     if File.regular?(main) do
       true
     else
-      IO.puts(:stderr, "warning: plugins/#{slug} has no lib/#{slug}/plugin.ex; skipping it (an empty or unfinished clone?)")
+      warn_once(path, "warning: plugins/#{slug} has no lib/#{slug}/plugin.ex; skipping it (an empty or unfinished clone?)")
       false
+    end
+  end
+
+  # Discovery runs several times per compile (Phxlive.Plugins and each router
+  # macro); say it once per VM.
+  defp warn_once(path, message) do
+    key = {__MODULE__, :warned, path}
+
+    unless :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+      IO.puts(:stderr, message)
     end
   end
 end

@@ -294,7 +294,11 @@ Each of these has already cost a build, an outage, or a security hole.
 
 ## 7. User storage and the file explorer
 
-### Status: implemented 2026-10-15, not yet deployed
+### Status: deployed 2026-10-15
+
+The legacy import found nothing to move: production's `user_files` and `user_folders`
+tables were empty, so the drive started clean. (The 19 `user_media` rows are blog, page
+and chat images, which stay where they are by design.)
 
 Before this milestone there were two storage systems that didn't know about each other:
 Arc `UserFile` rows and the desktop explorer writing raw files under `uploads/users/<id>/`.
@@ -321,7 +325,7 @@ and nothing else.
 | `Phxlive.Drive.Policy` | pure quota and permission rules |
 | `Phxlive.Drive.Sniff` | magic-byte type detection; only recognised types are ever served inline |
 | `Phxlive.Drive.Janitor` | hourly: purge expired 30-day holds, GC unreferenced blobs; one node at a time via a Postgres advisory lock |
-| `Phxlive.Drive.Import` | one-off legacy import, re-runnable (`mix drive.import`, or `bin/phoenix_app eval "Phxlive.Drive.Import.run()"`) |
+| `Phxlive.Drive.Import` | one-off legacy import, re-runnable (`mix drive.import`, or `bin/phoenix_app rpc "Phxlive.Drive.Import.run()"`) |
 | `Phxlive.Storage` / `Storage.Local` | adapter behaviour; local blobs at `<root>/aa/bb/<sha>`; `DRIVE_STORAGE_ROOT` overrides the root |
 | `PhxliveWeb.DriveController` | `GET /files/:id` and `GET /s/:token`; nosniff, sandbox CSP (except PDF), inline only for recognised media, single-range requests |
 | `Phxlive.Entitlements` | `grant/2` (refuses storage tiers for ineligible users), `active/2`, `revoke_all/3` |
@@ -350,14 +354,17 @@ assets). Each My Files row has a visibility selector and, when shared, a click-t
 link. The old `user://` / `root://` code paths in `PhoenixDesktopLive` are unreachable
 from the current UI and should be deleted in milestone 5.
 
-### Deploying milestone 1
+### Running the import (for other installs)
 
 1. Deploy (the migration runs as usual).
-2. `bin/phoenix_app eval "Phxlive.Drive.Import.run(dry_run: true)"` and check the counts.
-3. `bin/phoenix_app eval "Phxlive.Drive.Import.run()"`. Users already Guest/Banned are
+2. `bin/phoenix_app rpc "Phxlive.Drive.Import.run(dry_run: true)"` and check the counts.
+3. `bin/phoenix_app rpc "Phxlive.Drive.Import.run()"`. Users already Guest/Banned are
    locked by the import, which starts their 30-day hold.
 4. Legacy files stay on disk and readable through `UploadsGuard` for one release, then
    retire them.
+
+`rpc`, not `eval`: `rpc` runs inside the running node, where the repos are started;
+`eval` boots a separate VM without them.
 
 ---
 
@@ -777,14 +784,18 @@ Ordered roughly by how much it hurts.
   `mix.exs` allows. Pin it to `elixir:1.19`. (`Dockerfile.multistage` is already pinned.)
 - **Forum attachments are public by URL** (§7), which blocks VIP channels.
 
-- Two storage systems (§7) until milestone 1's import has run in production.
+- **The legacy file system is dead code.** Production's `user_files` / `user_folders` are
+  empty (checked 2026-10-15), so `Phxlive.Files` (`UserFile`, `UserFolder`),
+  `FileController`, `file_manager_component.ex`, `Drive.Import` and `mix drive.import`
+  can be deleted and the two tables dropped. Do it with the explorer cleanup in
+  milestone 5; check other installs have run the import first.
 - `User.registration_changeset/2` casts `:role` and `:is_admin`. `register_user/2`
   overwrites both, so it isn't exploitable today, but `Accounts.create_user/1` passes attrs
   straight through and the unused `Phxlive.Schema` (GraphQL; the router serves
   `PhxliveWeb.Schema`) calls it. Drop the two fields from the cast and set them explicitly.
 - Web Lobby's three.js client has eight pre-existing TypeScript errors under
   `npm run type-check` (implicit `any`s, one loop-style enum); it bundles fine.
-- `Files` has a `:timer.sleep(10000)` in an upload path.
+- `Files` has a `:timer.sleep(10000)` in an upload path (goes with the legacy file system above).
 - The admin files page links to `/uploads/user_files/...`, which is not where files are
   stored.
 - `PhxliveWeb.RoomChannel` is referenced (commented out) but doesn't exist.
