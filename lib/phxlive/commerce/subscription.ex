@@ -15,7 +15,7 @@ defmodule Phxlive.Commerce.Subscription do
     field :status, :string, default: "active"
     field :starts_at, :utc_datetime
     field :expires_at, :utc_datetime
-    # The column is spelled "canceled_at" (see 20250101000004_commerce.exs).
+    # The column is spelled "canceled_at" (see the site baseline migration).
     field :cancelled_at, :utc_datetime, source: :canceled_at
     field :trial_ends_at, :utc_datetime
     
