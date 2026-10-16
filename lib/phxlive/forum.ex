@@ -29,26 +29,12 @@ defmodule Phxlive.Forum do
   def default_channel_allowance, do: @default_channel_allowance
 
   @doc """
-  Channels this user owns, with whether each already has a Holo-sim.
-
-  Feeds the in-game door: the owner picks a channel to build in, and the ones
-  that already have a world are shown as such rather than offered and then
-  refused.
+  Channels this user owns. Games use it to offer a player their own channels
+  (e.g. to build a world in).
   """
-  def list_owned_channels_with_sims(user_id) do
-    channels =
-      from(c in Channel, where: c.owner_id == ^user_id, order_by: [asc: c.position, asc: c.name])
-      |> Repo.all()
-
-    # One query for all of them, not one per channel.
-    sim_ids =
-      channels
-      |> Enum.map(& &1.id)
-      |> Phxlive.Games.SimAccess.channels_with_sims()
-
-    Enum.map(channels, fn channel ->
-      %{channel: channel, has_sim: MapSet.member?(sim_ids, channel.id)}
-    end)
+  def list_owned_channels(user_id) do
+    from(c in Channel, where: c.owner_id == ^user_id, order_by: [asc: c.position, asc: c.name])
+    |> Repo.all()
   end
 
   # Channels
@@ -124,20 +110,10 @@ defmodule Phxlive.Forum do
 
         pubsub_broadcast("chat:channels", {:channel_updated, updated_channel})
 
-        # A channel's name and publicity are also its Holo-sim's (2026-10-08).
-        # Best effort: a sim that cannot take the new name (another sim of the
-        # same owner already has it) keeps its old one and is logged, rather than
-        # failing an edit the website already accepted.
-        if current.name != updated_channel.name or current.is_public != updated_channel.is_public do
-          case Phxlive.Games.SimAccess.channel_updated(updated_channel) do
-            {:error, reason} ->
-              require Logger
-              Logger.warning("Holo-sim sync for channel #{updated_channel.id} failed: #{inspect(reason)}")
-
-            _ ->
-              :ok
-          end
-        end
+        # Plugins may keep data tied to a channel (a game might mirror its name
+        # and publicity into a world built for it). Best effort for them: an
+        # edit the website already accepted is not failed here.
+        Phxlive.Plugins.notify({:channel_updated, updated_channel, current})
 
         {:ok, updated_channel}
       error -> error
@@ -149,18 +125,17 @@ defmodule Phxlive.Forum do
     if String.downcase(channel.name) == "general" do
       {:error, :protected_channel}
     else
-      # THE HOLO-SIM GOES FIRST, AND OUTSIDE THE TRANSACTION.
+      # PLUGINS GO FIRST, AND OUTSIDE THE TRANSACTION.
       #
-      # It lives in the other database, so it cannot join the transaction below
-      # - and if it could, it still would not belong there: a rolled-back
-      # channel delete would need the sim resurrected, which is not something a
-      # second database can be asked to do.
+      # Their data tied to this channel (a game world built for it) may live in
+      # the other database, so it cannot join the transaction below - and if it
+      # could, it still would not belong there: a rolled-back channel delete
+      # would need that data resurrected.
       #
-      # Doing it first means the bad case is a sim deleted while its channel
-      # survives, leaving a channel with no world - recoverable, and the same
-      # state as a channel nobody has built in yet. The other order leaves a sim
-      # whose channel is gone, which has no access control list at all.
-      Phxlive.Games.SimAccess.channel_deleted(channel.id)
+      # Doing it first means the bad case is plugin data deleted while its
+      # channel survives - recoverable. The other order leaves plugin data
+      # whose channel, and so whose access control list, is gone.
+      Phxlive.Plugins.notify({:channel_deleted, channel.id})
 
       # Start transaction to ensure all-or-nothing deletion
       Repo.transaction(fn ->
@@ -954,7 +929,7 @@ defmodule Phxlive.Forum do
         # this happens and which the old attrs check missed entirely.
         if updated_member.is_banned or updated_member.role == "banned" do
           pubsub_broadcast("channel:#{member.channel_id}", {:user_banned, member.user_id, member.channel_id})
-          Phxlive.Games.SimAccess.revoke_access(member.channel_id, member.user_id)
+          Phxlive.Plugins.notify({:channel_member_removed, member.channel_id, member.user_id})
         end
 
         {:ok, updated_member}
@@ -993,15 +968,15 @@ defmodule Phxlive.Forum do
           {:ok, deleted_member} ->
             pubsub_broadcast("channel:#{channel_id}", {:user_kicked, user_id, channel_id})
 
-            # AND OUT OF THE HOLO-SIM. Removing the membership stops the next
-            # join; someone already standing in the world is unaffected by it,
-            # because access is checked when they enter and never again.
+            # AND OUT OF ANYTHING A PLUGIN GATES ON MEMBERSHIP (e.g. a running
+            # game world that admits channel members). Removing the
+            # membership stops the next join; someone already inside is only
+            # removed by this.
             #
-            # Deliberately not in a Task: this is the security half of the
+            # Deliberately synchronous: this is the security half of the
             # action, and a caller that got {:ok, _} should be able to believe
-            # the kick was queued. It is one indexed query and one insert
-            # against a database that is already open.
-            Phxlive.Games.SimAccess.revoke_access(channel_id, user_id)
+            # the kick happened.
+            Phxlive.Plugins.notify({:channel_member_removed, channel_id, user_id})
 
             {:ok, deleted_member}
           error -> error

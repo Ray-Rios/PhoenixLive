@@ -9,12 +9,13 @@ plugins/<slug>/
   lib/<slug>/plugin.ex          <Slug>.Plugin - `use Phxlive.Plugin, slug: "<slug>", ...`
   lib/<slug>/...                your contexts and schemas
   lib/<slug>_web/...            your LiveViews and controllers
-  lib/<slug>_web/routes.ex      `use Phxlive.Plugin.Routes` - api do ... end / browser do ... end
+  lib/<slug>_web/routes.ex      `use Phxlive.Plugin.Routes` - api / browser / admin blocks
   priv/games_repo/migrations/   your tables, prefixed <slug>_
   priv/repo/migrations/         (optional) site-database tables
   assets/js/index.ts            `export const hooks = {...}`: your LiveView hooks
   test/test_helper.exs          required by mix (may be empty)
   test/                         runs with `mix test`
+  k3s/                          (optional) Kubernetes manifests; deploy-prod.sh applies them
 ```
 
 Rules of the road:
@@ -25,14 +26,25 @@ Rules of the road:
 - Use your own namespace (`WebLobby`, `WebLobbyWeb`), never `Phxlive.*`.
 - Talk to the hub only through its public contexts (`Phxlive.Games`, `Phxlive.Drive`,
   `Phxlive.Entitlements`, ...). Core code never references a plugin.
-- API routes mount at `/api/games/<game slug>/...`; pages at `/games/<slug>/...`.
+- API routes mount at `/api/games/<game slug>/...` (controllers get `params["game_slug"]`,
+  as the hub's own game routes do); pages at `/games/<slug>/...`; admin pages at
+  `/admin/<slug>/...` (admins only - link them from `admin_nav/0`).
+- Need to react to the hub? Implement `hub_event/1` (channel updated/deleted, member
+  removed - see `Phxlive.Plugin`). It's called for installed plugins, active or not.
+- Shipping files you read at runtime? Put them in `priv/` and find them with
+  `Phxlive.Plugins.priv_dir("<slug>")`.
+- Settings: read your own environment variables at runtime (a small `Config` module
+  that calls `System.get_env/1`, overridable with `config :phxlive, YourModule, ...`);
+  the hub's `config/runtime.exs` doesn't know your plugin.
 - Run migrations with `mix phxlive.migrate` (plain `mix ecto.migrate` only sees `priv/`).
   Migration versions share one table with core: use real timestamps.
 - JavaScript: your `assets/js/index.ts` is picked up automatically on the next asset build.
   Hook names are global, so make them distinctive. Import npm packages through the shims in
   `assets/js/vendor/` (e.g. `import * as THREE from "../../../../assets/js/vendor/three"`);
   esbuild can't see `node_modules` from here.
-- A private plugin can be its own git repository cloned into this folder; list it in
-  the repository's `.gitignore` so it stays out of the public repo.
+- A private plugin can be its own git repository cloned into this folder. The hub's
+  `.gitignore` ignores every plugin folder except the ones it ships, so it stays out
+  of the public repo, and `.dockerignore` keeps its `.git`, `k3s/` and scripts out of
+  images. Switch it on from the first boot with `PHXLIVE_ACTIVE_PLUGINS`.
 
 `web_lobby/` is the reference plugin: copy it to start your own.

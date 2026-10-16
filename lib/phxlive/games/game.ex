@@ -1,6 +1,6 @@
 defmodule Phxlive.Games.Game do
   @moduledoc """
-  A registered game/title in the games platform (e.g. "rays-space-sim").
+  A registered game/title in the games platform (e.g. "web_lobby").
 
   New games are added here first; `GameCharacter` records reference a game
   by `game_id` so the schema stays generic across future titles.

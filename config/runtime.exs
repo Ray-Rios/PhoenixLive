@@ -9,7 +9,7 @@ config :swoosh, :api_client, false
 # Optional Projects API key used by Taskbar calendar to fetch project items
 config :phxlive, projects_api_key: System.get_env("PROJECTS_API_KEY") || ""
 
-# API key used by trusted dedicated game servers (e.g. RaysSpaceSim) to act on behalf of players
+# API key used by trusted dedicated game servers to act on behalf of players
 # Drive storage (PHXLIVE.md §7). Defaults to <uploads volume>/_drive, which
 # UploadsGuard keeps from ever being served by /uploads.
 if drive_root = System.get_env("DRIVE_STORAGE_ROOT") do
@@ -100,159 +100,22 @@ games_database_url =
     "postgresql://#{db_username}:#{db_password}@#{db_host}:#{db_port}/#{games_db_name}"
 
 # -------------------------------------------------
-# Holo-sim instance orchestration (M5)
+# Plugins (PHXLIVE.md §9)
 #
-# Everything here is optional. With HOLOSIM_IMAGE unset the launcher reports
-# itself unavailable and /launch falls back to the M4 behaviour - record the
-# intent, answer `pending`, and let a hand-started server heartbeat in. That is
-# the development loop and it must keep working, so "not configured" is a
-# supported state rather than a broken one.
-#
-# Values are computed into variables FIRST, matching how games_database_url is
-# handled above. That is not only style: a multi-line `case ... end` used
-# directly as a keyword value does not parse - Elixir cannot tell that the
-# keyword list resumes after `end,` - and the resulting SyntaxError is raised by
-# the release's config provider at boot, long after any compile step could have
-# caught it. The pod crash-loops with no application log at all.
+# PHXLIVE_ACTIVE_PLUGINS (comma-separated slugs) replaces
+# :default_active_plugins: which plugins are active until an admin toggles
+# them on /admin/plugins. Lets a deploy switch on a private plugin from its
+# first boot without the hub's config naming it. A plugin's own settings are
+# read by the plugin.
 # -------------------------------------------------
+case System.get_env("PHXLIVE_ACTIVE_PLUGINS") do
+  nil ->
+    :ok
 
-# Entrypoint override, for proving the orchestration before a server image
-# exists. Comma-separated, e.g. HOLOSIM_COMMAND="sleep,3600" alongside
-# HOLOSIM_IMAGE=busybox. Unset in production - the real image runs the server
-# and takes the launcher's arguments as they are.
-#
-# STDLIB ONLY, DELIBERATELY. This was Jason.decode! on a JSON array, which reads
-# better and was the one thing in this entire file reaching for a dependency.
-# runtime.exs is evaluated before the applications start, on a restricted code
-# path where dependency modules are not reliably loadable.
-holosim_command =
-  case System.get_env("HOLOSIM_COMMAND") do
-    nil ->
-      nil
-
-    "" ->
-      nil
-
-    csv ->
-      csv
-      |> String.split(",", trim: true)
-      |> Enum.map(&String.trim/1)
-  end
-
-holosim_port_min = String.to_integer(System.get_env("HOLOSIM_PORT_MIN", "7800"))
-holosim_port_max = String.to_integer(System.get_env("HOLOSIM_PORT_MAX", "7899"))
-
-config :phxlive, Phxlive.Games.InstanceLauncher,
-  # The packaged Linux dedicated server image. Until this exists, leave it unset.
-  image: System.get_env("HOLOSIM_IMAGE"),
-  image_pull_policy: System.get_env("HOLOSIM_IMAGE_PULL_POLICY", "IfNotPresent"),
-  command: holosim_command,
-
-  # The address a GAME CLIENT can reach, which is not necessarily the address
-  # the cluster knows itself by. Getting this wrong produces an instance that
-  # appears in the browser and times out on connect.
-  public_host: System.get_env("HOLOSIM_PUBLIC_HOST", "127.0.0.1"),
-  port_range: {holosim_port_min, holosim_port_max},
-
-  # Removed this long after the Job finishes, which is also when its port frees.
-  ttl_seconds: String.to_integer(System.get_env("HOLOSIM_TTL_SECONDS", "600")),
-
-  # A backstop for a wedged instance. Normal retirement is the empty-instance
-  # countdown inside the server itself.
-  max_lifetime_seconds:
-    String.to_integer(System.get_env("HOLOSIM_MAX_LIFETIME_SECONDS", "14400")),
-  # raysspacesim since 2026-10-08, beside the world server - instances parse
-  # untrusted network input and do not belong next to Postgres. The Secret is
-  # that namespace's copy (Secrets do not cross namespaces); its RBAC lives in
-  # k3s/raysspacesim and is applied by deploy-prod.sh.
-  namespace: System.get_env("HOLOSIM_NAMESPACE", "raysspacesim"),
-  secret_name: System.get_env("HOLOSIM_SECRET_NAME", "raysspacesim-secrets"),
-
-  # NO :4000. That is the CONTAINER port; the phoenix-web Service publishes
-  # `port: 80, targetPort: 4000`, so the Service has no port 4000 to connect to.
-  # Naming it does not fail fast - there is no endpoint behind it, so the packets
-  # are dropped and the caller waits out its own timeout instead of being
-  # refused. See the matching comment in InstanceLauncher.
-  hub_url:
-    System.get_env(
-      "HOLOSIM_HUB_URL",
-      "http://phoenix-web.phoenixapp.svc.cluster.local"
-    )
-
-# -------------------------------------------------
-# World server orchestration
-#
-# The admin section's start/stop/logs controls for the persistent world, which
-# until now was `Scripts\run_world_server.bat` on a desktop.
-#
-# Same optionality as the Holo-sim block above: with WORLD_IMAGE unset the
-# launcher reports itself unavailable and the admin screen says so, rather than
-# offering buttons that cannot work. A hand-started world server still
-# heartbeats in exactly as before - this adds a way to start one in the
-# cluster, it does not become the only way.
-#
-# The same command-as-CSV trick, for the same reason: WORLD_COMMAND="sleep,3600"
-# with WORLD_IMAGE=busybox exercises create, scale, status and log paths without
-# needing a server image.
-# -------------------------------------------------
-world_command =
-  case System.get_env("WORLD_COMMAND") do
-    nil ->
-      nil
-
-    "" ->
-      nil
-
-    csv ->
-      csv
-      |> String.split(",", trim: true)
-      |> Enum.map(&String.trim/1)
-  end
-
-world_public_port =
-  case System.get_env("WORLD_PUBLIC_PORT") do
-    nil -> nil
-    "" -> nil
-    value -> String.to_integer(value)
-  end
-
-config :phxlive, Phxlive.Games.WorldServerLauncher,
-  # The same packaged image the Holo-sims use. A world server is that image
-  # WITHOUT -HoloSimId=, so there is no second thing to build or keep in step.
-  image: System.get_env("WORLD_IMAGE") || System.get_env("HOLOSIM_IMAGE"),
-  image_pull_policy: System.get_env("WORLD_IMAGE_PULL_POLICY", "IfNotPresent"),
-  command: world_command,
-
-  # Its own namespace, so a workload that parses untrusted network input for a
-  # living is not sharing one with the web app and the database. Needs the Role
-  # and RoleBinding in k3s/base/raysspacesim.yaml, and its own copy of the API
-  # key Secret - a Secret cannot be read across namespaces.
-  namespace: System.get_env("WORLD_NAMESPACE", "raysspacesim"),
-  deployment_name: System.get_env("WORLD_DEPLOYMENT_NAME", "rss-world-server"),
-
-  # The map the world runs. Cosmos is the world map; FrontEnd is the menu and
-  # its game mode does not heartbeat, so a server started on it registers
-  # nothing and looks broken.
-  map: System.get_env("WORLD_MAP", "Cosmos"),
-  port: String.to_integer(System.get_env("WORLD_PORT", "7777")),
-
-  # The address a GAME CLIENT can reach, which is not the address the cluster
-  # knows itself by. Wrong here means a shard that appears in the browser and
-  # times out on connect - the plugin refuses to guess it for that reason.
-  public_host: System.get_env("WORLD_PUBLIC_HOST", "127.0.0.1"),
-  public_port: world_public_port,
-  secret_name: System.get_env("WORLD_SECRET_NAME", "raysspacesim-secrets"),
-
-  # NO :4000, and the namespace is spelled out. Both matter here: this pod lives
-  # in `raysspacesim`, so a bare `phoenix-web` would not resolve at all, and the
-  # Service publishes port 80 (targetPort 4000) - so :4000 resolves, connects to
-  # nothing, and produces "HTTP request timed out after 15.00 seconds" rather
-  # than a refusal.
-  hub_url:
-    System.get_env(
-      "WORLD_HUB_URL",
-      "http://phoenix-web.phoenixapp.svc.cluster.local"
-    )
+  csv ->
+    config :phxlive, :default_active_plugins,
+      csv |> String.split(",", trim: true) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+end
 
 config :phxlive, Phxlive.GamesRepo,
   adapter: Ecto.Adapters.Postgres,

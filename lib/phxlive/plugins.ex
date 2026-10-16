@@ -232,10 +232,36 @@ defmodule Phxlive.Plugins do
   end
 
   # ---------------------------------------------------------------------------
+  # Hub events
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Tells every installed plugin about a hub event (see `c:Phxlive.Plugin.hub_event/1`).
+  Synchronous: when this returns, every plugin has handled it, so a caller
+  that revokes access can rely on it being done. A plugin that raises is
+  logged and skipped; the others still run.
+  """
+  def notify(event) when is_tuple(event) do
+    for mod <- installed() do
+      try do
+        mod.hub_event(event)
+      rescue
+        e ->
+          Logger.error("Plugin #{mod.slug()}: hub_event #{inspect(elem(event, 0))} failed: " <> Exception.format(:error, e, __STACKTRACE__))
+      catch
+        kind, reason ->
+          Logger.error("Plugin #{mod.slug()}: hub_event #{inspect(elem(event, 0))} failed: #{inspect({kind, reason})}")
+      end
+    end
+
+    :ok
+  end
+
+  # ---------------------------------------------------------------------------
   # Menus
   # ---------------------------------------------------------------------------
 
-  @doc "Admin sidebar links from active plugins."
+  @doc "Admin sidebar links from active plugins. A plugin's admin pages live under /admin/<slug>."
   def admin_nav, do: Enum.flat_map(active(), & &1.admin_nav())
 
   @doc "Start-menu apps from active plugins."
@@ -266,6 +292,23 @@ defmodule Phxlive.Plugins do
       :error ->
         []
     end
+  end
+
+  @doc """
+  The plugin's `priv/` folder: `priv/plugins/<slug>` inside a release (copied
+  there by the release step in mix.exs), `plugins/<slug>/priv` in development.
+  For files a plugin ships with, like data it reads at runtime.
+  """
+  def priv_dir(slug) when is_binary(slug) do
+    released = Application.app_dir(:phxlive, Path.join(["priv", "plugins", slug]))
+
+    source =
+      case Enum.find(@discovered, &(&1.slug == slug)) do
+        %{dir: dir} -> Path.join(dir, "priv")
+        nil -> Path.join(["plugins", slug, "priv"])
+      end
+
+    if File.dir?(released), do: released, else: source
   end
 
   defp migration_dir(slug, source_dir, repo_dir) do

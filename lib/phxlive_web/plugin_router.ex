@@ -7,6 +7,7 @@ defmodule PhxliveWeb.PluginRouter do
       plugin_pipelines()        # with the other pipelines
       plugin_api_routes()       # BEFORE the core "/api/games/:game_slug" scopes
       plugin_browser_routes()   # after the main live_session
+      plugin_admin_routes()     # likewise
 
   Routes of *installed* plugins are always compiled in; the gate pipeline
   (`PhxliveWeb.Plugs.PluginActive`) and the LiveView `on_mount` hook
@@ -56,15 +57,23 @@ defmodule PhxliveWeb.PluginRouter do
     end
   end
 
-  @doc "One gate pipeline per installed plugin, plus a recompile guard."
+  @doc "Gate pipelines for each installed plugin (pages, API, admin), plus a recompile guard."
   defmacro plugin_pipelines do
     plugins = plugins_with_routes()
     slugs = Discovery.slugs()
 
     pipelines =
-      for %{slug: slug} <- plugins do
+      for %{slug: slug, game_slug: game_slug} <- plugins do
         quote do
           pipeline unquote(:"plugin_gate_#{slug}") do
+            plug PhxliveWeb.Plugs.PluginActive, slug: unquote(slug), page: true
+          end
+
+          pipeline unquote(:"plugin_api_gate_#{slug}") do
+            plug PhxliveWeb.Plugs.PluginActive, slug: unquote(slug), game_slug: unquote(game_slug)
+          end
+
+          pipeline unquote(:"plugin_admin_gate_#{slug}") do
             plug PhxliveWeb.Plugs.PluginActive, slug: unquote(slug)
           end
         end
@@ -87,7 +96,7 @@ defmodule PhxliveWeb.PluginRouter do
         block != nil do
       quote do
         scope unquote("/api/games/#{game_slug}"), unquote(routes.__namespace__()), as: unquote(:"#{slug}_api") do
-          pipe_through [:games_api, unquote(:"plugin_gate_#{slug}")]
+          pipe_through [:games_api, unquote(:"plugin_api_gate_#{slug}")]
           unquote(block)
         end
       end
@@ -108,6 +117,29 @@ defmodule PhxliveWeb.PluginRouter do
 
           live_session unquote(:"plugin_#{slug}"),
             on_mount: [{PhxliveWeb.UserAuth, :default}, {PhxliveWeb.PluginGate, unquote(slug)}],
+            layout: {PhxliveWeb.Layouts, :app} do
+            unquote(block)
+          end
+        end
+      end
+    end
+
+    {:__block__, [], scopes}
+  end
+
+  @doc "Admin pages at /admin/<plugin slug>/..., admins only, in a live_session per plugin."
+  defmacro plugin_admin_routes do
+    scopes =
+      for %{slug: slug, routes: routes} <- plugins_with_routes(),
+        function_exported?(routes, :__admin_routes__, 0),
+        block = routes.__admin_routes__(),
+        block != nil do
+      quote do
+        scope unquote("/admin/#{slug}"), unquote(routes.__namespace__()), as: unquote(:"#{slug}_admin") do
+          pipe_through [:browser, unquote(:"plugin_admin_gate_#{slug}")]
+
+          live_session unquote(:"plugin_admin_#{slug}"),
+            on_mount: [{PhxliveWeb.UserAuth, :require_admin_user}, {PhxliveWeb.PluginGate, {unquote(slug), "/admin/plugins"}}],
             layout: {PhxliveWeb.Layouts, :app} do
             unquote(block)
           end

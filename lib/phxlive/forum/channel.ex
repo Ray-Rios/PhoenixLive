@@ -51,18 +51,17 @@ defmodule Phxlive.Forum.Channel do
   # Was a literal 5. /shop will sell channel slots, so the number has to be
   # something a purchase can increment - see users.channel_allowance.
   #
-  # This is now also the HOLO-SIM limit. A sim requires a channel (one channel,
-  # at most one sim), so this check is the only one that can bind, and the older
-  # holo_sim_slots counter no longer does. Two limits on one thing would mean
-  # the error message names whichever happened to trip first, which is not
+  # Games that build one thing per channel (a world, say) use this as their
+  # limit too, rather than keeping a second counter: two limits on one thing
+  # would mean the error names whichever tripped first, which is not
   # necessarily the one the player has to do something about.
   #
   # NOT A RACE-FREE CHECK, DELIBERATELY. Two simultaneous creates can both read
   # the count before either inserts, so a determined user can exceed their
   # allowance by one. The consequence is one extra channel; the fix is a
   # transaction with a row lock, and it is not worth taking a lock on every
-  # channel create to prevent that. HoloSims.create_sim does hold a lock,
-  # because there the same race would hand out an unpaid-for game resource.
+  # channel create to prevent that. A game handing out a paid-for resource per
+  # channel should take its own lock.
   defp validate_channel_limit(changeset) do
     case get_change(changeset, :owner_id) do
       nil ->

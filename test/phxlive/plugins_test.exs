@@ -87,7 +87,49 @@ defmodule Phxlive.PluginsTest do
     assert %{status: 404, halted: true} = PhxliveWeb.Plugs.PluginActive.call(conn, opts)
 
     {:ok, _} = Plugins.activate("fixture_plugin")
-    assert %{halted: false} = PhxliveWeb.Plugs.PluginActive.call(conn, opts)
+    assert %{halted: false, assigns: assigns} = PhxliveWeb.Plugs.PluginActive.call(conn, opts)
+    refute Map.has_key?(assigns, :phxlive_plugin)
+
+    page_opts = PhxliveWeb.Plugs.PluginActive.init(slug: "fixture_plugin", page: true)
+    assert %{assigns: %{phxlive_plugin: "fixture_plugin"}} = PhxliveWeb.Plugs.PluginActive.call(conn, page_opts)
+  end
+
+  test "the API gate hands controllers the game slug, as the core routes do" do
+    {:ok, _} = Plugins.activate("fixture_plugin")
+
+    conn =
+      Plug.Test.conn(:get, "/api/games/my-game/ping")
+      |> Plug.Conn.fetch_query_params()
+
+    opts = PhxliveWeb.Plugs.PluginActive.init(slug: "fixture_plugin", game_slug: "my-game")
+    conn = PhxliveWeb.Plugs.PluginActive.call(conn, opts)
+
+    assert conn.params["game_slug"] == "my-game"
+    assert conn.path_params["game_slug"] == "my-game"
+  end
+
+  test "hub events reach every installed plugin, active or not, and a crash is contained" do
+    Application.put_env(:phxlive, :extra_plugins, [Phxlive.Test.CrashingPlugin, Phxlive.Test.FixturePlugin])
+
+    refute Plugins.active?("fixture_plugin")
+    channel_id = Ecto.UUID.generate()
+    assert :ok = Plugins.notify({:channel_deleted, channel_id})
+
+    # The crashing plugin came first; the fixture still got the event.
+    assert_received {:fixture_hub_event, {:channel_deleted, ^channel_id}}
+  end
+
+  test "admin pages bounce to /admin/plugins when the plugin is inactive" do
+    socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, flash: %{}}}
+
+    assert {:halt, _} = PhxliveWeb.PluginGate.on_mount({"fixture_plugin", "/admin/plugins"}, %{}, %{}, socket)
+
+    {:ok, _} = Plugins.activate("fixture_plugin")
+    assert {:cont, _} = PhxliveWeb.PluginGate.on_mount({"fixture_plugin", "/admin/plugins"}, %{}, %{}, socket)
+  end
+
+  test "priv_dir points at a plugin's priv folder" do
+    assert Plugins.priv_dir("web_lobby") |> String.ends_with?(Path.join(["web_lobby", "priv"]))
   end
 end
 
@@ -115,10 +157,15 @@ defmodule Phxlive.PluginDefinitionTest do
     end
   end
 
-  test "routes DSL stores both blocks and the namespace" do
+  test "routes DSL stores the blocks and the namespace" do
     routes = Phxlive.Test.FixtureWeb.Routes
     assert routes.__namespace__() == Phxlive.Test.FixtureWeb
     assert {:get, _, ["/ping", _, :show]} = routes.__api_routes__()
     assert {:live, _, ["/", _, :index]} = routes.__browser_routes__()
+    assert {:live, _, ["/", _, :index]} = routes.__admin_routes__()
+  end
+
+  test "hub_event defaults to :ok" do
+    assert Phxlive.Test.RefusingPlugin.hub_event({:anything, 1}) == :ok
   end
 end

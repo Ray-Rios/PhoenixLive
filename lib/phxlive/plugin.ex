@@ -69,6 +69,22 @@ defmodule Phxlive.Plugin do
   @doc "Runs once, on the node where an admin deactivates the plugin."
   @callback on_deactivate() :: :ok
 
+  @doc """
+  Something happened in the hub that this plugin's data may depend on.
+  Called synchronously, in the caller's process, for every *installed* plugin
+  (active or not: a plugin's data has to stay consistent either way), via
+  `Phxlive.Plugins.notify/1`. Return `:ok`; a crash is logged and ignored.
+
+  Events:
+
+    * `{:channel_updated, %Phxlive.Forum.Channel{} = new, %Phxlive.Forum.Channel{} = old}`
+    * `{:channel_deleted, channel_id}` - before the channel's rows go
+    * `{:channel_member_removed, channel_id, user_id}` - kicked, banned or left
+
+  Unknown events must be ignored, so the hub can add more.
+  """
+  @callback hub_event(event :: tuple()) :: :ok
+
   @slug_format ~r/\A[a-z][a-z0-9_]*\z/
 
   @doc false
@@ -113,9 +129,11 @@ defmodule Phxlive.Plugin do
       def on_activate, do: :ok
       @impl true
       def on_deactivate, do: :ok
+      @impl true
+      def hub_event(_event), do: :ok
 
       defoverridable game: 0, routes: 0, children: 0, admin_nav: 0, desktop_apps: 0,
-                     entitlement_kinds: 0, on_activate: 0, on_deactivate: 0
+                     entitlement_kinds: 0, on_activate: 0, on_deactivate: 0, hub_event: 1
     end
   end
 end

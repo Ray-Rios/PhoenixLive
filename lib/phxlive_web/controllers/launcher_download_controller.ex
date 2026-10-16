@@ -27,13 +27,23 @@ defmodule PhxliveWeb.LauncherDownloadController do
              %{"sha256" => sha} <- release.manifest["launcher"],
              {:ok, path} <- Releases.blob_path(sha),
              {:ok, %File.Stat{size: size}} <- File.stat(path) do
-          PhxliveWeb.Api.ReleasesController.send_blob(conn, path, size, "RaysSpaceSimLauncher.exe")
+          PhxliveWeb.Api.ReleasesController.send_blob(conn, path, size, launcher_filename(game, release))
         else
           _ ->
             conn
             |> put_flash(:error, "The launcher is not available yet - check back soon.")
             |> redirect(to: "/games")
         end
+    end
+  end
+
+  # The manifest may name the file ("launcher": {"filename": ...}); otherwise
+  # it is the game's name, letters and digits only: "My Game" ->
+  # "MyGameLauncher.exe".
+  defp launcher_filename(game, release) do
+    case release.manifest["launcher"]["filename"] do
+      name when is_binary(name) and name != "" -> Path.basename(name)
+      _ -> String.replace(game.name, ~r/[^A-Za-z0-9]/, "") <> "Launcher.exe"
     end
   end
 end

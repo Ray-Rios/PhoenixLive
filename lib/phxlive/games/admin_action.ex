@@ -20,7 +20,9 @@ defmodule Phxlive.Games.AdminAction do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @subject_types ~w(server holo_sim character game)
+  # Core's subject types. Plugins log their own; any lowercase name is
+  # accepted, for the same reason `action` is free-form.
+  @subject_types ~w(server instance character game)
 
   schema "admin_actions" do
     field :actor_user_id, :binary_id
@@ -35,7 +37,7 @@ defmodule Phxlive.Games.AdminAction do
     field :subject_type, :string
     field :subject_id, :binary_id
 
-    # Whatever makes this legible a year from now: the sim's name, the player
+    # Whatever makes this legible a year from now: the instance's name, the player
     # removed, the reason given.
     field :details, :map, default: %{}
 
@@ -46,7 +48,7 @@ defmodule Phxlive.Games.AdminAction do
     action
     |> cast(attrs, [:actor_user_id, :actor_email, :action, :subject_type, :subject_id, :details])
     |> validate_required([:actor_user_id, :action])
-    |> validate_inclusion(:subject_type, @subject_types)
+    |> validate_format(:subject_type, ~r/\A[a-z][a-z0-9_]*\z/)
   end
 
   def subject_types, do: @subject_types

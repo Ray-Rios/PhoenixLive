@@ -104,7 +104,7 @@ config :phxlive, Phxlive.Repo,
   migration_lock: false
 
 # ----------------------------
-# Games Repo defaults (isolated database for multiplayer game data - RaysSpaceSim, future games)
+# Games Repo defaults (isolated database for multiplayer game data)
 # ----------------------------
 config :phxlive, Phxlive.GamesRepo,
   username: System.get_env("DB_USERNAME") || "root",

@@ -2,7 +2,7 @@ defmodule PhxliveWeb.Api.GamesController do
   @moduledoc """
   Generic multiplayer game data API - `/api/games/:game_slug/characters`.
 
-  Reusable across RaysSpaceSim and future titles. A request is authorized
+  Shared by every game. A request is authorized
   either as the player themselves (Guardian bearer token) or as a trusted
   dedicated game server (`X-API-Key: GAMES_SERVER_API_KEY`, must pass
   `user_id` explicitly since there's no session in that mode).
@@ -149,28 +149,31 @@ defmodule PhxliveWeb.Api.GamesController do
     end
   end
 
-  # PUT /api/games/:game_slug/characters/:id/holo_location
+  # PUT /api/games/:game_slug/characters/:id/instance_location
   #
-  # Resume-in-sim (2026-10-09). The Holo-sim instance writes
-  # {holo_sim_id, location} on Logout and {holo_sim_id: null} when the player
-  # left with /exit. A PLAYER token may only clear - which the client does when
-  # the sim it was told to resume into is gone or refuses it - never set: a
-  # player-chosen sim id would be a login loop into a world they cannot enter.
-  def set_holo_location(conn, %{"game_slug" => slug, "id" => id} = params) do
+  # Resume-in-instance (2026-10-09). An instance server writes
+  # {instance_id, location} on Logout and {instance_id: null} when the player
+  # chose to leave the instance. A PLAYER token may only clear - which the
+  # client does when the instance it was told to resume into is gone or refuses
+  # it - never set: a player-chosen instance id would be a login loop into a
+  # world they cannot enter.
+  def set_instance_location(conn, %{"game_slug" => slug, "id" => id} = params) do
     with {:ok, game} <- fetch_game(slug),
          {:ok, user_id} <- resolve_user_id(conn, params) do
-      sim_id = params["holo_sim_id"]
+      # holo_sim_id: the field's name before 2026-10-16, still sent by game
+      # servers built before then. Accepted until they've all been rebuilt.
+      instance_id = params["instance_id"] || params["holo_sim_id"]
       server? = conn.assigns[:games_auth_mode] == :server_api_key
 
       cond do
-        not is_nil(sim_id) and not server? ->
+        not is_nil(instance_id) and not server? ->
           error_response(conn, 403, "Only a game server may set a resume location.")
 
         not is_nil(params["location"]) and not is_map(params["location"]) ->
           error_response(conn, 422, "location must be an object")
 
         true ->
-          case Games.set_holo_location(game.id, user_id, id, sim_id, params["location"]) do
+          case Games.set_instance_location(game.id, user_id, id, instance_id, params["location"]) do
             {:ok, character} ->
               json(conn, %{success: true, character: character_json(character)})
 
@@ -223,11 +226,11 @@ defmodule PhxliveWeb.Api.GamesController do
         |> maybe_opt(:version, params["version"])
         |> Keyword.put(:include_full, params["include_full"] == "true")
 
-      # World servers only. An instance in this list would let a player pick
-      # someone else's Holo-sim pod out of the browser and sidestep the access
+      # World servers only. An instance server in this list would let a player
+      # pick someone else's instance out of the browser and sidestep the access
       # check entirely.
-      # DEV SHARDS (2026-10-14). A world server Ray runs from the editor on his
-      # own machine (run_world_server.bat) heartbeats here like any other, and
+      # DEV SHARDS (2026-10-14). A world server a developer runs from the
+      # editor on their own machine heartbeats here like any other, and
       # without this it would be offered to - and auto-picked by - players.
       # Players never see one. An admin's editor asks with ?dev=1 and gets the
       # dev shards first, so PIE lands on the local server rather than live.
@@ -288,9 +291,11 @@ defmodule PhxliveWeb.Api.GamesController do
         # admin section exists to answer.
         "roster" => normalize_roster(params["roster"]),
 
-        # Set by a Holo-sim instance so the hub can match it to its sim and
-        # player. A world server omits both and stays a world server.
-        "holo_sim_id" => params["holo_sim_id"],
+        # Set by an instance server so the hub can match it to its instance
+        # and player. A world server omits both and stays a world server.
+        # holo_sim_id: pre-2026-10-16 servers (see set_instance_location/2).
+        # Dropping it would re-register a running instance as a WORLD server.
+        "instance_id" => params["instance_id"] || params["holo_sim_id"],
         "launched_by_user_id" => params["launched_by_user_id"] || params["instance_user_id"]
       }
 
@@ -433,7 +438,7 @@ defmodule PhxliveWeb.Api.GamesController do
       version: server.version,
       last_heartbeat_at: server.last_heartbeat_at,
       metadata: server.metadata,
-      holo_sim_id: server.holo_sim_id
+      instance_id: server.instance_id
     }
   end
 
@@ -511,10 +516,10 @@ defmodule PhxliveWeb.Api.GamesController do
       name: character.name,
       stats: character.stats,
       settings: character.settings,
-      # Resume-in-sim: non-null means "the last session ended inside this
-      # Holo-sim without /exit" - the client routes the next login there.
-      holo_sim_id: character.holo_sim_id,
-      holo_sim_location: character.holo_sim_location,
+      # Resume-in-instance: non-null means "the last session ended inside this
+      # instance" - the client routes the next login there.
+      instance_id: character.instance_id,
+      instance_location: character.instance_location,
       last_played_at: character.last_played_at,
       inserted_at: character.inserted_at,
       updated_at: character.updated_at

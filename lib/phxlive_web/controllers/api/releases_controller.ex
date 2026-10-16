@@ -1,6 +1,6 @@
 defmodule PhxliveWeb.Api.ReleasesController do
   @moduledoc """
-  Client releases for the RaysSpaceSim launcher - see `Phxlive.Games.Releases`.
+  Client releases for a game's launcher - see `Phxlive.Games.Releases`.
 
   Reading (the launcher, as a signed-in player):
     GET  /api/games/:slug/releases/latest      the live manifest

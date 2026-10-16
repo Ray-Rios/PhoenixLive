@@ -108,7 +108,7 @@ defmodule Phxlive.Games.Releases do
 
         manifest = %{
           "files" => Enum.map(files, &Map.take(&1, ["path", "size", "sha256"])),
-          "launcher" => if(is_map(launcher), do: Map.take(launcher, ["size", "sha256", "version"]), else: nil),
+          "launcher" => if(is_map(launcher), do: Map.take(launcher, ["size", "sha256", "version", "filename"]), else: nil),
           # The game executable the launcher starts, relative to the install
           # folder. Recorded rather than guessed so a renamed target cannot
           # leave the launcher starting the wrong exe.

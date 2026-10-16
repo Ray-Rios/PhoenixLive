@@ -2,9 +2,6 @@ defmodule PhxliveWeb.GamesLive do
   @moduledoc """
   /games - the games list: one card per active plugin game
   (`Phxlive.Plugins.active_games/0`), each linking to the plugin's page.
-
-  The RaysSpaceSim launcher card is temporary: it moves into that game's own
-  plugin in milestone 3 (PHXLIVE.md §12).
   """
   use PhxliveWeb, :live_view
 
@@ -14,7 +11,7 @@ defmodule PhxliveWeb.GamesLive do
   def mount(_params, _session, socket) do
     if connected?(socket), do: Phoenix.PubSub.subscribe(Phxlive.PubSub, Phxlive.Plugins.topic())
 
-    {:ok, assign(socket, page_title: "Games", games: Phxlive.Plugins.active_games(), rss_release: rss_live_release())}
+    {:ok, assign(socket, page_title: "Games", games: Phxlive.Plugins.active_games())}
   end
 
   # An admin activated or deactivated a plugin.
@@ -26,24 +23,6 @@ defmodule PhxliveWeb.GamesLive do
   @impl true
   def handle_event(event, _params, socket) when event in ["toggle_calendar", "toggle_start_menu", "open_app"],
     do: {:noreply, socket}
-
-  # The live launcher release, or nil (no release yet, or the games database
-  # unreachable - the page must still render either way).
-  defp rss_live_release do
-    with %{} = game <- Phxlive.Games.get_game_by_slug("rays-space-sim"),
-         %{} = release <- Phxlive.Games.Releases.live_release(game.id),
-         %{"sha256" => _} <- release.manifest["launcher"] do
-      release
-    else
-      _ -> nil
-    end
-  rescue
-    _ -> nil
-  end
-
-  defp format_gb(nil), do: "?"
-  defp format_gb(bytes) when bytes >= 1_073_741_824, do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"
-  defp format_gb(bytes), do: "#{div(bytes, 1_048_576)} MB"
 
   @impl true
   def render(assigns) do
@@ -64,27 +43,9 @@ defmodule PhxliveWeb.GamesLive do
             <div class="text-xl font-semibold text-white">{game.name}</div>
             <p class="text-sm text-gray-400 mt-2">{game.description}</p>
           </.link>
-
-          <%= if @rss_release do %>
-            <%!-- A plain link, not navigate: it is a file download served by
-                  LauncherDownloadController, outside LiveView. --%>
-            <a
-              href={~p"/games/rays-space-sim/launcher"}
-              class="block text-left glass-dark rounded-lg p-6 border border-gray-700 hover:border-blue-400 transition-colors duration-300"
-            >
-              <div class="text-4xl mb-3">🚀</div>
-              <div class="text-xl font-semibold text-white">RaysSpaceSim</div>
-              <p class="text-sm text-gray-400 mt-2">
-                Download the Windows launcher. It installs the game, keeps it up to date and signs you in.
-              </p>
-              <p class="text-xs text-gray-500 mt-3">
-                Build {@rss_release.build_id} · {format_gb(@rss_release.total_bytes)} · Windows 10/11
-              </p>
-            </a>
-          <% end %>
         </div>
 
-        <p :if={@games == [] and is_nil(@rss_release)} class="text-gray-500">
+        <p :if={@games == []} class="text-gray-500">
           No games are available yet.
           <%= if @current_user.role == "admin" do %>
             Activate one on <.link navigate={~p"/admin/plugins"} class="text-blue-400 hover:underline">Plugins</.link>.

@@ -307,17 +307,11 @@ echo "🔨 Building production Docker image with BuildKit..."
 docker build --no-cache -f Dockerfile.multistage -t "phoenixapp:prod" --progress=plain --build-arg "MIX_ENV=prod" .
 print_status "Production image built: phoenixapp:prod"
 
-# NOTE: the RaysSpaceSim dedicated server image is NOT built here.
-#
-# It is a UE cook - tens of minutes warm, hours cold - and it changes when game
-# code or content changes, which is far less often than this script runs. It has
-# its own pipeline:
-#
-#   ./deploy-game.sh            build the current commit and roll it out
-#   ./deploy-game.sh --list     see what is built and which build is live
-#
-# The two meet only at HOLOSIM_IMAGE in k3s/overlays/prod/configmap.yaml, which
-# this script applies along with everything else.
+# NOTE: game server images are NOT built here. A game plugin that runs its
+# own servers ships its own build pipeline (for example
+# plugins/<slug>/deploy-game.sh), and the two usually meet at an image name in
+# k3s/overlays/prod/configmap.yaml, which this script applies along with
+# everything else.
 
 # Deploy SSL infrastructure first
 echo "🔒 Deploying SSL infrastructure..."
@@ -442,9 +436,16 @@ fi
 # Deploy with server-side apply to handle existing PVC gracefully
 kubectl apply --server-side=true --force-conflicts -k k3s/overlays/prod/
 print_status "PhxLive deployed"
-kubectl apply -k k3s/raysspacesim
-kubectl apply -f k3s/raysspacesim/raysspacesim-secrets.yaml
-print_status "RaysSpaceSim deployed"
+# Plugins that ship Kubernetes manifests (PHXLIVE.md §9): plugins/<slug>/k3s/
+# with a kustomization.yaml, plus an optional gitignored secrets.yaml beside it.
+for plugin_k3s in plugins/*/k3s; do
+    [ -f "$plugin_k3s/kustomization.yaml" ] || continue
+    kubectl apply -k "$plugin_k3s"
+    for secrets in "$plugin_k3s"/*secrets.yaml; do
+        [ -f "$secrets" ] && kubectl apply -f "$secrets"
+    done
+    print_status "Plugin $(basename "$(dirname "$plugin_k3s")") manifests applied"
+done
 # Check if phoenix-uploads-pvc is bound (manual storage class can be finicky)
 echo "⏳ Checking phoenix-uploads-pvc binding..."
 for i in {1..10}; do

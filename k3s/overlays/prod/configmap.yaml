@@ -20,7 +20,14 @@ data:
   PHOENIX_HOST: "phxlive.net"
   ENABLE_REDIS: "true"
 
-  # --- Holo-sim instance orchestration (M5) --------------------------------
+  # Plugins active from the first boot (PHXLIVE.md §9). Replaces the hub's
+  # default list, so it names every plugin that should be on, not only the
+  # private one. A choice saved on /admin/plugins still wins.
+  PHXLIVE_ACTIVE_PLUGINS: "web_lobby,rays_space_sim"
+
+  # --- Holo-sim instance orchestration (RaysSpaceSim plugin) ---------------
+  #
+  # Read by the rays_space_sim plugin (RaysSpaceSim.Config), not the hub.
   #
   # HOLOSIM_IMAGE is written by ./deploy-game.sh and lives HERE, in the applied
   # source, rather than being set live with `kubectl set env`. deploy-prod.sh
@@ -46,7 +53,7 @@ data:
 
   # --- World server (see PROJECT.md 5b) -------------------------------------
   #
-  # WORLD_IMAGE is deliberately absent: runtime.exs falls back to HOLOSIM_IMAGE,
+  # WORLD_IMAGE is deliberately absent: the plugin falls back to HOLOSIM_IMAGE,
   # because a world server IS the Holo-sim image without -HoloSimId=. Set it here
   # only to pin the world to a different build than the instances - which is a
   # thing worth being able to do, and not a thing to do by accident.

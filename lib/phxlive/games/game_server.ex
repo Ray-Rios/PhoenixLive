@@ -48,11 +48,13 @@ defmodule Phxlive.Games.GameServer do
 
     # Instance servers only. Null on a world server.
     #
-    # An instance belongs to a SIM, not to a player: public sims are joined by
-    # many people at once. launched_by_user_id is attribution - who opened the
-    # door first - and is deliberately NOT used for access decisions. The hub's
-    # ACL check is the only thing that decides who may enter.
-    field :holo_sim_id, :binary_id
+    # `instance_id` names the game-defined thing this server is running (a
+    # player-built world, say). The hub doesn't know what an instance is; the
+    # game's plugin owns that table and its foreign key. An instance belongs to
+    # that thing, not to a player: many people can join one.
+    # launched_by_user_id is attribution - who opened the door first - and is
+    # deliberately NOT used for access decisions.
+    field :instance_id, :binary_id
     field :launched_by_user_id, :binary_id
 
     belongs_to :game, Phxlive.Games.Game
@@ -76,7 +78,7 @@ defmodule Phxlive.Games.GameServer do
       :last_heartbeat_at,
       :metadata,
       :roster,
-      :holo_sim_id,
+      :instance_id,
       :launched_by_user_id
     ])
     |> validate_required([:game_id, :host, :port, :name, :last_heartbeat_at])

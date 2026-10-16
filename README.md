@@ -47,7 +47,7 @@ practical: each subsystem says what it is and roughly what removing it costs.
 | **Notifications & email** | Swoosh + SMTP, HTML templates, delivery logging | `lib/phxlive/email`, `notifications` |
 | **Moderation & audit** | Audit log, moderation queue, admin LiveViews | `lib/phxlive/moderation`, `audit.ex` |
 | **GraphQL** | Absinthe schema with Dataloader | `lib/phxlive_web/schema.ex`, `resolvers` |
-| **Games platform** | Accounts→characters→shards→player-authored world instances, with a Kubernetes launcher. **Its own database.** | `lib/phxlive/games` |
+| **Games platform** | Games, characters, the game-server registry, single-session claims, client releases and launcher downloads. Game-specific features come from plugins. **Its own database.** | `lib/phxlive/games` |
 | **Kubernetes** | An ~80-line in-cluster API client using the pod's own service account | `lib/phxlive/kubernetes.ex` |
 
 The **games platform** is the least generic and the most actively developed part.
@@ -166,13 +166,13 @@ mix phx.gen.secret      # GUARDIAN_SECRET_KEY
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_VERIFY` | dev defaults to port 1025 (MailHog) |
 | `ENABLE_REDIS`, `REDIS_URL` | set both to bridge pubsub across pods |
 
-### Games platform orchestration
+### Plugins
 
-Only read when the app is running inside a cluster.
+| Variable | Notes |
+|---|---|
+| `PHXLIVE_ACTIVE_PLUGINS` | comma-separated plugin slugs active until an admin toggles them on /admin/plugins (default: `web_lobby`) |
 
-`HOLOSIM_IMAGE`, `HOLOSIM_IMAGE_PULL_POLICY`, `HOLOSIM_COMMAND`, `HOLOSIM_SECRET_NAME`,
-`HOLOSIM_PUBLIC_HOST`, `HOLOSIM_PORT_MIN`, `HOLOSIM_PORT_MAX`, `HOLOSIM_TTL_SECONDS`,
-`HOLOSIM_MAX_LIFETIME_SECONDS`
+A plugin's own settings are documented in its README.
 
 ---
 
@@ -182,7 +182,7 @@ Only read when the app is running inside a cluster.
 
 ```
 Phxlive.Repo          phoenixapp_dev        site: users, content, commerce, forum, …
-Phxlive.GamesRepo     phoenix_games_dev     games: games, characters, servers, world instances
+Phxlive.GamesRepo     phoenix_games_dev     games: games, characters, servers, releases, plugins' tables
                          priv/games_repo/migrations
 ```
 
@@ -238,18 +238,18 @@ acting on a player's behalf (which must also pass `user_id`).
 ```
 GET|POST            /characters
 GET|PUT|DELETE      /characters/:id
+POST                /characters/:id/claim         server key only
+POST                /characters/:id/release       server key only
+PUT                 /characters/:id/instance_location   players may only clear
 GET                 /servers
 POST                /servers/heartbeat            server key only
 POST                /servers/offline              server key only
-GET|POST            /holosims
-GET|PUT|DELETE      /holosims/:id
-POST|DELETE         /holosims/:id/members[/:member_user_id]
-POST                /holosims/:id/accept
-POST                /holosims/:id/launch
-GET                 /holosims/:id/status
-PUT                 /holosims/:id/state           server key only
-GET                 /holosims/:id/access/:target_user_id   server key only
+GET                 /releases/latest              the launcher's update check
+GET                 /releases/blobs/:sha
 ```
+
+A game's own endpoints come from its plugin and mount under the same prefix
+(`/api/games/<game slug>/...`, see `plugins/README.md`).
 
 Two of these are load-bearing for security and worth copying if you build
 something similar:
@@ -257,9 +257,9 @@ something similar:
 - **`/servers/heartbeat` and `/servers/offline` reject a player token.** If a
   player could register a server, they could advertise one they control to
   everyone browsing the server list. That is phishing, not cheating.
-- **`/holosims/:id/access/:user_id` is the instance's independent gate.** With one
-  server process per world, an address is all a stranger would need. The instance
-  asks the hub on every join, so a revoked invitation takes effect immediately.
+- **An instance server should ask the hub on every join.** With one server
+  process per world, an address is all a stranger would need; an access check
+  per join makes a revoked invitation take effect immediately.
 
 Server liveness is heartbeat **age**, not deregistration — a crashed server never
 gets to deregister.

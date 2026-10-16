@@ -97,6 +97,10 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 | 2026-10-15 | **Web Lobby's own tables (zones, spells, character spells) move to the games DB**, next to its characters, prefixed `web_lobby_`. | Owner's decision: all game data together, so the plugin is a clean template. |
 | 2026-10-15 | **Existing Lobby characters are not migrated**; the old site-DB tables are dropped. | Owner's decision: nothing worth keeping. |
 | 2026-10-15 | **Plugins are activated from an admin Plugins page** (`/admin/plugins`), WordPress-style: no redeploy to turn one on or off. Installed plugins' routes are always compiled in and gated per request. | Owner's decision. |
+| 2026-10-16 | **RaysSpaceSim becomes a private plugin**: a new private repository cloned into `plugins/rays_space_sim`. The hub ignores every plugin folder it doesn't ship. The Unreal project stays its own repository at `/RaysSpaceSim/`. | Owner's decision. The hub sees it exactly as it sees Web Lobby. |
+| 2026-10-16 | **The hub's game tables use game-neutral names:** `holo_sim_id` → `instance_id`, `holo_sim_location` → `instance_location` (columns, schemas, API JSON), and `PUT .../characters/:id/holo_location` → `.../instance_location`, **renamed now** with the game client updated in step. Old servers' `holo_sim_id` input and the old route are still accepted during the changeover. | Owner's decision ("rename now"). Accepting the old input keeps a running instance from re-registering as a world server mid-deploy. |
+| 2026-10-16 | **`PHXLIVE_ACTIVE_PLUGINS`** (comma-separated) sets which plugins are active until an admin toggles them. Production names `web_lobby,rays_space_sim`. | Owner's decision. A private plugin is on from the first boot without the hub's config naming it. |
+| 2026-10-16 | **CI's `staging-deploy` job is removed.** CI tests the public hub; production images come only from `deploy-prod.sh`, run from a working copy that has the private plugins. | Owner's decision. A CI-built image would ship without them. |
 | 2026-10-15 | **Plugin slug and game slug are separate.** The plugin slug is the folder name (underscores, maps to the module name); the game slug defaults to it but a plugin may keep an existing one (RaysSpaceSim stays `rays-space-sim`, which its clients use). Game slugs may now contain underscores. | Needed for `web_lobby`, and so existing game clients don't break. |
 
 ---
@@ -174,11 +178,10 @@ k3s/                       kustomize base + overlays (dev, prod)
 config/runtime.exs         all deploy-time configuration via env vars
 ```
 
-**Not part of the hub** and on their way out (§9, §13): `deploy-game.sh`,
-`scripts/build_*.sh`, `scripts/publish_client_release.py`, `scripts/move_build_to_f.ps1`,
-`k3s/raysspacesim/`, `priv/codemap/`, `lib/mix/tasks/rss.*`, and the `rays_space_sim*`
-admin LiveViews. A game repository checked out *inside* this directory is gitignored
-(`/RaysSpaceSim/`) and is not part of this repo.
+**Not part of the hub:** any plugin folder other than `plugins/web_lobby` (gitignored; a
+private plugin is its own repository), and a game repository checked out at the root
+(`/RaysSpaceSim/`, gitignored). RaysSpaceSim's deploy and build scripts, k8s manifests,
+code map, mix task and admin pages moved into its private plugin on 2026-10-16.
 
 ---
 
@@ -470,19 +473,32 @@ currency, whether credits can be gifted between users.
 |---|---|
 | `Games.Game` | registered titles (`slug`) |
 | `Games.GameCharacter` | per-user characters; game-specific data in the `stats` / `settings` JSON columns |
-| `Games.GameServer`, heartbeat API | dedicated-server registry; servers write their own rows |
+| `Games.GameServer`, heartbeat API | dedicated-server registry; servers write their own rows. `instance_id` set = an instance server (running one game-defined instance, e.g. a player world); nil = a world server, the only kind listed to players |
 | `Games.ServerCommand` | instructions queued for a server, delivered on its next heartbeat |
 | `Games.AdminAction` | audit trail of privileged actions on live game state |
 | `Games.GameRelease`, `Games.Releases` | client builds as SHA-256 manifests over a content-addressed blob store; launcher self-update; ranged downloads |
-| `Phxlive.Kubernetes` | small in-cluster API client using the pod's service account |
-| launcher download controller | currently hardcodes one game's launcher filename; to become per-game config |
+| `Games` session claims | one live session per character (`claim` / `release`, server key) |
+| `GameCharacter.instance_id` / `instance_location` | resume-in-instance: where to put a character on next login, opaque to the hub |
+| launcher download controller | `/games/:game_slug/launcher`; filename from the manifest's `launcher.filename` or the game's name |
 
-### Moves to the game's own plugin
+### Moved to the game's own plugin (2026-10-16)
 
-Holo-sims (`HoloSim*`, `SimAccess`, holo-sim controller and routes), `InstanceLauncher`,
-`WorldServerLauncher` (a candidate to generalise back into core later), `CodeMap` and the
-codebase admin page, the game's admin LiveView, its deploy/build scripts, its k8s
-manifests, its mix tasks, and the `HOLOSIM_*` / `WORLD_*` environment variables.
+Into the private `plugins/rays_space_sim` (namespace `RaysSpaceSim` / `RaysSpaceSimWeb`):
+Holo-sims (`HoloSim*`, `SimAccess`, the controller and its `/holosims` routes, paths
+unchanged), `InstanceLauncher`, `WorldServerLauncher` (a candidate to generalise back into
+core later), the Kubernetes client, `CodeMap` and the codebase page, the game's admin
+section (now `/admin/rays_space_sim`), the launcher card (now its page
+`/games/rays_space_sim`), `mix rss.dev_users`, the deploy/build scripts, the k8s manifests
+and namespace secret, the `HOLOSIM_*` / `WORLD_*` settings (read by `RaysSpaceSim.Config`;
+the values still sit in the prod configmap), and the `holo_sims*` migrations (same version
+numbers, so already-migrated databases don't rerun them). The plugin owns the foreign keys
+from the hub's `instance_id` columns to `holo_sims`. Forum channels are Holo-sims' access
+lists; the plugin follows channel changes through `hub_event/1`.
+
+Core migrations that used to create those columns with holo names and foreign keys were
+rewritten to the new names without them, so a fresh install without the plugin works;
+`20261016020000_rename_holo_columns_to_instance` brings existing databases to the same
+shape. The `create_games` migration no longer seeds the RaysSpaceSim row.
 
 ### Plugins (milestone 2, implemented 2026-10-15)
 
@@ -522,13 +538,16 @@ in production, `mix phxlive.migrate` in development; plain `mix ecto.migrate` on
 A plugin is *active* when an admin activates it on **/admin/plugins** (implemented
 2026-10-15). Each toggle is saved as a row in `plugin_states` (slug, active, who, when); a
 plugin that has never been toggled is active if its slug is in
-`config :phxlive, :default_active_plugins` (`["web_lobby"]`). Deliberately not stored in
+`config :phxlive, :default_active_plugins` (`["web_lobby"]`, or the `PHXLIVE_ACTIVE_PLUGINS`
+environment variable when set). Deliberately not stored in
 `cms_options` (see §13).
 
 | While a plugin is... | Installed only | Active |
 |---|---|---|
 | its API (`/api/games/<game slug>/...`) | 404 (`PhxliveWeb.Plugs.PluginActive`) | served |
 | its pages (`/games/<slug>/...`) | 404; open pages redirect to `/games` (`PhxliveWeb.PluginGate`) | served |
+| its admin pages (`/admin/<slug>/...`) | 404; open pages redirect to `/admin/plugins` | served, admins only |
+| `hub_event/1` | **still called** (its data must stay consistent) | called |
 | its `children/0` | stopped | supervised under `Phxlive.PluginSupervisor` |
 | its game row | `is_active: false` | registered, `is_active: true` |
 | admin nav, desktop apps, games list | hidden | shown |
@@ -553,24 +572,29 @@ defmodule Phxlive.Plugin do
   @callback admin_nav() :: [%{label: String.t(), path: String.t(), icon: String.t()}]
   @callback desktop_apps() :: [Phxlive.Desktop.App.t()]   # §10
   @callback entitlement_kinds() :: [String.t()]           # §8
-  @optional_callbacks game: 0, routes: 0, children: 0, admin_nav: 0, desktop_apps: 0, entitlement_kinds: 0
+  @callback on_activate() :: :ok | {:error, term()}
+  @callback on_deactivate() :: :ok
+  @callback hub_event(tuple()) :: :ok                     # see "Hub events"
 end
 ```
 
 `use Phxlive.Plugin, slug: "web_lobby", name: ..., version: ...` fills in the required
-callbacks and defaults the optional ones.
+callbacks and defaults the rest, so a plugin overrides only what it uses.
 
 **Routes.** Phoenix routes are compiled and LiveView expects one router, so a plugin's
-routes module (`use Phxlive.Plugin.Routes`) declares `api do ... end` and `browser do ... end`
+routes module (`use Phxlive.Plugin.Routes`) declares `api`, `browser` and `admin`
 blocks, and `PhxliveWeb.PluginRouter` expands them for every *installed* plugin at compile
 time. Activation is checked per request, so it never needs a recompile:
 
 - API routes mount at `/api/games/<game slug>/...` with the `:games_api` pipeline (player
   bearer token or server key) plus the plugin's gate. The literal-slug scopes are expanded *before* the core
-  `/api/games/:game_slug` routes, so the dynamic segment cannot capture them.
+  `/api/games/:game_slug` routes, so the dynamic segment cannot capture them. The gate sets
+  `params["game_slug"]` as the core routes do, so controllers work under either.
 - Browser routes mount at `/games/<plugin slug>/...` in a `live_session` of their own
   (`UserAuth` + `PluginGate` on mount). Navigating between a plugin page and a core page is
   a full page load.
+- Admin routes mount at `/admin/<plugin slug>/...` in their own `live_session` with
+  `UserAuth :require_admin_user`; link them from `admin_nav/0`.
 
 Adding or removing a plugin *folder* recompiles the router (it has a `__mix_recompile__?`
 guard); activating or deactivating never does.
@@ -588,6 +612,20 @@ package adds a shim there and the package to `assets/package.json`. The Dockerfi
 **Pages.** Plugin pages render in the app layout. The root layout gives them (and `/games`) a
 plain black background instead of the user's animated one, keyed on the `:phxlive_plugin`
 conn assign set by `PluginActive`.
+
+**Hub events.** `Phxlive.Plugins.notify/1` calls `hub_event/1` on every installed plugin,
+synchronously, in the caller's process; a plugin that raises is logged and skipped. Events
+so far, all from `Phxlive.Forum`: `{:channel_updated, new, old}`, `{:channel_deleted, id}`
+(before the channel's rows go, outside its transaction), `{:channel_member_removed,
+channel_id, user_id}` (kick or ban). Plugins must ignore events they don't know.
+
+**Files and settings.** `Phxlive.Plugins.priv_dir/1` finds a plugin's `priv/` in a release
+or the source tree. A plugin reads its own environment variables at runtime; the hub's
+`config/runtime.exs` doesn't know it.
+
+**Private plugins in deploys.** `.dockerignore` keeps every plugin's `.git`, `k3s/`,
+`scripts/` and `*.sh` out of images. `deploy-prod.sh` applies each `plugins/*/k3s` (with a
+`kustomization.yaml`) and then any `*secrets.yaml` beside it.
 
 **Game rows.** `activate/2` registers a plugin's `games` row; `Phxlive.Plugins.ensure_game/1`
 creates it on demand for plugins active by default that were never toggled (plugins call it to
@@ -692,7 +730,7 @@ Implementation: a nullable `required_entitlement` column on `channels` (e.g.
 |---|---|---|
 | 1 | **Storage service + file explorer** (§7) | One storage system; explorer and profile uploads show the same files; quotas enforced transactionally; all user files served through the authorising controller; old data migrated. |
 | 2 | **Plugin API + Web Lobby on it** (§9, §10) | Lobby works with zero Lobby references in core; a plugin can add routes, admin nav, desktop apps, migrations. |
-| 3 | **Extract game-specific code** (§9) | Nothing game-specific in this repo; the game's package boots against an unmodified hub. |
+| 3 | **Extract game-specific code** (§9) | Nothing game-specific in this repo; the game's plugin boots against an unmodified hub. *Code moved 2026-10-16; done once the private repo exists, the suite is green with and without it, and the game client is rebuilt.* |
 | 4 | **Commerce** (§8, §11) | Ledger + entitlements; Stripe then PayPal; currency packs, items, subscriptions; storage tiers and VIP channels driven by entitlements; webhook inbox idempotent. |
 | 5 | **Start menu redesign** (§10) | Every app maps to a real feature; apps are registered data. |
 | 6 | **Stored-name cutover** (§5) | Cookie, release, node, DB and k8s names are PhxLive; runbook written and executed. |
@@ -702,6 +740,16 @@ Implementation: a nullable `required_entitlement` column on `channels` (e.g.
 ## 13. Known debt
 
 Ordered roughly by how much it hurts.
+
+- **RaysSpaceSim's settings still live in the hub's prod configmap** (`HOLOSIM_*`,
+  `WORLD_*`, and `deploy-game.sh` writes `HOLOSIM_IMAGE` there), so a game deploy edits a
+  hub file. Move them to a configmap the plugin's `k3s/` owns and have the hub deployment
+  read it with `envFrom` (`optional: true`).
+- **Legacy wire names accepted until every client and server is rebuilt:** the
+  `holo_sim_id` heartbeat / location field and the `PUT .../holo_location` route
+  (`GamesController`, router). Remove after the next full `deploy-game.sh`.
+- Core comments and old migrations still mention RaysSpaceSim in places that are
+  history (migration docs, the rename migration). Harmless; don't add new ones.
 
 - **`mix.lock` is not committed.** Builds resolve dependency versions fresh each time.
   Commit it.

@@ -15,14 +15,9 @@ defmodule Phxlive.GamesRepo.Migrations.CreateGames do
 
     create_if_not_exists unique_index(:games, [:slug])
 
-    execute(
-      """
-      INSERT INTO games (id, slug, name, is_active, inserted_at, updated_at)
-      VALUES (gen_random_uuid(), 'rays-space-sim', 'RaysSpaceSim', true, NOW(), NOW())
-      ON CONFLICT (slug) DO NOTHING
-      """,
-      "DELETE FROM games WHERE slug = 'rays-space-sim'"
-    )
+    # No seeded game: each game's plugin registers its own row when it is
+    # activated (Phxlive.Plugins.ensure_game/1). This used to insert one
+    # specific title; databases that ran that version keep their row.
   end
 
   def down do

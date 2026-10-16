@@ -120,12 +120,6 @@ defmodule PhxliveWeb.Components.AdminSidebar do
           <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 sidebar-section-header">
             Games
           </h2>
-          <.sidebar_link
-            href="/admin/raysspacesim"
-            icon="🚀"
-            label="RaysSpaceSim"
-            active={String.starts_with?(@current_path, "/admin/raysspacesim")}
-          />
           <%!-- Admin pages contributed by active plugins (PHXLIVE.md §9) --%>
           <%= for item <- Phxlive.Plugins.admin_nav() do %>
             <.sidebar_link

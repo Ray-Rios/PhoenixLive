@@ -39,8 +39,7 @@ defmodule Phxlive.Accounts.User do
     # user - it is granted by a purchase or by an admin, so it is cast only in
     # the admin changeset, never in registration or profile updates.
     #
-    # This is also the Holo-sim limit, since a sim requires a channel. See
-    # Games.HoloSims for why the older holo_sim_slots counter no longer binds.
+    # Games that build one thing per channel use this as their limit too.
     field :channel_allowance, :integer, default: 5
 
     # Invite & notification preferences

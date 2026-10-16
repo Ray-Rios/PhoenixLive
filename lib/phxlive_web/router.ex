@@ -163,14 +163,15 @@ defmodule PhxliveWeb.Router do
     live "/admin/api-toolbox", AdminLive.ApiToolbox, :index
     live "/admin/custom-emojis", AdminLive.CustomEmojis, :index
     live "/admin/plugins", AdminLive.Plugins, :index
-    live "/admin/raysspacesim", AdminLive.RaysSpaceSim, :index
-    live "/admin/raysspacesim/codebase", AdminLive.RaysSpaceSimCodebase, :index
 
   end
   end
 
   # Plugin pages: /games/<plugin slug>/..., one live_session per plugin.
   plugin_browser_routes()
+
+  # Plugin admin pages: /admin/<plugin slug>/..., admins only.
+  plugin_admin_routes()
 
   # --------------------
   # Auth Controller Actions (non-Live)
@@ -240,7 +241,7 @@ defmodule PhxliveWeb.Router do
   plugin_api_routes()
 
   # --------------------
-  # Games Platform API (RaysSpaceSim and future titles)
+  # Games Platform API (shared by every game; game-specific APIs are plugins')
   # Auth enforced per-request by GamesApiKeyOrAuth (player JWT or server API key)
   # --------------------
   scope "/api/games", PhxliveWeb do
@@ -258,30 +259,6 @@ defmodule PhxliveWeb.Router do
     post "/:game_slug/servers/heartbeat", Api.GamesController, :heartbeat_server
     post "/:game_slug/servers/offline", Api.GamesController, :deregister_server
 
-    # Holo-sims. Player CRUD and invites use the player token; the access check
-    # and state save are server-API-key only, enforced in the controller.
-    #
-    # Ordering matters: the /access/ and /members/ routes must come before the
-    # bare /:id routes, or Phoenix matches "access" as an :id.
-    get "/:game_slug/holosims", Api.HoloSimController, :index
-    post "/:game_slug/holosims", Api.HoloSimController, :create
-    # Static segments BEFORE /:id, or "options" would be read as a sim id.
-    get "/:game_slug/holosims/options", Api.HoloSimController, :options
-    get "/:game_slug/holosims/:id/world", Api.HoloSimController, :world
-
-    get "/:game_slug/holosims/:id/access/:target_user_id", Api.HoloSimController, :check_access
-    put "/:game_slug/holosims/:id/state", Api.HoloSimController, :save_state
-
-    post "/:game_slug/holosims/:id/members", Api.HoloSimController, :add_member
-    delete "/:game_slug/holosims/:id/members/:member_user_id", Api.HoloSimController, :remove_member
-    post "/:game_slug/holosims/:id/accept", Api.HoloSimController, :accept
-    post "/:game_slug/holosims/:id/launch", Api.HoloSimController, :launch
-    get "/:game_slug/holosims/:id/status", Api.HoloSimController, :status
-
-    get "/:game_slug/holosims/:id", Api.HoloSimController, :show
-    put "/:game_slug/holosims/:id", Api.HoloSimController, :update
-    delete "/:game_slug/holosims/:id", Api.HoloSimController, :delete
-
     # Client releases for the launcher. /missing and /:build_id/live are above
     # the bare /blobs/:sha route only for readability - none of them collide.
     get "/:game_slug/releases/latest", Api.ReleasesController, :latest
@@ -297,7 +274,10 @@ defmodule PhxliveWeb.Router do
     # above theirs - Phoenix would otherwise be free to read "claim" as an :id.
     post "/:game_slug/characters/:id/claim", Api.GamesController, :claim_character
     post "/:game_slug/characters/:id/release", Api.GamesController, :release_character
-    put "/:game_slug/characters/:id/holo_location", Api.GamesController, :set_holo_location
+    put "/:game_slug/characters/:id/instance_location", Api.GamesController, :set_instance_location
+    # The same, under its pre-2026-10-16 name, for clients and servers built
+    # before the rename. Remove once they've all been rebuilt.
+    put "/:game_slug/characters/:id/holo_location", Api.GamesController, :set_instance_location
 
     get "/:game_slug/characters/:id", Api.GamesController, :get_character
     put "/:game_slug/characters/:id", Api.GamesController, :update_character

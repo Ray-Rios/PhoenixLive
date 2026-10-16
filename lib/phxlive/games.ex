@@ -1,6 +1,7 @@
 defmodule Phxlive.Games do
   @moduledoc """
-  Context for the multiplayer games platform (RaysSpaceSim and future titles).
+  Context for the multiplayer games platform: games, characters, the server
+  registry, client releases. Game-specific logic lives in each game's plugin.
 
   Backed by `Phxlive.GamesRepo`, a database isolated from the main site's
   `Phxlive.Repo`. Player identity (`user_id`) always comes from the main
@@ -81,14 +82,14 @@ defmodule Phxlive.Games do
   end
 
   @doc """
-  Record (or clear, with a nil sim id) where a character should resume.
+  Record (or clear, with a nil instance id) where a character should resume.
 
   Server-key only in the controller, except that a player may clear their own.
   Bare `change/2`, deliberately bypassing GameCharacter.changeset/2 - these
   fields are not castable from player input, and that changeset is the player
   input path.
   """
-  def set_holo_location(game_id, user_id, character_id, holo_sim_id, location \\ nil) do
+  def set_instance_location(game_id, user_id, character_id, instance_id, location \\ nil) do
     case get_owned_character(game_id, user_id, character_id) do
       nil ->
         {:error, :not_found}
@@ -96,10 +97,10 @@ defmodule Phxlive.Games do
       character ->
         character
         |> Ecto.Changeset.change(
-          holo_sim_id: holo_sim_id,
-          holo_sim_location: if(holo_sim_id, do: location, else: nil)
+          instance_id: instance_id,
+          instance_location: if(instance_id, do: location, else: nil)
         )
-        |> Ecto.Changeset.foreign_key_constraint(:holo_sim_id)
+        |> Ecto.Changeset.foreign_key_constraint(:instance_id)
         |> GamesRepo.update()
     end
   end
@@ -117,12 +118,12 @@ defmodule Phxlive.Games do
   #
   # A character may be in at most one live world or instance at a time.
   #
-  # THE PROBLEM THIS SOLVES IS DATA LOSS, NOT CHEATING. `PreLoginAsync`
-  # approved a join on the Holo-sim ACL and nothing else, so one character
-  # could be signed in from several clients at once - observed five times in a
-  # single run. `ARSSGameModeBase::Logout` writes a position checkpoint back
-  # here on the way out, so two sessions racing one character means whichever
-  # leaves last silently overwrites the other's progress.
+  # THE PROBLEM THIS SOLVES IS DATA LOSS, NOT CHEATING. Without a claim, a
+  # game server that approves joins on its own access rules alone lets one
+  # character be signed in from several clients at once (seen in practice).
+  # Servers write a position checkpoint back here on Logout, so two sessions
+  # racing one character means whichever leaves last silently overwrites the
+  # other's progress.
   #
   # THREE THINGS RELEASE A CLAIM, and the redundancy is deliberate because each
   # one covers a failure the others cannot:
@@ -418,7 +419,7 @@ defmodule Phxlive.Games do
            :last_heartbeat_at,
            :metadata,
            :roster,
-           :holo_sim_id,
+           :instance_id,
            :launched_by_user_id,
            :updated_at
          ]},
@@ -428,30 +429,30 @@ defmodule Phxlive.Games do
   end
 
   # ---------------------------------------------------------------------
-  # Holo-sim instances
+  # Instance servers
   # ---------------------------------------------------------------------
 
   @doc """
-  The live instance running this sim, if there is one.
+  The live server running this instance, if there is one.
 
-  Keyed on the SIM, not on a player. Public sims are joined by many people at
-  once, so an instance belongs to the world it is running - whoever opened the
-  door first is attribution, not ownership.
+  Keyed on the INSTANCE, not on a player. Many people can be in one instance
+  at once, so a server belongs to the instance it is running - whoever opened
+  the door first is attribution, not ownership.
 
-  This is what makes a second player joining an existing sim work, and what lets
-  the owner walk out and back in without spawning a second pod.
+  This is what lets a second player join an instance that is already running,
+  and the first walk out and back in without starting a second server.
 
   Filters on heartbeat freshness: a crashed pod leaves its row behind and would
-  otherwise make a sim permanently unlaunchable.
+  otherwise make an instance permanently unlaunchable.
   """
-  def get_instance_for_sim(game_id, holo_sim_id) do
+  def get_instance_server(game_id, instance_id) do
     cutoff =
       DateTime.utc_now()
       |> DateTime.add(-server_stale_after_seconds(), :second)
       |> DateTime.truncate(:second)
 
     GameServer
-    |> where([s], s.game_id == ^game_id and s.holo_sim_id == ^holo_sim_id)
+    |> where([s], s.game_id == ^game_id and s.instance_id == ^instance_id)
     |> where([s], s.status in ["online", "draining"])
     |> where([s], s.last_heartbeat_at >= ^cutoff)
     |> order_by([s], desc: s.last_heartbeat_at)
@@ -469,7 +470,7 @@ defmodule Phxlive.Games do
   def list_world_servers(game_id, opts \\ []) do
     game_id
     |> list_available_servers(opts)
-    |> Enum.filter(&is_nil(&1.holo_sim_id))
+    |> Enum.filter(&is_nil(&1.instance_id))
   end
 
   @doc """
@@ -569,15 +570,16 @@ defmodule Phxlive.Games do
   end
 
   @doc """
-  Delete Holo-sim instance rows that are dead (2026-10-10).
+  Delete instance server rows that are dead (2026-10-10).
 
   An instance is a process that lives minutes, and every launch can take a new
   port - so its `game_servers` row is worthless once it stops heartbeating, and
-  leaving them made the admin list fill with "Stale" copies of every sim.
-  Worse, deleting a sim NILIFIES `holo_sim_id` on its rows (the FK), which turns
-  a dead instance into what looks like a stale WORLD server.
+  leaving them made the admin list fill with "Stale" copies of every instance.
+  Worse, a game that deletes an instance may NILIFY `instance_id` on its rows
+  (with an ON DELETE SET NULL foreign key), which turns a dead instance server into
+  what looks like a stale WORLD server.
 
-  So: a row is an instance if it has a sim OR sits in the instance port range,
+  So: a row is an instance if it has an instance id OR sits in the instance port range,
   and an instance row that is offline or stale is deleted. World servers are
   untouched - for them, "stale" is information an admin wants to see.
   """
@@ -590,18 +592,18 @@ defmodule Phxlive.Games do
     {count, _} =
       GameServer
       |> where([s], s.game_id == ^game_id)
-      |> where([s], not is_nil(s.holo_sim_id) or (s.port >= ^port_min and s.port <= ^port_max))
+      |> where([s], not is_nil(s.instance_id) or (s.port >= ^port_min and s.port <= ^port_max))
       |> where([s], s.status == "offline" or s.last_heartbeat_at < ^cutoff or is_nil(s.last_heartbeat_at))
       |> GamesRepo.delete_all()
 
     {:ok, count}
   end
 
-  @doc "Delete every server row belonging to one sim - live or not. Used when the sim is deleted."
-  def delete_instance_rows(holo_sim_id) do
+  @doc "Delete every server row belonging to one instance - live or not. Used when the instance is deleted."
+  def delete_instance_rows(instance_id) do
     {count, _} =
       GameServer
-      |> where([s], s.holo_sim_id == ^holo_sim_id)
+      |> where([s], s.instance_id == ^instance_id)
       |> GamesRepo.delete_all()
 
     {:ok, count}

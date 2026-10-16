@@ -2,8 +2,8 @@ defmodule Phxlive.Games.GameCharacter do
   @moduledoc """
   A player's character within a specific game.
 
-  `stats` and `settings` are flexible JSONB maps so each game (RaysSpaceSim,
-  and future titles) can store its own shape of data without new migrations.
+  `stats` and `settings` are flexible JSONB maps so each game can store its
+  own shape of data without new migrations.
   Real-time gameplay state should live in the dedicated game server / Redis;
   this record is the periodic/disconnect checkpoint that gets persisted here.
 
@@ -46,13 +46,14 @@ defmodule Phxlive.Games.GameCharacter do
     field :session_started_at, :utc_datetime
     field :session_last_seen_at, :utc_datetime
 
-    # --- Resume-in-sim (2026-10-09) -------------------------------------
+    # --- Resume-in-instance (2026-10-09) --------------------------------
     #
     # Also NOT castable, for the same reason as the claim fields above: written
-    # by a Holo-sim instance on Logout (server key), cleared on /exit. See the
-    # migration 20261009120000 and Games.set_holo_location/4.
-    field :holo_sim_id, :binary_id
-    field :holo_sim_location, :map
+    # by an instance server on Logout (server key), cleared when the player
+    # leaves the instance. See Games.set_instance_location/5. `instance_location`
+    # is opaque to the hub; the game writes and reads it.
+    field :instance_id, :binary_id
+    field :instance_location, :map
 
     belongs_to :game, Phxlive.Games.Game
 
