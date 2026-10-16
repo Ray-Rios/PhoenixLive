@@ -61,6 +61,8 @@
         # Copy source code and compile
         # -------------------------------
             COPY lib ./lib
+            # Installed plugins (PHXLIVE.md §9)
+            COPY plugins ./plugins
             
         # -------------------------------
         # Copy assets and build them - FORCE REBUILD 2025-11-19

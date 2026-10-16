@@ -24,7 +24,9 @@ defmodule Phxlive.Games.Game do
     game
     |> cast(attrs, [:slug, :name, :is_active])
     |> validate_required([:slug, :name])
-    |> validate_format(:slug, ~r/^[a-z0-9\-]+$/, message: "must be lowercase, alphanumeric, and hyphens only")
+    # Underscores allowed since 2026-10-15: plugin slugs (e.g. "web_lobby") are
+    # also game slugs, and plugin slugs map to Elixir module names.
+    |> validate_format(:slug, ~r/^[a-z0-9][a-z0-9_\-]*$/, message: "must be lowercase letters, digits, hyphens or underscores")
     |> unique_constraint(:slug)
   end
 end

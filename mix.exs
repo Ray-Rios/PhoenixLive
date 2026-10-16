@@ -7,6 +7,8 @@ defmodule Phxlive.MixProject do
       version: "0.1.0",
       elixir: "~> 1.19.0",
       elixirc_paths: elixirc_paths(Mix.env()),
+      # Plugins' own tests run with the core suite (PHXLIVE.md §9).
+      test_paths: ["test" | plugin_paths("test")],
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
@@ -30,8 +32,44 @@ defmodule Phxlive.MixProject do
     ]
   end
 
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(:test), do: ["lib", "test/support"] ++ plugin_paths("lib") ++ plugin_paths("test/support")
+  defp elixirc_paths(_), do: ["lib" | plugin_paths("lib")]
+
+  # Installed plugins are folders under plugins/ (PHXLIVE.md §9). Returns
+  # plugins/<slug>/<sub> for each plugin that has it. Folder names that aren't
+  # valid slugs (e.g. "_template") are skipped, matching Phxlive.Plugins.Discovery.
+  defp plugin_paths(sub) do
+    "plugins/*/#{sub}"
+    |> Path.wildcard()
+    |> Enum.filter(&File.dir?/1)
+    |> Enum.filter(fn path -> Regex.match?(~r/\A[a-z][a-z0-9_]*\z/, path |> Path.split() |> Enum.at(1)) end)
+    |> Enum.sort()
+  end
+
+  # `mix phxlive.migrate`: every repo, core + plugin migration folders.
+  # Use this instead of plain `mix ecto.migrate`, which only sees priv/.
+  defp migrate_all(args) do
+    for {repo, dir} <- [{"Phxlive.Repo", "repo"}, {"Phxlive.GamesRepo", "games_repo"}] do
+      paths = ["priv/#{dir}/migrations" | plugin_paths("priv/#{dir}/migrations")]
+      Mix.Task.reenable("ecto.migrate")
+      Mix.Task.run("ecto.migrate", ["-r", repo] ++ Enum.flat_map(paths, &["--migrations-path", &1]) ++ args)
+    end
+  end
+
+  # Release step: plugins' priv/ (migrations, assets) is not part of the OTP app,
+  # so copy it into the release where Phxlive.Plugins.migration_paths/1 looks.
+  defp copy_plugin_priv(%Mix.Release{} = release) do
+    vsn = to_string(release.applications[:phxlive][:vsn])
+    dest_root = Path.join([release.path, "lib", "phxlive-#{vsn}", "priv", "plugins"])
+
+    for src <- plugin_paths("priv") do
+      slug = src |> Path.split() |> Enum.at(1)
+      File.mkdir_p!(dest_root)
+      File.cp_r!(src, Path.join(dest_root, slug))
+    end
+
+    release
+  end
 
   defp deps do
     [
@@ -93,9 +131,10 @@ defmodule Phxlive.MixProject do
   defp aliases do
   [
     setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
-    "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+    "ecto.setup": ["ecto.create", "phxlive.migrate", "run priv/repo/seeds.exs"],
+    "phxlive.migrate": &migrate_all/1,
     "ecto.reset": ["ecto.drop", "ecto.setup"],
-    test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+    test: ["ecto.create --quiet", "phxlive.migrate --quiet", "test"],
 
     # Frontend asset tasks using npm instead of mix tailwind
   "assets.setup": ["cmd --cd assets ../scripts/dev-assets.sh ci"],
@@ -111,7 +150,7 @@ defmodule Phxlive.MixProject do
       phoenix_app: [
         include_executables_for: [:unix],
         applications: [runtime_tools: :permanent],
-        steps: [:assemble, :tar]
+        steps: [:assemble, &copy_plugin_priv/1, :tar]
       ]
     ]
   end

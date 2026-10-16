@@ -14,6 +14,8 @@ defmodule Phxlive.Scheduler.Task do
     field :start_at, :utc_datetime
     field :end_at, :utc_datetime
     field :earliest_start_at, :utc_datetime
+    # Computed by Scheduler.Engine (column added 20261015220500).
+    field :earliest_finish_at, :utc_datetime
     field :latest_finish_at, :utc_datetime
     field :lock_version, :integer, default: 1
 

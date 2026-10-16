@@ -89,6 +89,9 @@ config :cors_plug,
 # ----------------------------
 # Ecto Repo defaults
 # ----------------------------
+# Plugins active until an admin saves a choice on /admin/plugins (PHXLIVE.md §9).
+config :phxlive, :default_active_plugins, ["web_lobby"]
+
 config :phxlive, Phxlive.Repo,
   username: System.get_env("DB_USERNAME") || "root",
   password: System.get_env("DB_PASSWORD") || "postgres",

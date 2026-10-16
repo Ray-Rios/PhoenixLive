@@ -26,6 +26,12 @@ config :logger, level: :warning
 
 # Drive: no background janitor in tests; bodies go to a throwaway directory.
 config :phxlive, Phxlive.Drive.Janitor, enabled: false
+
+# Plugins: tests drive activation themselves; no background runtime, a fixture
+# plugin, and nothing active by default.
+config :phxlive, Phxlive.Plugins.Runtime, enabled: false
+config :phxlive, :extra_plugins, [Phxlive.Test.FixturePlugin]
+config :phxlive, :default_active_plugins, []
 config :phxlive, Phxlive.Storage, root: Path.join(System.tmp_dir!(), "phxlive_test_drive")
 
 # Tests register accounts and then log in as them; without this the login gate

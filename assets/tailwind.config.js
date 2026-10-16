@@ -4,7 +4,10 @@ module.exports = {
   content: [
     './js/**/*.{js,ts}',
     '../lib/phxlive_web.ex',
-    '../lib/phxlive_web/**/*.{ex,heex,html.heex}'
+    '../lib/phxlive_web/**/*.{ex,heex,html.heex}',
+    // Installed plugins' templates and hooks (PHXLIVE.md §9)
+    '../plugins/*/lib/**/*.{ex,heex}',
+    '../plugins/*/assets/js/**/*.{js,ts}'
   ],
   theme: {
     extend: {

@@ -90,6 +90,8 @@ RUN cd assets/node_modules && \
 
 # Copy lib directory for Tailwind to scan templates
 COPY lib ./lib
+# Plugins (PHXLIVE.md §9): their templates for Tailwind, their JS for esbuild.
+COPY plugins ./plugins
 
 COPY priv/static/tri.gif ./priv/static/
 COPY priv/static/favicon.ico ./priv/static/
@@ -152,6 +154,9 @@ RUN mix deps.compile
 # Copy application source
 COPY config ./config
 COPY lib ./lib
+# Installed plugins are compiled in (mix.exs elixirc_paths) and their priv/ is
+# copied into the release by the copy_plugin_priv release step.
+COPY plugins ./plugins
 COPY priv/repo ./priv/repo
 # THE GAMES REPO'S MIGRATIONS.
 #

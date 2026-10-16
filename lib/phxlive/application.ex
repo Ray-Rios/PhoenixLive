@@ -41,6 +41,10 @@ defmodule Phxlive.Application do
       Phxlive.Scheduler.Worker,
       # Drive maintenance: 30-day purge + blob GC (PHXLIVE.md §7)
       Phxlive.Drive.Janitor,
+      # Plugins (PHXLIVE.md §9): active plugins' processes, kept in step with
+      # /admin/plugins across the cluster by Plugins.Runtime.
+      {DynamicSupervisor, name: Phxlive.PluginSupervisor, strategy: :one_for_one},
+      Phxlive.Plugins.Runtime,
       PhxliveWeb.Endpoint
     ] ++ redis_children()
 

@@ -39,7 +39,8 @@ import { GlobalHooks } from "./global_hooks";
 import { ProfileSettings } from "./profile_settings";
 import { ColorPicker, OpacitySlider } from "./color_picker";
 import { AudioHook } from "./audio";
-import { WorldCharacterUIScene } from "./threejs/scenes/world-character-ui-scene";
+// LiveView hooks from installed plugins (generated before each build; PHXLIVE.md §9).
+import { PluginHooks } from "./plugins.generated";
 
 // Import Desktop hooks
 import "./desktop";
@@ -137,7 +138,7 @@ async function loadHeavyModulesAndConnect() {
       StarfieldScene: { mounted() { console.log('⏳ StarfieldScene loading...'); } },
       VoidScene: { mounted() { console.log('⏳ VoidScene loading...'); } },
       GlobalCameraController: { mounted() { console.log('⏳ GlobalCameraController loading...'); } },
-      WorldCharacterUIScene
+      ...PluginHooks
     };
     
     // Create and connect LiveSocket NOW - essential hooks ready
@@ -212,7 +213,7 @@ async function loadHeavyModulesAndConnect() {
       FullscreenContainer: (window as any)._FullscreenContainer,
       SidebarResizer: (window as any)._SidebarResizer,
       AdminSidebarResizer: (window as any)._AdminSidebarResizer,
-      WorldCharacterUIScene
+      ...PluginHooks
     };
     
     liveSocket = new LiveSocket("/live", Socket, {

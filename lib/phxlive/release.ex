@@ -70,7 +70,11 @@ defmodule Phxlive.Release do
         log("  !! no migration files found - this repo will never gain a schema")
       end
 
-      case Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true)) do
+      # Installed plugins' migrations (PHXLIVE.md §9) run with the core ones.
+      plugin_paths = Phxlive.Plugins.migration_paths(repo)
+      for p <- plugin_paths, do: log("  + plugin migrations from #{p}")
+
+      case Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, [path | plugin_paths], :up, all: true)) do
         {:ok, versions, _} ->
           log("  #{inspect(repo)}: applied #{length(versions)} migration(s)")
 
@@ -112,7 +116,10 @@ defmodule Phxlive.Release do
         IO.puts("      and `migrate` will report success because it had nothing to do.")
       end
 
-      case Ecto.Migrator.with_repo(repo, &Ecto.Migrator.migrations(&1)) do
+      plugin_paths = Phxlive.Plugins.migration_paths(repo)
+      for p <- plugin_paths, do: IO.puts("   plugin   : #{p}")
+
+      case Ecto.Migrator.with_repo(repo, &Ecto.Migrator.migrations(&1, [path | plugin_paths])) do
         {:ok, migrations, _} ->
           {applied, pending} = Enum.split_with(migrations, fn {status, _, _} -> status == :up end)
 
@@ -145,7 +152,8 @@ defmodule Phxlive.Release do
 
   def rollback(repo, version) do
     load_app()
-    {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
+    paths = [Ecto.Migrator.migrations_path(repo) | Phxlive.Plugins.migration_paths(repo)]
+    {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, paths, :down, to: version))
   end
 
   defp repos do

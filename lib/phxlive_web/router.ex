@@ -91,6 +91,14 @@ defmodule PhxliveWeb.Router do
   end
 
   # --------------------
+  # Plugins (PHXLIVE.md §9): one gate pipeline per installed plugin. Their
+  # routes are expanded below: API before the core /api/games/:game_slug
+  # scopes, pages after the main live_session.
+  # --------------------
+  import PhxliveWeb.PluginRouter
+  plugin_pipelines()
+
+  # --------------------
   # Public LiveViews
   # --------------------
   scope "/", PhxliveWeb do
@@ -154,11 +162,15 @@ defmodule PhxliveWeb.Router do
     live "/admin/emails", AdminLive.Emails, :index
     live "/admin/api-toolbox", AdminLive.ApiToolbox, :index
     live "/admin/custom-emojis", AdminLive.CustomEmojis, :index
+    live "/admin/plugins", AdminLive.Plugins, :index
     live "/admin/raysspacesim", AdminLive.RaysSpaceSim, :index
     live "/admin/raysspacesim/codebase", AdminLive.RaysSpaceSimCodebase, :index
 
   end
   end
+
+  # Plugin pages: /games/<plugin slug>/..., one live_session per plugin.
+  plugin_browser_routes()
 
   # --------------------
   # Auth Controller Actions (non-Live)
@@ -222,6 +234,10 @@ defmodule PhxliveWeb.Router do
     
     post "/scheduler/:secret", Api.SchedulerController, :trigger_webhook
   end
+
+  # Plugin APIs: /api/games/<game slug>/... MUST stay above the core
+  # "/api/games/:game_slug" scopes, or the dynamic segment captures them.
+  plugin_api_routes()
 
   # --------------------
   # Games Platform API (RaysSpaceSim and future titles)

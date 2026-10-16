@@ -96,6 +96,8 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 | 2026-10-15 | **"Plugins", not "extensions"**, and **packaged WordPress-style: in-tree folders** under `plugins/<slug>/`, compiled into the app. A private plugin is its own git repo cloned into `plugins/` and gitignored by the public repo. | Owner's decision. A Mix-package model would be circular (plugins depend on the hub). |
 | 2026-10-15 | **Web Lobby's own tables (zones, spells, character spells) move to the games DB**, next to its characters, prefixed `web_lobby_`. | Owner's decision: all game data together, so the plugin is a clean template. |
 | 2026-10-15 | **Existing Lobby characters are not migrated**; the old site-DB tables are dropped. | Owner's decision: nothing worth keeping. |
+| 2026-10-15 | **Plugins are activated from an admin Plugins page** (`/admin/plugins`), WordPress-style: no redeploy to turn one on or off. Installed plugins' routes are always compiled in and gated per request. | Owner's decision. |
+| 2026-10-15 | **Plugin slug and game slug are separate.** The plugin slug is the folder name (underscores, maps to the module name); the game slug defaults to it but a plugin may keep an existing one (RaysSpaceSim stays `rays-space-sim`, which its clients use). Game slugs may now contain underscores. | Needed for `web_lobby`, and so existing game clients don't break. |
 
 ---
 
@@ -114,7 +116,7 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
                  ┌──────────────────────────── Phxlive (contexts) ─────────────────────┐
                  │ Accounts  Security  Content  Forum  Commerce  Files  Scheduler      │
                  │ Notifications  Email  Moderation/Audit  Desktop  Settings           │
-                 │ Games (platform core)            Game (Lobby - to become a plugin)  │
+                 │ Games (platform core)   Drive   Entitlements   Plugins              │
                  └──────────┬──────────────────────────────────────┬───────────────────┘
                             │                                      │
                   Phxlive.Repo (site DB)               Phxlive.GamesRepo (games DB)
@@ -124,8 +126,8 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 
 | Repo | Holds | Migrations |
 |---|---|---|
-| `Phxlive.Repo` | users, content, forum/chat, commerce, files, scheduler, Lobby's tables | `priv/repo/migrations` |
-| `Phxlive.GamesRepo` | games platform: games, characters, servers, releases, per-game tables | `priv/games_repo/migrations` |
+| `Phxlive.Repo` | users, content, forum/chat, commerce, files and drive, scheduler, plugin states | `priv/repo/migrations` |
+| `Phxlive.GamesRepo` | games platform: games, characters, servers, releases; plugins' tables | `priv/games_repo/migrations`, `plugins/*/priv/games_repo/migrations` |
 
 Games tables cannot foreign-key to `users`, because that table is in the other database.
 Their `user_id` columns are bare `binary_id` **by design**. Integrity is enforced in the
@@ -152,7 +154,8 @@ records *scoped to that user id*. A forged or borrowed id returns 404 from the h
 lib/
   phxlive/                 contexts (business logic, Ecto schemas)
     games/                 games platform: core + (for now) game-specific modules, see §9
-    game.ex, game/         Lobby (in-browser arcade): to become plugins/web_lobby
+    plugin.ex, plugins/    plugin behaviour, discovery, active state, runtime (§9)
+    drive.ex, drive/       user storage (§7)
     files.ex, files/       user files (Arc-based, being replaced, see §7)
     commerce.ex, commerce/ products, carts, orders, subscriptions (scaffolding, see §8)
     safe_path.ex           path confinement, used for every client-supplied path
@@ -165,7 +168,8 @@ lib/
     controllers/api/       JSON API
 priv/repo/migrations       site DB
 priv/games_repo/migrations games DB
-assets/                    esbuild + tailwind; three.js for Lobby
+assets/                    esbuild + tailwind; three.js background scenes; vendor/ shims for plugins
+plugins/                   installed plugins, one folder each (§9); web_lobby/ is the example
 k3s/                       kustomize base + overlays (dev, prod)
 config/runtime.exs         all deploy-time configuration via env vars
 ```
@@ -273,7 +277,11 @@ Each of these has already cost a build, an outage, or a security hole.
     handle the message. Update component state directly (see
     `refresh_file_manager/2`).
 
-14. **Line endings.** The repo stores LF. Windows checkouts use `core.autocrlf=true`.
+14. **Run migrations with `mix phxlive.migrate`**, not `mix ecto.migrate`: only the
+    former includes installed plugins' migration folders. Releases use
+    `Phxlive.Release.migrate/0`, which does too.
+
+15. **Line endings.** The repo stores LF. Windows checkouts use `core.autocrlf=true`.
     Tools that rewrite files must preserve the working-tree line endings and must not leave
     a lone `\r` (a bare CR at end of file does not parse in Elixir). If a non-Windows git
     reads a Windows checkout it shows every line as changed; compare with
@@ -476,7 +484,7 @@ Holo-sims (`HoloSim*`, `SimAccess`, holo-sim controller and routes), `InstanceLa
 codebase admin page, the game's admin LiveView, its deploy/build scripts, its k8s
 manifests, its mix tasks, and the `HOLOSIM_*` / `WORLD_*` environment variables.
 
-### Plugins (design, milestone 2)
+### Plugins (milestone 2, implemented 2026-10-15)
 
 A plugin is a folder, the way WordPress plugins are:
 
@@ -490,32 +498,46 @@ plugins/
     lib/web_lobby_web/routes.ex      WebLobbyWeb.Routes - api + browser routes
     priv/games_repo/migrations/      tables prefixed web_lobby_
     priv/repo/migrations/            (optional) site-DB tables
-    assets/js/index.ts               LiveView hooks, imported by assets/js/plugins.ts
+    assets/js/index.ts               `export const hooks = {...}` (LiveView hooks)
     test/                            run with the core suite
 ```
 
 **Conventions** (what makes a plugin a template other people can copy):
 
 - One top-level namespace per plugin (`WebLobby`, `WebLobbyWeb`), never `Phxlive.*`.
-- The folder name is the slug. It is also the game slug (`/api/games/web_lobby`) and the
-  prefix of every table the plugin owns (`web_lobby_zones`).
+- The folder name is the slug: lowercase letters, digits, underscores. It names the main
+  module (`web_lobby` -> `WebLobby.Plugin`), prefixes every table the plugin owns
+  (`web_lobby_zones`), and is the game slug unless `game/0` returns its own `:slug`.
 - A plugin uses the hub only through public context functions (`Phxlive.Games`,
   `Phxlive.Drive`, `Phxlive.Entitlements`, ...). Core never references a plugin module.
 - Characters are platform `GameCharacter`s. Plugin tables may reference
   `game_characters.id` (same database).
 
 **Installed vs active.** Every folder under `plugins/` is *installed*: `mix.exs` adds
-`plugins/*/lib` to the compile paths, and `Phxlive.Release.migrate/0` / the mix aliases add
-each plugin's migration folders. Only plugins listed in config are *active*:
+`plugins/*/lib` to the compile paths and `plugins/*/test` to the test paths, all its
+routes are compiled into the router, and its migrations run (`Phxlive.Release.migrate/0`
+in production, `mix phxlive.migrate` in development; plain `mix ecto.migrate` only sees
+`priv/`). A release step in `mix.exs` copies each plugin's `priv/` into the release.
 
-```elixir
-# config/plugins.exs (imported by config.exs)
-config :phxlive, plugins: [WebLobby.Plugin]
-```
+A plugin is *active* when an admin activates it on **/admin/plugins** (implemented
+2026-10-15). Each toggle is saved as a row in `plugin_states` (slug, active, who, when); a
+plugin that has never been toggled is active if its slug is in
+`config :phxlive, :default_active_plugins` (`["web_lobby"]`). Deliberately not stored in
+`cms_options` (see §13).
 
-Active plugins get their routes mounted, their processes supervised, their game row
-registered, and their admin/desktop entries shown. *Open question: activation from an
-admin Plugins page at runtime (true WordPress style) instead of config.*
+| While a plugin is... | Installed only | Active |
+|---|---|---|
+| its API (`/api/games/<game slug>/...`) | 404 (`PhxliveWeb.Plugs.PluginActive`) | served |
+| its pages (`/games/<slug>/...`) | 404; open pages redirect to `/games` (`PhxliveWeb.PluginGate`) | served |
+| its `children/0` | stopped | supervised under `Phxlive.PluginSupervisor` |
+| its game row | `is_active: false` | registered, `is_active: true` |
+| admin nav, desktop apps, games list | hidden | shown |
+| its tables and data | kept | kept |
+
+Each node caches the active set in `:persistent_term`. `Phxlive.Plugins.activate/2` and
+`deactivate/2` run the plugin's `on_activate/0` / `on_deactivate/0` hook (which may refuse),
+save the list, and broadcast on `phxlive:plugins`; `Phxlive.Plugins.Runtime` on every node
+refreshes its cache and starts or stops the plugin's processes.
 
 **The behaviour:**
 
@@ -525,7 +547,7 @@ defmodule Phxlive.Plugin do
   @callback name() :: String.t()
   @callback version() :: String.t()
   @callback description() :: String.t()
-  @callback game() :: %{name: String.t(), description: String.t(), path: String.t()} | nil
+  @callback game() :: %{name: String.t(), path: String.t(), description: String.t(), icon: String.t()} | nil
   @callback routes() :: module() | nil                 # e.g. WebLobbyWeb.Routes
   @callback children() :: [Supervisor.child_spec()]    # under Phxlive.PluginSupervisor
   @callback admin_nav() :: [%{label: String.t(), path: String.t(), icon: String.t()}]
@@ -539,38 +561,66 @@ end
 callbacks and defaults the optional ones.
 
 **Routes.** Phoenix routes are compiled and LiveView expects one router, so a plugin's
-routes module exports `api/0` and `browser/0` macros, and the core router expands them for
-each active plugin at compile time (`Application.compile_env(:phxlive, :plugins)`):
+routes module (`use Phxlive.Plugin.Routes`) declares `api do ... end` and `browser do ... end`
+blocks, and `PhxliveWeb.PluginRouter` expands them for every *installed* plugin at compile
+time. Activation is checked per request, so it never needs a recompile:
 
-- API routes mount at `/api/games/<slug>/...` with the `:games_api` pipeline (player bearer
-  token or server key). The literal-slug scopes are expanded *before* the core
+- API routes mount at `/api/games/<game slug>/...` with the `:games_api` pipeline (player
+  bearer token or server key) plus the plugin's gate. The literal-slug scopes are expanded *before* the core
   `/api/games/:game_slug` routes, so the dynamic segment cannot capture them.
-- Browser routes mount at `/games/<slug>/...` inside the authenticated `live_session`.
+- Browser routes mount at `/games/<plugin slug>/...` in a `live_session` of their own
+  (`UserAuth` + `PluginGate` on mount). Navigating between a plugin page and a core page is
+  a full page load.
 
-Changing the active list therefore needs a recompile, the same as changing routes.
+Adding or removing a plugin *folder* recompiles the router (it has a `__mix_recompile__?`
+guard); activating or deactivating never does.
 
-**Assets.** `assets/js/plugins.ts` imports each plugin's `assets/js/index.ts` and merges
-its hooks into the LiveSocket. The Dockerfiles copy `plugins/` before building assets and
-compiling.
+**Assets.** Before every JS build (npm `pre*` scripts), `assets/scripts/gen-plugin-hooks.js`
+writes `assets/js/plugins.generated.ts` (gitignored): one import per
+`plugins/*/assets/js/index.ts`, merged into `PluginHooks`, which `app.ts` hands to the
+LiveSocket. Hook names are global, so pick ones unlikely to clash. Plugin files sit outside
+`assets/`, where esbuild can't find `node_modules`, so they import shared libraries through
+re-export shims in `assets/js/vendor/` (`three.ts`, `three-loaders.ts`), e.g.
+`import * as THREE from "../../../../assets/js/vendor/three"`. A plugin needing another npm
+package adds a shim there and the package to `assets/package.json`. The Dockerfiles copy
+`plugins/` before building assets and compiling.
+
+**Pages.** Plugin pages render in the app layout. The root layout gives them (and `/games`) a
+plain black background instead of the user's animated one, keyed on the `:phxlive_plugin`
+conn assign set by `PluginActive`.
+
+**Game rows.** `activate/2` registers a plugin's `games` row; `Phxlive.Plugins.ensure_game/1`
+creates it on demand for plugins active by default that were never toggled (plugins call it to
+get their game id, and `Plugins.Runtime` calls it at boot).
+
+**Status:** framework, admin page and Web Lobby done (2026-10-15). Tests: the fixture plugin
+(`test/support/fixture_plugin.ex`) and Web Lobby's own `plugins/web_lobby/test`. Each plugin
+test folder needs a `test_helper.exs` (mix requires one per test path; it can be empty).
 
 **Done means:** Web Lobby runs entirely as `plugins/web_lobby` with no Lobby references in
-core, and a second plugin can be added by dropping in a folder and listing it in config.
+core (met), and a second plugin can be added by dropping in a folder, deploying and
+activating it.
 
 ### Web Lobby (the template plugin)
 
-Today Lobby is `Phxlive.Game` (zones, characters, spells, combat) plus `GamesLive` (three.js
-client, presence, chat, movement validation, PvP, respawn) on the site DB. In milestone 2:
+Moved 2026-10-15. Lobby used to be `Phxlive.Game` (zones, characters, spells, combat) plus
+`GamesLive` (three.js client, presence, chat, movement validation, PvP, respawn) on the site
+DB:
 
-| Today | Becomes |
+| Was | Now |
 |---|---|
-| `characters` (site DB) | `game_characters` with `game_slug = "web_lobby"`: HP, MP, PvP in `stats`; model, type, last position and zone in `settings` |
+| `characters` (site DB) | `game_characters` of game `web_lobby`: HP, MP, PvP in `stats`; type, model, zone and last position in `settings`. Single-key writes merge in SQL (`jsonb \|\|`) so a position save can't overwrite HP another player's spell just changed |
 | `zones`, `spells`, `character_spells` (site DB) | `web_lobby_zones`, `web_lobby_spells`, `web_lobby_character_spells` (games DB), seeded by the plugin's migrations |
-| `Phxlive.Game` | `WebLobby.World` (zones, spawn) and `WebLobby.Combat` (spells, damage, respawn) |
+| `Phxlive.Game` | `WebLobby.World` (characters, zones, positions), `WebLobby.Combat` (spells, damage, respawn), `WebLobby.Models` (model list) |
 | `GamesLive` | core `GamesLive` = a games index built from active plugins' `game/0`; the game itself = `WebLobbyWeb.PlayLive` at `/games/web_lobby` |
-| three.js hooks in `assets/js/threejs` | `plugins/web_lobby/assets/js` |
+| three.js hooks in `assets/js/threejs` | `plugins/web_lobby/assets/js` (the four unused files there were deleted; core keeps the background scenes and camera controllers) |
+| PubSub / Presence topics `presence:zone:*`, `presence:account:*`, `user:*:characters` | `web_lobby:zone:*`, `web_lobby:account:*`, `web_lobby:user:*:characters` |
 
-Existing Lobby characters are not migrated (decisions log); the old site-DB tables are
-dropped.
+Existing Lobby characters were not migrated (decisions log):
+`20261016000100_drop_legacy_lobby_tables` drops the old site-DB tables (`zones`,
+`characters`, `spells`, `character_spells`, and the never-used `items`,
+`character_inventory`, `character_equipment`), and their creating migrations were removed.
+Combat now also checks that the target is a Web Lobby character, which the old code didn't.
 
 ## 10. Desktop shell and start menu
 
@@ -657,6 +707,15 @@ Ordered roughly by how much it hurts.
   Commit it.
 - ~~The test suite can't run~~: `test/test_helper.exs` and `test/support/data_case.ex`
   added 2026-10-15 (sandboxes both repos; `user_fixture/1`, `tmp_upload/1`).
+- **`cms_options` schema and migration disagree** (found 2026-10-15, pre-existing):
+  `Settings.Option` uses `option_name` / `option_value` / `autoload` (string), but
+  `20250101000005_desktop_and_settings.exs` creates `key` / `value` / `autoload` (boolean) /
+  `category`. On a database built from the migrations every `Phxlive.Settings` call fails,
+  including the default-user-role setting in admin user management. The migration uses
+  `create_if_not_exists`, so **prod may differ**: check prod's actual columns before choosing
+  whether to fix the schema (`source:` mappings) or the migration.
+- ~~Scheduler engine wrote a column that didn't exist~~ (fixed 2026-10-15):
+  `earliest_finish_at` added to `tasks` and `Scheduler.Task`.
 - ~~`subscriptions` schema didn't match the table~~ (fixed 2026-10-15): the schema
   said `cancelled_at`, the column is `canceled_at` (now `source: :canceled_at`), and
   seven declared fields had no column, so **every** subscription query failed on a
@@ -666,7 +725,13 @@ Ordered roughly by how much it hurts.
   `mix.exs` allows. Pin it to `elixir:1.19`. (`Dockerfile.multistage` is already pinned.)
 - **Forum attachments are public by URL** (§7), which blocks VIP channels.
 
-- Two storage systems (§7) and two `game_characters` tables (§9).
+- Two storage systems (§7) until milestone 1's import has run in production.
+- `User.registration_changeset/2` casts `:role` and `:is_admin`. `register_user/2`
+  overwrites both, so it isn't exploitable today, but `Accounts.create_user/1` passes attrs
+  straight through and the unused `Phxlive.Schema` (GraphQL; the router serves
+  `PhxliveWeb.Schema`) calls it. Drop the two fields from the cast and set them explicitly.
+- Web Lobby's three.js client has eight pre-existing TypeScript errors under
+  `npm run type-check` (implicit `any`s, one loop-style enum); it bundles fine.
 - `Files` has a `:timer.sleep(10000)` in an upload path.
 - The admin files page links to `/uploads/user_files/...`, which is not where files are
   stored.
