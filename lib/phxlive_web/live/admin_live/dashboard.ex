@@ -645,7 +645,7 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
   defp log_color(log) do
     cond do
       String.contains?(log, "[error]") or String.contains?(log, "ERROR") -> "text-red-400"
-      String.contains?(log, "[warn]") or String.contains?(log, "WARNING") -> "text-yellow-400"
+      String.contains?(log, "[warn") or String.contains?(log, "WARNING") -> "text-yellow-400"
       String.contains?(log, "[info]") or String.contains?(log, "INFO") -> "text-blue-400"
       String.contains?(log, "[debug]") or String.contains?(log, "DEBUG") -> "text-gray-500"
       true -> "text-gray-300"

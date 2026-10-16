@@ -100,6 +100,10 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 | 2026-10-16 | **RaysSpaceSim becomes a private plugin**: a new private repository cloned into `plugins/rays_space_sim`. The hub ignores every plugin folder it doesn't ship. The Unreal project stays its own repository at `/RaysSpaceSim/`. | Owner's decision. The hub sees it exactly as it sees Web Lobby. |
 | 2026-10-16 | **The hub's game tables use game-neutral names:** `holo_sim_id` → `instance_id`, `holo_sim_location` → `instance_location` (columns, schemas, API JSON), and `PUT .../characters/:id/holo_location` → `.../instance_location`, **renamed now** with the game client updated in step. Old servers' `holo_sim_id` input and the old route are still accepted during the changeover. | Owner's decision ("rename now"). Accepting the old input keeps a running instance from re-registering as a world server mid-deploy. |
 | 2026-10-16 | **`PHXLIVE_ACTIVE_PLUGINS`** (comma-separated) sets which plugins are active until an admin toggles them. Production names `web_lobby,rays_space_sim`. | Owner's decision. A private plugin is on from the first boot without the hub's config naming it. |
+| 2026-10-16 | **Migrations squashed to one baseline per database** (`20250101000001_site_baseline`, `20260809100000_games_baseline`, and one per plugin), generated from production's schema. Production already records those versions, so it runs none of them. | A fresh install now builds the real schema instead of replaying a year of drift (the `cms_options` and `subscriptions` mismatches came from that). |
+| 2026-10-16 | **The currency is Gems: 100 Gems = US$1.** No bundle bonuses; bonuses are for promotional events. | Owner's decision. |
+| 2026-10-16 | **No refunds, ever**, for Gems, items or subscriptions. Cancelling a subscription stops the next renewal; the current period runs out. | Owner's decision. Chargebacks still happen (the bank decides those), so the ledger keeps the claw-back path. |
+| 2026-10-16 | **Stripe first, in test mode**, once an account exists; PayPal after. Until then the provider interface is built and tested against a fake provider. | No Stripe account yet. |
 | 2026-10-16 | **CI's `staging-deploy` job is removed.** CI tests the public hub; production images come only from `deploy-prod.sh`, run from a working copy that has the private plugins. | Owner's decision. A CI-built image would ship without them. |
 | 2026-10-15 | **Plugin slug and game slug are separate.** The plugin slug is the folder name (underscores, maps to the module name); the game slug defaults to it but a plugin may keep an existing one (RaysSpaceSim stays `rays-space-sim`, which its clients use). Game slugs may now contain underscores. | Needed for `web_lobby`, and so existing game clients don't break. |
 
@@ -284,6 +288,9 @@ Each of these has already cost a build, an outage, or a security hole.
     former includes installed plugins' migration folders. Releases use
     `Phxlive.Release.migrate/0`, which does too.
 
+    Each database (and each plugin) starts from one baseline migration generated from
+    production's schema; schema changes are new migrations after it. Never edit a baseline.
+
 15. **Line endings.** The repo stores LF. Windows checkouts use `core.autocrlf=true`.
     Tools that rewrite files must preserve the working-tree line endings and must not leave
     a lone `\r` (a bare CR at end of file does not parse in Elixir). If a non-Windows git
@@ -386,8 +393,8 @@ physical goods and have no `paid` or `refunded`. `Subscription` has Stripe ids;
 
 | kind | Bought with | Grants |
 |---|---|---|
-| `currency_pack` | money | credits in the user's wallet |
-| `item` | money or credits | an entitlement (e.g. an in-game item) |
+| `currency_pack` | money | Gems in the user's wallet |
+| `item` | money or Gems | an entitlement (e.g. an in-game item) |
 | `subscription_plan` | money, recurring | entitlements while active (storage tier, VIP channels) |
 
 **Orders** are a state machine. Transitions happen only in `Commerce`, never in a
@@ -396,7 +403,7 @@ LiveView:
 ```
 draft → awaiting_payment → paid → fulfilled
                  ↘ failed / cancelled
-paid|fulfilled → refunded | partially_refunded | disputed
+paid|fulfilled → disputed → (won → fulfilled | lost → charged_back)
 ```
 
 Order items snapshot name, price and currency at purchase time.
@@ -407,7 +414,6 @@ Order items snapshot name, price and currency at purchase time.
 @callback create_checkout(order, opts) :: {:ok, %{redirect_url: String.t(), provider_ref: String.t()}} | {:error, term}
 @callback verify_webhook(raw_body :: binary, headers :: list) :: {:ok, provider_event :: map} | {:error, term}
 @callback normalize(provider_event :: map) :: {:ok, %Phxlive.Payments.Event{}} | :ignore
-@callback refund(payment, amount_minor :: integer) :: {:ok, term} | {:error, term}
 @callback create_subscription(user, plan, opts) :: {:ok, %{redirect_url: String.t(), provider_ref: String.t()}} | {:error, term}
 @callback cancel_subscription(subscription) :: :ok | {:error, term}
 ```
@@ -426,23 +432,30 @@ touches our servers.
 - A user returning from checkout sees "processing" until the webhook marks the order
   paid. Never fulfil from the redirect.
 
-**Wallet (hub-wide credits)** is an append-only, double-entry ledger:
+**Gems.** The hub-wide currency. **100 Gems = US$1**, so a pack's price is its Gems / 100
+dollars; no bonus Gems except in promotional events (a promotion is a pack with extra
+Gems and an active window, set by an admin). **No refunds, ever** (decisions log): there is
+no refund path in the code, and the store, checkout and terms say so before payment. A
+chargeback is not a refund we give; it is handled below.
+
+**Wallet** is an append-only, double-entry ledger:
 
 ```
-wallet_accounts  id, owner_type (user | system), owner_id, currency ("CREDITS")
+wallet_accounts  id, owner_type (user | system), owner_id, currency ("GEMS")
 ledger_entries   id, txn_id, account_id, amount (signed integer), kind, game_slug,
                  reference_type, reference_id, idempotency_key, inserted_at
                  unique(idempotency_key)
 ```
 
 Every transaction writes entries that sum to zero (e.g. user +500,
-`system:currency_sales` −500). A balance is the sum of the account's entries, cached in
+`system:gem_sales` −500). A balance is the sum of the account's entries, cached in
 a row updated in the same transaction. Spends record `game_slug`, so per-game revenue is
-a query. Balances may not go below zero through spending. A refund or chargeback of a
-currency pack **claws back** credits and may leave a negative balance, which blocks
-further spending until it is settled.
+a query. Balances may not go below zero through spending. A lost chargeback on a
+Gem pack **claws back** the Gems and may leave a negative balance, which blocks
+further spending until it is settled. (We never refund; a lost chargeback is the bank
+taking the money back, and the Gems it paid for go with it.)
 
-Games spend credits through the hub, never locally: `POST /api/wallet/spend` with the
+Games spend Gems through the hub, never locally: `POST /api/wallet/spend` with the
 server key, user id, amount, item and an idempotency key. The hub debits and grants the
 entitlement in one transaction.
 
@@ -461,14 +474,19 @@ entitlements  id, user_id, kind, key, source_type, source_id,
 
 `Entitlements.active?(user, kind, key)` is the single check. Plugins register their
 own kinds. Subscription renewals extend `ends_at` (period end + a grace period);
-cancellation lets it lapse; refunds and chargebacks set `revoked_at`.
+cancellation lets it lapse (no refund for the rest of the period); a lost chargeback sets
+`revoked_at`.
 
 **Subscriptions:** our DB is the source of truth for state. Each plan stores one
 provider plan id per provider (`stripe_price_id`, `paypal_plan_id`). Provider webhooks
 move our state; we never poll for it.
 
-**Not decided yet:** tax handling (Stripe Tax vs manual), refund policy text for virtual
-currency, whether credits can be gifted between users.
+**Providers, in order:** Stripe (test mode first, then live), then PayPal. There is no
+Stripe account yet, so the provider interface is built and tested against
+`Payments.Fake`, which the test suite and local development use.
+
+**Not decided yet:** tax handling (Stripe Tax vs manual), the exact no-refund wording in
+the terms, whether Gems can be gifted between users, which Gem packs to sell.
 
 ---
 
@@ -497,15 +515,15 @@ core later), the Kubernetes client, `CodeMap` and the codebase page, the game's 
 section (now `/admin/rays_space_sim`), the launcher card (now its page
 `/games/rays_space_sim`), `mix rss.dev_users`, the deploy/build scripts, the k8s manifests
 and namespace secret, the `HOLOSIM_*` / `WORLD_*` settings (read by `RaysSpaceSim.Config`;
-the values still sit in the prod configmap), and the `holo_sims*` migrations (same version
-numbers, so already-migrated databases don't rerun them). The plugin owns the foreign keys
+the values still sit in the prod configmap), and the `holo_sims*` tables (now the plugin's
+baseline migration). The plugin owns the foreign keys
 from the hub's `instance_id` columns to `holo_sims`. Forum channels are Holo-sims' access
 lists; the plugin follows channel changes through `hub_event/1`.
 
-Core migrations that used to create those columns with holo names and foreign keys were
-rewritten to the new names without them, so a fresh install without the plugin works;
-`20261016020000_rename_holo_columns_to_instance` brings existing databases to the same
-shape. The `create_games` migration no longer seeds the RaysSpaceSim row.
+The hub's games baseline (`20260809100000_games_baseline`) creates `instance_id` /
+`instance_location` with no foreign keys, so a fresh install without the plugin works; the
+plugin's baseline (`20260811090000_rays_space_sim_baseline`) creates `holo_sims*` and adds
+the foreign keys. No game row is seeded; each plugin registers its own.
 
 ### Plugins (milestone 2, implemented 2026-10-15)
 
@@ -663,10 +681,10 @@ DB:
 | three.js hooks in `assets/js/threejs` | `plugins/web_lobby/assets/js` (the four unused files there were deleted; core keeps the background scenes and camera controllers) |
 | PubSub / Presence topics `presence:zone:*`, `presence:account:*`, `user:*:characters` | `web_lobby:zone:*`, `web_lobby:account:*`, `web_lobby:user:*:characters` |
 
-Existing Lobby characters were not migrated (decisions log):
-`20261016000100_drop_legacy_lobby_tables` drops the old site-DB tables (`zones`,
-`characters`, `spells`, `character_spells`, and the never-used `items`,
-`character_inventory`, `character_equipment`), and their creating migrations were removed.
+Existing Lobby characters were not migrated (decisions log): the old site-DB tables
+(`zones`, `characters`, `spells`, `character_spells`, and the never-used `items`,
+`character_inventory`, `character_equipment`) were dropped in production and are absent
+from the site baseline.
 Combat now also checks that the target is a Web Lobby character, which the old code didn't.
 
 ## 10. Desktop shell and start menu
@@ -757,31 +775,24 @@ Ordered roughly by how much it hurts.
 - **Legacy wire names accepted until every client and server is rebuilt:** the
   `holo_sim_id` heartbeat / location field and the `PUT .../holo_location` route
   (`GamesController`, router). Remove after the next full `deploy-game.sh`.
-- Core comments and old migrations still mention RaysSpaceSim in places that are
-  history (migration docs, the rename migration). Harmless; don't add new ones.
+- A few core comments still mention RaysSpaceSim as history. Harmless; don't add new ones.
 
-- **`mix.lock` is not committed.** Builds resolve dependency versions fresh each time.
-  Commit it.
+- ~~`mix.lock` is not committed~~ (committed 2026-10-15).
 - ~~The test suite can't run~~: `test/test_helper.exs` and `test/support/data_case.ex`
   added 2026-10-15 (sandboxes both repos; `user_fixture/1`, `tmp_upload/1`).
-- ~~`cms_options` schema and migration disagreed~~ (fixed 2026-10-15):
-  `20250101000005_desktop_and_settings` created a table `Settings.Option` can't use
-  (uuid id with no default, `key` / `value` / boolean `autoload`, no `option_name`), so on a
-  database built from migrations every `Phxlive.Settings` call failed. Production's table
-  predates it and matched the schema, but had gained `key` NOT NULL DEFAULT '' with a unique
-  index that nothing sets, so the second new option ever saved would fail.
-  `20261016010000_fix_cms_options` converges both on the schema's shape (rebuilding the
-  migration-built table, dropping `key` and the unused `value` / `category` from older
-  ones, keeping any column that holds real data).
+- ~~`cms_options` schema and migration disagreed~~ (fixed 2026-10-15): fresh databases got a
+  table `Settings.Option` couldn't use, and production's had a unique `key` column nothing
+  set, which would have broken the second new setting. Fixed in production, and the site
+  baseline now has the schema's shape.
 - ~~Scheduler engine wrote a column that didn't exist~~ (fixed 2026-10-15):
   `earliest_finish_at` added to `tasks` and `Scheduler.Task`.
-- ~~`subscriptions` schema didn't match the table~~ (fixed 2026-10-15): the schema
-  said `cancelled_at`, the column is `canceled_at` (now `source: :canceled_at`), and
-  seven declared fields had no column, so **every** subscription query failed on a
-  database built from migrations. `20261015210000_align_subscriptions_with_schema`
-  adds them with `IF NOT EXISTS`. Commerce is redesigned in milestone 4 anyway.
-- **The root `Dockerfile` uses `FROM elixir:latest`**, which is now newer than
-  `mix.exs` allows. Pin it to `elixir:1.19`. (`Dockerfile.multistage` is already pinned.)
+- ~~`subscriptions` schema didn't match the table~~ (fixed 2026-10-15): the schema said
+  `cancelled_at` (the column is `canceled_at`; now `source: :canceled_at`) and seven
+  declared fields had no column. Added in production; in the site baseline.
+- ~~The root `Dockerfile` used `FROM elixir:latest`~~ (pinned to `elixir:1.19`).
+- **`Phxlive.LogBufferBackend` is a legacy `:gen_event` Logger backend**, deprecated since
+  Elixir 1.15. It works (and now normalises the `:warn` level it is still handed), but should
+  become an Erlang `:logger` handler.
 - **Forum attachments are public by URL** (§7), which blocks VIP channels.
 
 - **The legacy file system is dead code.** Production's `user_files` / `user_folders` are

@@ -11,12 +11,17 @@ defmodule Phxlive.LogBufferBackend do
 
   @impl true
   def handle_call({:configure, opts}, state) do
-    level = Keyword.get(opts, :level, state.level)
+    level = opts |> Keyword.get(:level, state.level) |> normalize()
     {:ok, :ok, %{state | level: level}}
   end
 
   @impl true
   def handle_event({level, _gl, {Logger, message, timestamp, metadata}}, state) do
+    # Legacy :gen_event backends are still handed `:warn` for warnings, and
+    # passing it to Logger.compare_levels/2 prints a deprecation notice on
+    # every event. Normalise once, here.
+    level = normalize(level)
+
     if meet_level?(level, state.level) do
       formatted_timestamp = format_timestamp(timestamp)
       formatted_message = format_message(message)
@@ -56,6 +61,9 @@ defmodule Phxlive.LogBufferBackend do
   def code_change(_old_vsn, state, _extra) do
     {:ok, state}
   end
+
+  defp normalize(:warn), do: :warning
+  defp normalize(level), do: level
 
   defp meet_level?(level, min_level) do
     Logger.compare_levels(level, min_level) != :lt
