@@ -13,19 +13,24 @@ defmodule PhxliveWeb.StoreLibraryLive do
   @impl true
   def mount(_params, _session, socket) do
     lib = Library.for_user(socket.assigns.current_user)
-    {:ok, assign(socket, page_title: "Library", lib: lib, empty?: lib.downloads == [] and lib.keys == [] and lib.grants == [])}
+
+    {:ok,
+     assign(socket,
+       page_title: "Library",
+       tz: timezone(socket),
+       lib: lib,
+       empty?: lib.downloads == [] and lib.keys == [] and lib.grants == []
+     )}
   end
 
   @impl true
   def handle_event(event, _params, socket) when event in ["toggle_calendar", "toggle_start_menu", "open_app"],
     do: {:noreply, socket}
 
-  defp date(dt), do: Calendar.strftime(dt, "%b %-d, %Y")
-
-  defp state_text(:forever), do: "Yours to keep"
-  defp state_text({:until, dt}), do: "Until #{date(dt)}"
-  defp state_text({:expired, dt}), do: "Ended #{date(dt)}"
-  defp state_text(:revoked), do: "Taken back (chargeback)"
+  defp state_text(:forever, _tz), do: "Yours to keep"
+  defp state_text({:until, dt}, tz), do: "Until #{local_date(dt, tz)}"
+  defp state_text({:expired, dt}, tz), do: "Ended #{local_date(dt, tz)}"
+  defp state_text(:revoked, _tz), do: "Taken back (chargeback)"
 
   defp active?(state), do: state == :forever or match?({:until, _}, state)
 
@@ -84,7 +89,7 @@ defmodule PhxliveWeb.StoreLibraryLive do
           <div class="divide-y divide-gray-800 rounded-xl border border-gray-800 bg-gray-950/80">
             <div :for={k <- @lib.keys} class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div class="min-w-0">
-                <div class="text-sm text-gray-400">{k.product.name} · {date(k.sold_at)}</div>
+                <div class="text-sm text-gray-400">{k.product.name} · {local_date(k.sold_at, @tz)}</div>
                 <code id={"key-#{k.id}"} class={["select-all break-all font-mono text-white", k.revoked_at && "line-through opacity-50"]}>{k.code}</code>
                 <div :if={k.revoked_at} class="text-xs text-red-300">Revoked after a chargeback.</div>
               </div>
@@ -110,7 +115,7 @@ defmodule PhxliveWeb.StoreLibraryLive do
                 <div class={["font-medium", active?(g.state) && "text-white", !active?(g.state) && "text-gray-500"]}>{g.label}</div>
                 <div :if={g.product && g.product.name != g.label} class="text-xs text-gray-500">{g.product.name}</div>
               </div>
-              <span class={["text-sm", active?(g.state) && "text-green-300", !active?(g.state) && "text-gray-500"]}>{state_text(g.state)}</span>
+              <span class={["text-sm", active?(g.state) && "text-green-300", !active?(g.state) && "text-gray-500"]}>{state_text(g.state, @tz)}</span>
             </div>
           </div>
         </section>

@@ -108,6 +108,44 @@ defmodule PhxliveWeb.StoreComponents do
     |> String.replace(~r/(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])/, "<em>\\1</em>")
   end
 
+  @doc """
+  The viewer's time zone, from the LiveView connect params (`timezone`, sent
+  by app.ts), or "Etc/UTC" before the socket connects or if it's unknown.
+  Call from `mount/3`.
+  """
+  def timezone(socket) do
+    with true <- Phoenix.LiveView.connected?(socket),
+         %{"timezone" => tz} when is_binary(tz) <- Phoenix.LiveView.get_connect_params(socket),
+         {:ok, _} <- DateTime.shift_zone(DateTime.utc_now(), tz) do
+      tz
+    else
+      _ -> "Etc/UTC"
+    end
+  end
+
+  @doc "\"Oct 16, 2026, 4:27 PM\" in `tz` (with \"UTC\" when that's all we know)."
+  def local_datetime(nil, _tz), do: ""
+
+  def local_datetime(%DateTime{} = dt, tz) do
+    local =
+      case DateTime.shift_zone(dt, tz) do
+        {:ok, shifted} -> shifted
+        _ -> dt
+      end
+
+    Calendar.strftime(local, "%b %-d, %Y, %-I:%M %p") <> if(local.time_zone == "Etc/UTC", do: " UTC", else: "")
+  end
+
+  @doc "\"Oct 16, 2026\" in `tz`."
+  def local_date(nil, _tz), do: ""
+
+  def local_date(%DateTime{} = dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, shifted} -> Calendar.strftime(shifted, "%b %-d, %Y")
+      _ -> Calendar.strftime(dt, "%b %-d, %Y")
+    end
+  end
+
   @doc "Small print under Buy buttons."
   def small_print(assigns) do
     ~H"""

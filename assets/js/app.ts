@@ -143,7 +143,8 @@ async function loadHeavyModulesAndConnect() {
     
     // Create and connect LiveSocket NOW - essential hooks ready
     liveSocket = new LiveSocket("/live", Socket, {
-      params: { _csrf_token: csrfToken },
+      // timezone: lets server-rendered pages show local times (store dates).
+      params: { _csrf_token: csrfToken, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       hooks: Hooks,
       timeout: 30000, // 30 second timeout for slower connections
     });
@@ -217,7 +218,8 @@ async function loadHeavyModulesAndConnect() {
     };
     
     liveSocket = new LiveSocket("/live", Socket, {
-      params: { _csrf_token: csrfToken },
+      // timezone: lets server-rendered pages show local times (store dates).
+      params: { _csrf_token: csrfToken, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       hooks: fallbackHooks,
       timeout: 30000, // 30 second timeout for slower connections
     });

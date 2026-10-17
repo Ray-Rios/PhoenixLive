@@ -6,6 +6,7 @@ defmodule PhxliveWeb.StoreOrderLive do
   """
   use PhxliveWeb, :live_view
 
+  import PhxliveWeb.StoreComponents, only: [timezone: 1, local_datetime: 2]
   alias Phxlive.{Store, Wallet}
 
   on_mount {PhxliveWeb.UserAuth, :require_authenticated_user}
@@ -13,6 +14,7 @@ defmodule PhxliveWeb.StoreOrderLive do
   @impl true
   def mount(params, _session, socket) do
     user = socket.assigns.current_user
+    socket = assign(socket, tz: timezone(socket))
 
     case params["id"] do
       nil ->
@@ -60,6 +62,7 @@ defmodule PhxliveWeb.StoreOrderLive do
         <%= if @order do %>
           <h1 class="text-3xl font-bold text-white mt-6 mb-6">{@order.product_name}</h1>
           <div class="glass-dark rounded-lg p-6 border border-gray-700 space-y-2 text-gray-300">
+            <div><span class="text-gray-500">Ordered:</span> {local_datetime(@order.inserted_at, @tz)}</div>
             <div><span class="text-gray-500">Status:</span> <span class="text-white">{status_text(@order.status)}</span></div>
             <div><span class="text-gray-500">Price:</span> {Store.order_price(@order)}</div>
             <div :if={@order.gems > 0}><span class="text-gray-500">Gems:</span> {Store.format_gems(@order.gems)}</div>
@@ -87,10 +90,13 @@ defmodule PhxliveWeb.StoreOrderLive do
             <.link
               :for={o <- @orders}
               navigate={~p"/store/orders/#{o.id}"}
-              class="flex justify-between glass-dark rounded p-4 border border-gray-700 hover:border-blue-400"
+              class="flex items-center justify-between gap-4 glass-dark rounded p-4 border border-gray-700 hover:border-blue-400"
             >
-              <span class="text-white">{o.product_name}</span>
-              <span class="text-gray-400">{Store.order_price(o)} · {status_text(o.status)}</span>
+              <span class="min-w-0">
+                <span class="block text-white">{o.product_name}</span>
+                <span class="block text-xs text-gray-500">{local_datetime(o.inserted_at, @tz)}</span>
+              </span>
+              <span class="text-right text-gray-400">{Store.order_price(o)} · {status_text(o.status)}</span>
             </.link>
           </div>
         <% end %>

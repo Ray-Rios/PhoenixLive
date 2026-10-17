@@ -113,6 +113,7 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 | 2026-10-16 | **Deleting a user who has bought anything anonymizes the account** instead: personal data goes, the row and its orders and ledger stay. | Owner's decision. Sales records must outlive the account. |
 | 2026-10-16 | **Nothing is built on the development PC**: no `npm`, no asset watchers in `config/dev.exs`. CSS and JS are built inside the container image. | Owner's decision. |
 | 2026-10-16 | **CI's `staging-deploy` job is removed.** CI tests the public hub; production images come only from `deploy-prod.sh`, run from a working copy that has the private plugins. | Owner's decision. A CI-built image would ship without them. |
+| 2026-10-16 | **GitHub Actions workflows removed** (`ci.yml`, `deploy-scheduler.yml`). CI had never passed: its test job had no database, it enforced format/Credo/Sobelow/Dialyzer checks the code has never met, and it ran browser tests needing a live server; the scheduler workflow deployed a branch that doesn't exist. Tests run in throwaway Docker containers before each commit (§14). | Owner's decision. Every push emailed a failure. |
 | 2026-10-15 | **Plugin slug and game slug are separate.** The plugin slug is the folder name (underscores, maps to the module name); the game slug defaults to it but a plugin may keep an existing one (RaysSpaceSim stays `rays-space-sim`, which its clients use). Game slugs may now contain underscores. | Needed for `web_lobby`, and so existing game clients don't break. |
 
 ---
@@ -892,7 +893,8 @@ Ordered roughly by how much it hurts.
     sh -c 'mix local.hex --force && mix local.rebar --force && mix deps.get && mix test'
   docker stop phxchk-pg && docker network rm phxchk
   ```
-- **Before committing:** `mix compile --warnings-as-errors`, `mix format --check-formatted`.
+- **Before committing:** `mix compile --warnings-as-errors` and the test suite, in Docker as above.
+  There is no CI; nothing checks a push after the fact.
   `mix lint` runs format, credo, sobelow and dialyzer.
 - **Security-sensitive areas** (anything touching paths, uploads, auth, payments,
   webhooks, the games server key) get a second reviewer, human or tool, who did not write
