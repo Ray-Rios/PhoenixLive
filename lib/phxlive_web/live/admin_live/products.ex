@@ -69,7 +69,7 @@ defmodule PhxliveWeb.AdminLive.Products do
   def handle_event("edit_category", %{"id" => id}, socket), do: {:noreply, assign(socket, editing_category: id)}
   def handle_event("cancel_category", _params, socket), do: {:noreply, assign(socket, editing_category: nil)}
 
-  def handle_event("rename_category", %{"id" => id, "name" => name}, socket) do
+  def handle_event("rename_category", %{"category_id" => id, "name" => name}, socket) do
     with %{} = c <- Catalog.get_category(id),
          {:ok, _} <- Catalog.update_category(c, %{name: name}) do
       {:noreply, socket |> assign(editing_category: nil) |> load()}
@@ -207,7 +207,7 @@ defmodule PhxliveWeb.AdminLive.Products do
             <div :for={c <- @categories} class="flex items-center justify-between gap-3 px-4 py-2.5">
               <%= if @editing_category == c.id do %>
                 <form phx-submit="rename_category" class="flex flex-1 gap-2">
-                  <input type="hidden" name="id" value={c.id} />
+                  <input type="hidden" name="category_id" value={c.id} />
                   <input type="text" name="name" value={c.name} class="flex-1 rounded-lg border-gray-600 bg-gray-800 text-white text-sm" autofocus />
                   <button class="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500">Save</button>
                   <button type="button" phx-click="cancel_category" class="rounded-lg bg-gray-700 px-3 py-1.5 text-sm text-white">Cancel</button>
