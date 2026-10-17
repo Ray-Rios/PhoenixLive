@@ -78,14 +78,14 @@ defmodule PhxliveWeb.Components.AdminSidebar do
           />
         </div>
         
-        <!-- Commerce Section -->
+        <!-- Store Section -->
         <div class="mb-6">
           <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 sidebar-section-header">
-            Commerce
+            Store
           </h2>
           <.sidebar_link
             href="/admin/products"
-            icon="🛍️"
+            icon="💎"
             label="Products"
             active={String.starts_with?(@current_path, "/admin/products")}
           />
@@ -95,9 +95,16 @@ defmodule PhxliveWeb.Components.AdminSidebar do
             label="Orders"
             active={String.starts_with?(@current_path, "/admin/orders")}
           />
+        </div>
+
+        <!-- Tools Section -->
+        <div class="mb-6">
+          <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 sidebar-section-header">
+            Tools
+          </h2>
           <.sidebar_link
             href="/admin/projects"
-            icon="�"
+            icon="🗂️"
             label="Projects"
             active={String.starts_with?(@current_path, "/admin/projects")}
           />
@@ -106,12 +113,6 @@ defmodule PhxliveWeb.Components.AdminSidebar do
             icon="⏰"
             label="Scheduler"
             active={String.starts_with?(@current_path, "/admin/scheduler")}
-          />
-          <.sidebar_link
-            href="/admin/subscriptions"
-            icon="🔄"
-            label="Subscriptions"
-            active={String.starts_with?(@current_path, "/admin/subscriptions")}
           />
         </div>
         

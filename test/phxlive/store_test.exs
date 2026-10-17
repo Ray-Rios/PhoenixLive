@@ -30,13 +30,14 @@ defmodule Phxlive.StoreTest do
     assert :ok = Store.can_buy(buyer())
   end
 
-  test "checkout needs the no-refunds box ticked" do
-    assert {:error, :terms_not_accepted} = Store.start_checkout(buyer(), pack())
+  test "checkout starts straight from the Buy button" do
+    assert {:ok, %{status: "awaiting_payment", terms_accepted_at: %DateTime{}}, "/store/fake-checkout/" <> _} =
+             Store.start_checkout(buyer(), pack())
   end
 
   test "paying credits the Gems once, even if the event is delivered again" do
     user = buyer()
-    {:ok, order, "/store/fake-checkout/" <> ref} = Store.start_checkout(user, pack(), accept_terms: true)
+    {:ok, order, "/store/fake-checkout/" <> ref} = Store.start_checkout(user, pack())
     assert order.status == "awaiting_payment" and order.gems == 1000
     Phoenix.PubSub.subscribe(Phxlive.PubSub, Store.topic(order))
 
@@ -52,7 +53,7 @@ defmodule Phxlive.StoreTest do
 
   test "a payment for the wrong amount isn't accepted" do
     user = buyer()
-    {:ok, order, _} = Store.start_checkout(user, pack(), accept_terms: true)
+    {:ok, order, _} = Store.start_checkout(user, pack())
 
     assert {:error, {:amount_mismatch, _}} = Fake.complete(order.provider_ref, 1)
     assert Wallet.balance(user) == 0
@@ -61,7 +62,7 @@ defmodule Phxlive.StoreTest do
 
   test "a payment that arrives after the buyer cancelled is still honoured" do
     user = buyer()
-    {:ok, order, _} = Store.start_checkout(user, pack("gems_500"), accept_terms: true)
+    {:ok, order, _} = Store.start_checkout(user, pack("gems_500"))
     {:ok, _} = Store.cancel_unpaid(order)
 
     assert :ok = Fake.complete(order.provider_ref, 500)
@@ -70,14 +71,14 @@ defmodule Phxlive.StoreTest do
 
   test "a declined card fails the order" do
     user = buyer()
-    {:ok, order, _} = Store.start_checkout(user, pack(), accept_terms: true)
+    {:ok, order, _} = Store.start_checkout(user, pack())
     assert :ok = Fake.fail(order.provider_ref)
     assert %{status: "failed"} = Store.get_user_order(user, order.id)
   end
 
   test "a lost chargeback takes the Gems back; a won one restores the order" do
     user = buyer()
-    {:ok, order, _} = Store.start_checkout(user, pack("gems_500"), accept_terms: true)
+    {:ok, order, _} = Store.start_checkout(user, pack("gems_500"))
     :ok = Fake.complete(order.provider_ref, 500)
 
     :ok = Fake.dispute(order.provider_ref, :dispute_opened)
@@ -99,7 +100,7 @@ defmodule Phxlive.StoreTest do
   end
 
   test "someone else's order isn't visible" do
-    {:ok, order, _} = Store.start_checkout(buyer(), pack(), accept_terms: true)
+    {:ok, order, _} = Store.start_checkout(buyer(), pack())
     assert Store.get_user_order(buyer(), order.id) == nil
   end
 
@@ -109,6 +110,22 @@ defmodule Phxlive.StoreTest do
     on_exit(fn -> Application.put_env(:phxlive, Phxlive.Payments, config) end)
 
     refute Store.checkout_available?()
-    assert {:error, :unknown_provider} = Store.start_checkout(buyer(), pack(), accept_terms: true)
+    assert {:error, :unknown_provider} = Store.start_checkout(buyer(), pack())
+  end
+
+  test "admin lists and stats count paid orders and their revenue" do
+    user = buyer()
+    {:ok, paid, "/store/fake-checkout/" <> ref} = Store.start_checkout(user, pack("gems_2500"))
+    assert :ok = Fake.complete(ref, 2500)
+    {:ok, unpaid, _} = Store.start_checkout(user, pack())
+
+    assert [%{id: id}] = Store.list_orders(status: "fulfilled")
+    assert id == paid.id
+    assert Enum.map(Store.list_orders(), & &1.id) == [unpaid.id, paid.id]
+    assert %{user: %{id: user_id}} = Store.get_order(paid.id)
+    assert user_id == user.id
+    assert Store.get_order("not-a-uuid") == nil
+
+    assert %{orders: 1, products: 5, revenue_today_cents: 2500, revenue_month_cents: 2500} = Store.stats()
   end
 end

@@ -6,6 +6,11 @@ defmodule Phxlive.Store.Order do
                        -> failed | cancelled
       fulfilled -> disputed -> fulfilled (won) | charged_back (lost)
 
+  An order left at "paid" with a `failure_reason` was paid for but couldn't
+  be delivered (a license key product ran out, say); an admin fixes the cause
+  and retries delivery from /admin/orders. A Gem purchase is created already
+  paid and fulfilled in one transaction.
+
   There is no refunded state: sales are final (PHXLIVE.md §2).
   """
   use Ecto.Schema
@@ -19,8 +24,12 @@ defmodule Phxlive.Store.Order do
     field :status, :string
     field :provider, :string
     field :provider_ref, :string
+    field :provider_payment_ref, :string
     field :product_name, :string
+    # A card order has amount_cents and currency; a Gem order (provider
+    # "gems") has amount_gems and currency "gems".
     field :amount_cents, :integer
+    field :amount_gems, :integer
     field :currency, :string
     field :gems, :integer, default: 0
     field :terms_accepted_at, :utc_datetime_usec

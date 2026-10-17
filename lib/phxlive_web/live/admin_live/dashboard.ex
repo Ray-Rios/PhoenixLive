@@ -1,6 +1,6 @@
 defmodule PhxliveWeb.AdminLive.Dashboard do
   use PhxliveWeb, :live_view
-  alias Phxlive.{Accounts, Commerce, Content, Security, RateLimiter}
+  alias Phxlive.{Accounts, Content, Security, RateLimiter, Store}
   alias PhxliveWeb.Components.AdminSidebar
 
   on_mount {PhxliveWeb.UserAuth, :require_admin_user}
@@ -44,16 +44,18 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
 
   defp get_dashboard_stats do
     try do
+      store = Store.stats()
+
       %{
         total_users: Accounts.count_users() || 0,
-        total_orders: Commerce.count_orders() || 0,
-        total_products: Commerce.count_products() || 0,
+        total_orders: store.orders,
+        total_products: store.products,
         total_posts: Content.count_posts() || 0,
         total_pages: Content.count_pages() || 0,
         recent_users: Accounts.list_recent_users(5) || [],
         recent_orders: safe_list_orders() || [],
-        revenue_today: Commerce.get_revenue_today() || 0,
-        revenue_month: Commerce.get_revenue_month() || 0,
+        revenue_today: Store.format_price(store.revenue_today_cents, "usd"),
+        revenue_month: Store.format_price(store.revenue_month_cents, "usd"),
         uploads_size: get_uploads_size()
       }
     rescue
@@ -67,8 +69,8 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
           total_pages: 0,
           recent_users: [],
           recent_orders: [],
-          revenue_today: 0,
-          revenue_month: 0,
+          revenue_today: "$0.00",
+          revenue_month: "$0.00",
           uploads_size: %{bytes: 0, formatted: "0 KB", file_count: 0}
         }
     end
@@ -76,7 +78,7 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
 
   defp safe_list_orders do
     try do
-      Commerce.list_recent_orders(5)
+      Store.list_orders(limit: 5)
     rescue
       _ -> []
     end
@@ -255,7 +257,7 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
         <.stat_card icon="👥" value={@stats.total_users} label="Users" color="blue" />
         <.stat_card icon="📝" value={@stats.total_posts} label="Blog Posts" color="green" />
         <.stat_card icon="📄" value={@stats.total_pages} label="Pages" color="purple" />
-        <.stat_card icon="🛍️" value={@stats.total_products} label="Products" color="amber" />
+        <.stat_card icon="💎" value={@stats.total_products} label="Products on sale" color="amber" />
       </div>
 
       <!-- Revenue & Storage Row -->
@@ -264,7 +266,7 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="text-gray-400 text-sm">Revenue Today</p>
-                    <p class="text-3xl font-bold text-green-400 mt-1">$<%= @stats.revenue_today %></p>
+                    <p class="text-3xl font-bold text-green-400 mt-1"><%= @stats.revenue_today %></p>
                   </div>
                   <div class="p-3 bg-green-500/10 rounded-lg">
                     <span class="text-2xl">💵</span>
@@ -276,7 +278,7 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="text-gray-400 text-sm">Revenue This Month</p>
-                    <p class="text-3xl font-bold text-green-400 mt-1">$<%= @stats.revenue_month %></p>
+                    <p class="text-3xl font-bold text-green-400 mt-1"><%= @stats.revenue_month %></p>
                   </div>
                   <div class="p-3 bg-green-500/10 rounded-lg">
                     <span class="text-2xl">📈</span>
@@ -357,21 +359,20 @@ defmodule PhxliveWeb.AdminLive.Dashboard do
                     <%= for order <- @stats.recent_orders do %>
                       <div class="flex items-center justify-between">
                         <div>
-                          <p class="text-white text-sm font-medium">Order #<%= String.slice(order.id, -8..-1) %></p>
-                          <p class="text-gray-500 text-xs"><%= order.user.email %></p>
+                          <.link navigate={~p"/admin/orders/#{order.id}"} class="text-white text-sm font-medium hover:underline"><%= order.product_name %></.link>
+                          <p class="text-gray-500 text-xs"><%= order.user && order.user.email %></p>
                         </div>
                         <div class="text-right">
-                          <p class="text-green-400 font-bold text-sm">$<%= order.total_amount %></p>
+                          <p class="text-green-400 font-bold text-sm"><%= Store.order_price(order) %></p>
                           <span class={["text-xs px-2 py-0.5 rounded",
                                       case order.status do
-                                        "pending" -> "bg-yellow-600/30 text-yellow-300"
-                                        "processing" -> "bg-blue-600/30 text-blue-300"
-                                        "shipped" -> "bg-purple-600/30 text-purple-300"
-                                        "delivered" -> "bg-green-600/30 text-green-300"
-                                        "cancelled" -> "bg-red-600/30 text-red-300"
+                                        "awaiting_payment" -> "bg-yellow-600/30 text-yellow-300"
+                                        s when s in ["paid", "fulfilled"] -> "bg-green-600/30 text-green-300"
+                                        "disputed" -> "bg-orange-600/30 text-orange-300"
+                                        s when s in ["failed", "charged_back"] -> "bg-red-600/30 text-red-300"
                                         _ -> "bg-gray-600/30 text-gray-300"
                                       end]}>
-                            <%= String.capitalize(order.status || "unknown") %>
+                            <%= order.status |> String.replace("_", " ") |> String.capitalize() %>
                           </span>
                         </div>
                       </div>

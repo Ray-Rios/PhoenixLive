@@ -25,4 +25,9 @@ defmodule Phxlive.Payments.Provider do
   """
   @callback parse_webhook(raw_body :: binary(), headers :: [{String.t(), String.t()}]) ::
               {:ok, Phxlive.Payments.Event.t()} | :ignore | {:error, term()}
+
+  @doc "Is it configured (keys present)? Assumed true when not implemented."
+  @callback available?() :: boolean()
+
+  @optional_callbacks available?: 0
 end

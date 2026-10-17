@@ -11,8 +11,10 @@ defmodule Phxlive.Payments do
 
       config :phxlive, Phxlive.Payments,
         default_provider: "fake",
-        providers: %{"fake" => Phxlive.Payments.Fake},
+        providers: %{"fake" => Phxlive.Payments.Fake, "stripe" => Phxlive.Payments.Stripe},
         fake_enabled: true          # dev and test only
+
+  runtime.exs makes "stripe" the default when `STRIPE_SECRET_KEY` is set.
 
   The fake provider is refused unless `fake_enabled` is true, so it can't
   take "payments" in production even if someone points the config at it.
@@ -30,9 +32,15 @@ defmodule Phxlive.Payments do
     providers = Keyword.get(config(), :providers, %{})
 
     case Map.fetch(providers, name) do
-      {:ok, Phxlive.Payments.Fake} -> if fake_enabled?(), do: {:ok, Phxlive.Payments.Fake}, else: {:error, :unknown_provider}
-      {:ok, mod} -> {:ok, mod}
-      :error -> {:error, :unknown_provider}
+      {:ok, Phxlive.Payments.Fake} ->
+        if fake_enabled?(), do: {:ok, Phxlive.Payments.Fake}, else: {:error, :unknown_provider}
+
+      {:ok, mod} ->
+        Code.ensure_loaded(mod)
+        if function_exported?(mod, :available?, 0) and not mod.available?(), do: {:error, :not_configured}, else: {:ok, mod}
+
+      :error ->
+        {:error, :unknown_provider}
     end
   end
 

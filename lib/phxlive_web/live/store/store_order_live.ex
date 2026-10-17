@@ -42,7 +42,7 @@ defmodule PhxliveWeb.StoreOrderLive do
     do: {:noreply, socket}
 
   defp status_text("awaiting_payment"), do: "Waiting for payment"
-  defp status_text("paid"), do: "Paid, delivering"
+  defp status_text("paid"), do: "Paid, being delivered"
   defp status_text("fulfilled"), do: "Complete"
   defp status_text("failed"), do: "Payment didn't go through"
   defp status_text("cancelled"), do: "Cancelled"
@@ -61,18 +61,27 @@ defmodule PhxliveWeb.StoreOrderLive do
           <h1 class="text-3xl font-bold text-white mt-6 mb-6">{@order.product_name}</h1>
           <div class="glass-dark rounded-lg p-6 border border-gray-700 space-y-2 text-gray-300">
             <div><span class="text-gray-500">Status:</span> <span class="text-white">{status_text(@order.status)}</span></div>
-            <div><span class="text-gray-500">Price:</span> {Store.format_price(@order.amount_cents, @order.currency)}</div>
-            <div :if={@order.gems > 0}><span class="text-gray-500">Gems:</span> 💎 {PhxliveWeb.StoreLive.format_number(@order.gems)}</div>
-            <p :if={@order.status in ["awaiting_payment", "paid"]} class="text-sm text-gray-400 pt-2">
+            <div><span class="text-gray-500">Price:</span> {Store.order_price(@order)}</div>
+            <div :if={@order.gems > 0}><span class="text-gray-500">Gems:</span> {Store.format_gems(@order.gems)}</div>
+            <p :if={@order.status == "awaiting_payment"} class="text-sm text-gray-400 pt-2">
               This page updates by itself once the payment is confirmed.
             </p>
+            <p :if={@order.status == "paid"} class="text-sm text-gray-400 pt-2">
+              Your payment went through. We're finishing your delivery and will have it in your library shortly.
+            </p>
             <p :if={@order.status == "fulfilled" and @order.gems > 0} class="text-sm text-green-300 pt-2">
-              Your Gems have been added. Balance: 💎 {PhxliveWeb.StoreLive.format_number(@balance)}
+              Your Gems have been added. Balance: {Store.format_gems(@balance)}
+            </p>
+            <p :if={@order.status == "fulfilled" and @order.gems == 0} class="text-sm text-green-300 pt-2">
+              Delivered. <.link navigate={~p"/store/library"} class="text-blue-400 hover:underline">Open your library</.link>
             </p>
           </div>
         <% else %>
           <h1 class="text-3xl font-bold text-white mt-6 mb-2">Purchases</h1>
-          <p class="text-gray-400 mb-6">Balance: 💎 {PhxliveWeb.StoreLive.format_number(@balance)}</p>
+          <p class="text-gray-400 mb-6">
+            Balance: {Store.format_gems(@balance)} ·
+            <.link navigate={~p"/store/library"} class="text-blue-400 hover:underline">Library</.link>
+          </p>
           <div :if={@orders == []} class="text-gray-500">No purchases yet.</div>
           <div class="space-y-2">
             <.link
@@ -81,7 +90,7 @@ defmodule PhxliveWeb.StoreOrderLive do
               class="flex justify-between glass-dark rounded p-4 border border-gray-700 hover:border-blue-400"
             >
               <span class="text-white">{o.product_name}</span>
-              <span class="text-gray-400">{Store.format_price(o.amount_cents, o.currency)} · {status_text(o.status)}</span>
+              <span class="text-gray-400">{Store.order_price(o)} · {status_text(o.status)}</span>
             </.link>
           </div>
         <% end %>

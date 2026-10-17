@@ -35,7 +35,7 @@ defmodule Phxlive.Accounts.User do
     field :background_custom_data, :map, default: %{}
 
     # How many channels this user may create. Was a 5 hardcoded in
-    # Forum.Channel; now per-user so /shop can sell more. Not settable by the
+    # Forum.Channel; now per-user so the store can sell more. Not settable by the
     # user - it is granted by a purchase or by an admin, so it is cast only in
     # the admin changeset, never in registration or profile updates.
     #
@@ -62,21 +62,15 @@ defmodule Phxlive.Accounts.User do
     field :last_login_ip, :string
     field :last_login_at, :utc_datetime
     
-    # Subscription & quota fields
+    # The payment provider's customer record, for card subscriptions (PHXLIVE.md §8).
     field :stripe_customer_id, :string
-    field :storage_quota_bytes, :integer, default: 1_073_741_824  # 1GB default
-    field :storage_used_bytes, :integer, default: 0
-    field :subscription_tier, :string, default: "free"  # free, basic, pro, enterprise
-    field :subscription_features, {:array, :string}, default: []
 
     belongs_to :approved_by, __MODULE__, foreign_key: :approved_by_id, on_replace: :nilify
 
-    has_many :orders, Phxlive.Commerce.Order, on_delete: :delete_all
     has_many :posts, Phxlive.Content.Post, on_delete: :nilify_all
     has_many :comments, Phxlive.Content.Comment, on_delete: :nilify_all
     has_many :files, Phxlive.Files.UserFile, on_delete: :delete_all
     has_many :chat_messages, Phxlive.Forum.Message, on_delete: :delete_all
-    has_many :subscriptions, Phxlive.Commerce.Subscription, on_delete: :delete_all
 
     timestamps(type: :utc_datetime)
   end

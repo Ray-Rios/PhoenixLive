@@ -41,6 +41,8 @@ defmodule Phxlive.Application do
       Phxlive.Scheduler.Worker,
       # Drive maintenance: 30-day purge + blob GC (PHXLIVE.md §7)
       Phxlive.Drive.Janitor,
+      # Store maintenance: ends expired passes, cancels stale checkouts (PHXLIVE.md §8)
+      Phxlive.Store.Sweeper,
       # Plugins (PHXLIVE.md §9): active plugins' processes, kept in step with
       # /admin/plugins across the cluster by Plugins.Runtime.
       {DynamicSupervisor, name: Phxlive.PluginSupervisor, strategy: :one_for_one},

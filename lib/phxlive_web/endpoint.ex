@@ -73,7 +73,9 @@ defmodule PhxliveWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    json_decoder: Phoenix.json_library()
+    json_decoder: Phoenix.json_library(),
+    # Keeps the raw body of payment webhooks for signature checks.
+    body_reader: {PhxliveWeb.RawBodyReader, :read_body, []}
 
   plug Plug.MethodOverride
   plug Plug.Head

@@ -108,6 +108,10 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 | 2026-10-16 | **Storage tiers and VIP access are card subscriptions** (Stripe, later PayPal), billed monthly; cancelling stops the next renewal. Gems are for in-game items. | Owner's decision. |
 | 2026-10-16 | **The store is Buy buttons, no cart**: one checkout per pack or plan. The old physical-goods shop (cart, shipping statuses, download tokens) is retired. | Owner's decision. Every product is a single purchase. |
 | 2026-10-16 | **Members and up may buy** (verified email, active account); Guest and Banned can't. Same rule as storage tiers. | Owner's decision. |
+| 2026-10-16 | **No checkbox at checkout.** Buy starts checkout; "All sales are final" is small print beside the button. A Gem purchase gets one inline "Spend 💎 N?" confirm, because it spends at once. | Owner's decision. |
+| 2026-10-16 | **Digital products:** downloads, game items, access passes (a private chat channel, or extra channel slots) and license keys. Each has a card price, a Gem price, or both; the Gem price defaults to 100 × the dollar price. Downloads are kept forever, always with the current files. Each product has its own page with images; the storefront has category tabs. | Owner's decision. |
+| 2026-10-16 | **Deleting a user who has bought anything anonymizes the account** instead: personal data goes, the row and its orders and ledger stay. | Owner's decision. Sales records must outlive the account. |
+| 2026-10-16 | **Nothing is built on the development PC**: no `npm`, no asset watchers in `config/dev.exs`. CSS and JS are built inside the container image. | Owner's decision. |
 | 2026-10-16 | **CI's `staging-deploy` job is removed.** CI tests the public hub; production images come only from `deploy-prod.sh`, run from a working copy that has the private plugins. | Owner's decision. A CI-built image would ship without them. |
 | 2026-10-15 | **Plugin slug and game slug are separate.** The plugin slug is the folder name (underscores, maps to the module name); the game slug defaults to it but a plugin may keep an existing one (RaysSpaceSim stays `rays-space-sim`, which its clients use). Game slugs may now contain underscores. | Needed for `web_lobby`, and so existing game clients don't break. |
 
@@ -118,7 +122,7 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 ```
                  ┌──────────────────────────── PhxliveWeb ─────────────────────────────┐
  browser ──────▶ │ Endpoint ─ UploadsGuard ─ Plug.Static ─ Session ─ Router            │
-                 │   LiveViews (pages, admin, shop, forum, games)                      │
+                 │   LiveViews (pages, admin, store, forum, games)                      │
                  │   PhoenixDesktopLive (global live_component on authed pages)        │
                  │   Channels (chat, presence)        Absinthe (GraphQL)               │
  game client ──▶ │   /api/auth/*  /api/games/:slug/*  (JSON, Guardian bearer)          │
@@ -126,7 +130,7 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
                  └───────────────────────────────┬─────────────────────────────────────┘
                                                  │
                  ┌──────────────────────────── Phxlive (contexts) ─────────────────────┐
-                 │ Accounts  Security  Content  Forum  Commerce  Files  Scheduler      │
+                 │ Accounts  Security  Content  Forum  Store    Files  Scheduler      │
                  │ Notifications  Email  Moderation/Audit  Desktop  Settings           │
                  │ Games (platform core)   Drive   Entitlements   Plugins              │
                  └──────────┬──────────────────────────────────────┬───────────────────┘
@@ -138,7 +142,7 @@ fork can delete the ones it doesn't want; `README.md` lists what removing each c
 
 | Repo | Holds | Migrations |
 |---|---|---|
-| `Phxlive.Repo` | users, content, forum/chat, commerce, files and drive, scheduler, plugin states | `priv/repo/migrations` |
+| `Phxlive.Repo` | users, content, forum/chat, store and wallet, files and drive, scheduler, plugin states | `priv/repo/migrations` |
 | `Phxlive.GamesRepo` | games platform: games, characters, servers, releases; plugins' tables | `priv/games_repo/migrations`, `plugins/*/priv/games_repo/migrations` |
 
 Games tables cannot foreign-key to `users`, because that table is in the other database.
@@ -169,7 +173,8 @@ lib/
     plugin.ex, plugins/    plugin behaviour, discovery, active state, runtime (§9)
     drive.ex, drive/       user storage (§7)
     files.ex, files/       user files (Arc-based, being replaced, see §7)
-    commerce.ex, commerce/ products, carts, orders, subscriptions (scaffolding, see §8)
+    store.ex, wallet.ex,   the store, the Gem ledger and payment providers (§8)
+    payments.ex
     safe_path.ex           path confinement, used for every client-supplied path
   phxlive_web/
     endpoint.ex            plug order matters, see §6
@@ -391,19 +396,42 @@ from the current UI and should be deleted in milestone 5.
 | Products and orders (`store_products`, `store_orders`) | `Phxlive.Store`: `gem_packs/0`, `can_buy/1`, `start_checkout/3`, `apply_event/1`. Packs are validated at 100 Gems/$; extra Gems only as a dated promotion (`bonus_gems`, `promo_starts_at`/`ends_at`) |
 | Event inbox (`payment_events`) | `Phxlive.Payments`: `ingest/1` stores then applies; a failed event is retried on re-delivery |
 | Providers | `Phxlive.Payments.Provider` (`create_checkout/2`, `parse_webhook/2`; no refund callback). `Payments.Fake` for dev/test, refused unless `fake_enabled` |
-| Pages | `/store` (packs, balance, "all sales are final" checkbox), `/store/orders`, `/store/orders/:id` (updates live), `/store/fake-checkout/:ref` (dev/test) |
+| Pages | `/store`, `/store/orders`, `/store/orders/:id` (updates live), `/store/fake-checkout/:ref` (dev/test). The "all sales are final" checkbox was removed in 4c |
 
-In production no provider is enabled yet, so `/store` shows the packs with "Purchases
-open soon". Next: Stripe (needs an account), webhooks with raw-body verification, then
-subscriptions for storage tiers and VIP channels, admin pages, and retiring the old shop.
+**Milestone 4b:** Stripe, admin pages, and the old shop retired.
 
-### The old shop (to retire)
+| Piece | Where |
+|---|---|
+| Stripe Checkout (one-time payments) | `Phxlive.Payments.Stripe`, plain HTTPS through `Phxlive.Finch` (no Stripe library). Enabled when `STRIPE_SECRET_KEY` is set; then it is the default provider unless `PAYMENTS_PROVIDER` says otherwise |
+| Webhooks | `POST /api/webhooks/payments/:provider` (`PaymentWebhookController`). `PhxliveWeb.RawBodyReader` keeps the raw body for that path only; Stripe's `Stripe-Signature` HMAC is checked against `STRIPE_WEBHOOK_SECRET` with a 5-minute tolerance. 200 = handled or ignored, 400 = bad signature/body (not retried), 500 = processing failed (Stripe retries) |
+| Events used | `checkout.session.completed` (when `paid`), `checkout.session.async_payment_succeeded`/`_failed`, `checkout.session.expired`, `charge.dispute.created`, `charge.dispute.closed` (won/lost). Disputes find the order by its PaymentIntent (`store_orders.provider_payment_ref`) |
+| Admin | `/admin/products` (Gem packs: price, Gems, dated promotion, badge, on/off sale; never deleted), `/admin/orders` (orders, order detail, the payment event inbox; read-only) |
+| Old shop | Removed: `Commerce`, `/shop`, `/cart`, `/checkout`, the old admin products/orders/subscriptions pages, their tables and the users columns only they used (migration `20261016210000`) |
 
-Scaffolding only. `Order` has a `stripe_payment_intent_id` column but there is no
-payment library dependency; checkout says "Payment processing will be integrated with
-Stripe." Order statuses (`pending/processing/shipped/delivered/cancelled`) assume
-physical goods and have no `paid` or `refunded`. `Subscription` has Stripe ids;
-`DownloadToken` exists for digital downloads.
+**Setting up Stripe.** Test mode first. Locally: export `STRIPE_SECRET_KEY` (an
+`sk_test_` key), run `stripe listen --forward-to localhost:4000/api/webhooks/payments/stripe`
+and export the `whsec_` it prints as `STRIPE_WEBHOOK_SECRET`. In production both go in
+the gitignored `k3s/overlays/prod/secrets.yaml`, and the webhook endpoint
+`https://<host>/api/webhooks/payments/stripe` is added in the Stripe dashboard with the
+events above. Keys never go in the repository.
+
+**Milestone 4c:** digital products.
+
+| Piece | Where |
+|---|---|
+| Kinds | `Store.Product.kind`: `gem_pack`, `download`, `item`, `access`, `license_key` (table in its moduledoc). Prices: `price_cents` and/or `price_gems` |
+| Catalog | `Phxlive.Store.Catalog`: categories (`store_categories`), products, images and download files (`store_product_files`), license key pools (`store_license_keys`). File bodies use `Phxlive.Storage` like drive files; `Drive.gc_blobs/2` keeps any body a product file names |
+| Delivery | `Phxlive.Store.Fulfilment`: entitlements with `source_type` "store_order" (`store_download`, a plugin's item kind, `channel_access`, `channel_slots`), keys from the pool, Gems to the wallet. A lost chargeback takes it back. Plugins get `{:entitlement_granted, e}` / `{:entitlement_revoked, e}` hub events |
+| Gems | `Store.buy_with_gems/2`: spend and deliver in one transaction |
+| Card | `Store.start_checkout/3` reserves a license key until the order is paid, fails or is cancelled. Paid but undeliverable (keys ran out) stays "paid" with a reason; `/admin/orders` has "Retry delivery" |
+| Expiry | `Phxlive.Store.Sweeper` (every 5 min, advisory lock): ends timed items and passes (a pass's channel membership goes with it), cancels card orders unpaid for 48 h |
+| Pages | `/store` (category tabs, product grid, Gem packs), `/store/p/:slug` (gallery, Buy with card / Gems), `/store/library` (downloads, keys, items and passes), `GET /store/media/:id` (images), `GET /store/download/:id` (buyers only, attachment) |
+| Admin | `/admin/products` (all products, new-product buttons per kind, categories), `/admin/products/new?kind=…` and `/admin/products/:id` (`AdminLive.ProductEditor`: text, prices, delivery, images, files, keys) |
+| Accounts | `Accounts.delete_user/1` anonymizes a user with orders, ledger entries or keys instead of deleting the row |
+
+Download size is capped by `config :phxlive, Phxlive.Store, max_download_bytes:` (default 2 GiB). Uploads go through the LiveView socket in 1 MB chunks and are staged in the pod's temp directory first, so the pod needs that much free temp space.
+
+Next: card subscriptions for storage tiers and VIP channels (Stripe Billing), then PayPal.
 
 ### Target model (milestone 4)
 
@@ -417,7 +445,7 @@ physical goods and have no `paid` or `refunded`. `Subscription` has Stripe ids;
 | `item` | money or Gems | an entitlement (e.g. an in-game item) |
 | `subscription_plan` | money, recurring | entitlements while active (storage tier, VIP channels) |
 
-**Orders** are a state machine. Transitions happen only in `Commerce`, never in a
+**Orders** are a state machine. Transitions happen only in `Store`, never in a
 LiveView:
 
 ```
@@ -723,7 +751,7 @@ persistence is commented out ("TEMP DISABLED").
 | Files | storage service (§7) |
 | Chat | forum/channels, including VIP channels (§11) |
 | Library | owned games, entitlements, launcher downloads |
-| Store | products, cart, checkout |
+| Store | products, one-click checkout |
 | Wallet & Orders | ledger balance, order history, subscriptions |
 | Friends | presence |
 | Forum | threads |

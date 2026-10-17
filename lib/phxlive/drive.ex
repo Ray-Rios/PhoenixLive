@@ -614,6 +614,8 @@ defmodule Phxlive.Drive do
             as: :blob,
             where: b.last_referenced_at < ^cutoff,
             where: not exists(from f in DFile, where: f.blob_sha256 == parent_as(:blob).sha256, select: 1),
+            # Store product images and downloads share the blob store (Phxlive.Store.Catalog).
+            where: not exists(from sf in "store_product_files", where: sf.sha256 == parent_as(:blob).sha256, select: 1),
             select: b.sha256,
             limit: ^limit,
             lock: "FOR UPDATE SKIP LOCKED"

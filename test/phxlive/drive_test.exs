@@ -170,7 +170,7 @@ defmodule Phxlive.DriveTest do
   end
 
   describe "role changes (Accounts.change_role/3)" do
-    test "becoming guest locks the drive, revokes tiers, cancels subscriptions; restoring unlocks" do
+    test "becoming guest locks the drive and revokes tiers; restoring unlocks" do
       user = user_fixture()
       file = add!(user, nil, "keep me", "k.txt")
       {:ok, _} = Drive.set_visibility(user, file.id, "public")

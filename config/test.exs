@@ -26,6 +26,7 @@ config :logger, level: :warning
 
 # Drive: no background janitor in tests; bodies go to a throwaway directory.
 config :phxlive, Phxlive.Drive.Janitor, enabled: false
+config :phxlive, Phxlive.Store.Sweeper, enabled: false
 
 # Plugins: tests drive activation themselves; no background runtime, a fixture
 # plugin, and nothing active by default.

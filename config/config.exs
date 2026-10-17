@@ -94,10 +94,11 @@ config :phxlive, :default_active_plugins, ["web_lobby"]
 
 # Payments (PHXLIVE.md §8). "fake" is a pretend provider for development and
 # tests; it refuses to work unless fake_enabled is true (dev.exs, test.exs).
-# Stripe gets added here once there's an account.
+# "stripe" works once STRIPE_SECRET_KEY is set (runtime.exs), which also makes
+# it the default.
 config :phxlive, Phxlive.Payments,
   default_provider: "fake",
-  providers: %{"fake" => Phxlive.Payments.Fake},
+  providers: %{"fake" => Phxlive.Payments.Fake, "stripe" => Phxlive.Payments.Stripe},
   fake_enabled: false
 
 config :phxlive, Phxlive.Repo,

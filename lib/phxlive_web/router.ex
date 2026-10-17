@@ -88,6 +88,10 @@ defmodule PhxliveWeb.Router do
 
     get "/files/:id", DriveController, :show
     get "/s/:token", DriveController, :shared
+
+    # Store product images (public) and downloads (buyers only), PHXLIVE.md §8.
+    get "/store/media/:id", StoreFileController, :media
+    get "/store/download/:id", StoreFileController, :download
   end
 
   # --------------------
@@ -123,20 +127,16 @@ defmodule PhxliveWeb.Router do
     live "/auth/verify-email", AuthLive, :verify_email
     live "/auth/resend-verification", AuthLive, :resend_verification
 
-    # Public blog/shop/chat/etc.
+    # Public blog/store/chat/etc.
     live "/blog", BlogLive, :index
     live "/blog/:slug", BlogLive, :show
     
     live "/pages/:slug", PageLive, :show
-    live "/shop", ShopLive, :index
-    live "/shop/category/:slug", ShopLive, :category
-    live "/shop/product/:id", ShopLive, :product
-    live "/cart", CartLive, :index
-    live "/checkout", CheckoutLive, :index
-
-    # The store (PHXLIVE.md §8): Gem packs, purchase history, and the fake
+    # The store (PHXLIVE.md §8): products, the buyer's library, purchase history, and the fake
     # provider's checkout page (refuses unless the fake provider is enabled).
     live "/store", StoreLive, :index
+    live "/store/p/:slug", StoreProductLive, :show
+    live "/store/library", StoreLibraryLive, :index
     live "/store/orders", StoreOrderLive, :index
     live "/store/orders/:id", StoreOrderLive, :show
     live "/store/fake-checkout/:ref", FakeCheckoutLive, :show
@@ -158,10 +158,12 @@ defmodule PhxliveWeb.Router do
     live "/admin/pages", AdminLive.Pages, :index
     live "/admin/pages/:id", AdminLive.Pages, :edit
     live "/admin/products", AdminLive.Products, :index
+    live "/admin/products/new", AdminLive.ProductEditor, :new
+    live "/admin/products/:id", AdminLive.ProductEditor, :edit
     live "/admin/orders", AdminLive.Orders, :index
+    live "/admin/orders/:id", AdminLive.Orders, :show
     live "/admin/projects", AdminLive.Projects, :index
     live "/admin/scheduler", AdminLive.Scheduler, :index
-    live "/admin/subscriptions", AdminLive.Subscriptions, :index
     live "/admin/uploads", AdminLive.Uploads, :index
     live "/admin/user-management", AdminLive.UserManagementLive, :index
     live "/admin/sql", AdminLive.SQL, :index
@@ -232,6 +234,21 @@ defmodule PhxliveWeb.Router do
     pipe_through :api_auth
 
     post "/verify-bearer", Api.ApiAuthController, :verify_bearer
+  end
+
+  # --------------------
+  # Payment provider webhooks (PHXLIVE.md §8). Authenticated by the provider's
+  # signature over the raw body, checked in the controller. No session, no
+  # rate limit: the provider retries on failure, and a refused retry is a
+  # missed payment.
+  # --------------------
+  pipeline :webhooks do
+    plug :accepts, ["json"]
+  end
+
+  scope "/api/webhooks/payments", PhxliveWeb do
+    pipe_through :webhooks
+    post "/:provider", PaymentWebhookController, :create
   end
 
   # --------------------

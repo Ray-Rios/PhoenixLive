@@ -5,7 +5,6 @@ defmodule PhxliveWeb.AdminLive.ApiToolbox do
 
   alias Phxlive.Accounts
   alias Phxlive.Content
-  alias Phxlive.Commerce
   alias Phxlive.Files
   alias PhxliveWeb.Components.AdminSidebar
 
@@ -224,7 +223,7 @@ defmodule PhxliveWeb.AdminLive.ApiToolbox do
   end
 
   defp execute_action("list_orders", _params, _current_user) do
-    orders = Commerce.list_orders() |> Enum.take(50)
+    orders = Phxlive.Store.list_orders(limit: 50)
 
     {:ok,
      %{
@@ -234,7 +233,9 @@ defmodule PhxliveWeb.AdminLive.ApiToolbox do
            %{
              id: order.id,
              status: order.status,
-             total: order.total_amount,
+             product: order.product_name,
+             total: Phxlive.Store.order_price(order),
+             provider: order.provider,
              user_email: order.user && order.user.email,
              inserted_at: order.inserted_at
            }
@@ -328,14 +329,14 @@ defmodule PhxliveWeb.AdminLive.ApiToolbox do
         fields: []
       },
 
-      # Commerce
+      # Store
       %{
         id: "list_orders",
         name: "List Orders",
         category: "commerce",
         method: "GET",
         path: "/api/admin/orders",
-        description: "Retrieve up to 50 most recent orders with status and total amounts.",
+        description: "Retrieve up to 50 most recent store orders with status and amounts.",
         fields: []
       },
 
@@ -380,7 +381,7 @@ defmodule PhxliveWeb.AdminLive.ApiToolbox do
 
           <!-- Category Filter -->
           <div class="flex flex-wrap gap-2 mb-6">
-            <%= for {label, value} <- [{"All", "all"}, {"Users", "users"}, {"Content", "content"}, {"Commerce", "commerce"}, {"Files", "files"}] do %>
+            <%= for {label, value} <- [{"All", "all"}, {"Users", "users"}, {"Content", "content"}, {"Store", "commerce"}, {"Files", "files"}] do %>
               <button
                 phx-click="filter_category"
                 phx-value-category={value}

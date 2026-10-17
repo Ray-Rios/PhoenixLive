@@ -395,8 +395,7 @@ defmodule Phxlive.Accounts do
   below cannot be skipped:
 
     * becoming **guest** or **banned**: the drive is locked and scheduled for
-      purge in 30 days, storage-tier entitlements are revoked, and every active
-      subscription is cancelled immediately
+      purge in 30 days and storage-tier entitlements are revoked
     * leaving guest/banned: the drive is unlocked (if not yet purged); the user
       is back on the free tier
     * becoming **banned**: sessions are disconnected and `cleanup_banned_user/1`
@@ -421,15 +420,10 @@ defmodule Phxlive.Accounts do
 
       drive = Phxlive.Drive.on_role_change(updated, old_role, new_role)
 
-      cancelled =
-        if drive == :locked,
-          do: Phxlive.Commerce.cancel_all_subscriptions(updated, "role:#{new_role}"),
-          else: 0
-
-      {updated, drive, cancelled}
+      {updated, drive}
     end)
     |> case do
-      {:ok, {updated, drive, cancelled}} ->
+      {:ok, {updated, drive}} ->
         actor = case opts[:actor] do
           %{id: id} -> id
           _ -> "system"
@@ -437,7 +431,7 @@ defmodule Phxlive.Accounts do
 
         Logger.info(
           "Role change #{user.id}: #{old_role} -> #{new_role} by #{actor}; " <>
-            "drive=#{drive} subscriptions_cancelled=#{cancelled}"
+            "drive=#{drive}"
         )
 
         if new_role == "banned" and old_role != "banned" do
@@ -579,30 +573,6 @@ defmodule Phxlive.Accounts do
     |> Repo.update()
   end
 
-  @doc """
-  Updates subscription-related fields on the user (storage quota, role, tier, features).
-  """
-  def update_user_subscription_fields(%User{} = user, attrs) do
-    user
-    |> Ecto.Changeset.change(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Adds storage bytes to the user's quota.
-  """
-  def add_storage_quota(%User{} = user, bytes_to_add) do
-    current_quota = user.storage_quota_bytes || 1_073_741_824
-    update_user_subscription_fields(user, %{storage_quota_bytes: current_quota + bytes_to_add})
-  end
-
-  @doc """
-  Updates the user's used storage bytes.
-  """
-  def update_storage_used(%User{} = user, bytes_used) do
-    update_user_subscription_fields(user, %{storage_used_bytes: bytes_used})
-  end
-
   def enable_user(%User{} = user) do
     # When admin enables a user, also verify their email (acts like admin bypass)
     attrs = %{status: "active"}
@@ -658,6 +628,53 @@ defmodule Phxlive.Accounts do
   # ---------------------
   # Delete user
   # ---------------------
+
+  # Rows other tables keep for the record (PHXLIVE.md §8): store orders, the
+  # Gem ledger, license keys sold.
+  defp has_purchases?(user_id) do
+    Repo.exists?(from o in Phxlive.Store.Order, where: o.user_id == ^user_id) or
+      Repo.exists?(from a in Phxlive.Wallet.Account, where: a.user_id == ^user_id) or
+      Repo.exists?(from k in Phxlive.Store.LicenseKey, where: k.user_id == ^user_id)
+  end
+
+  # The account can never sign in again and nothing in it identifies the
+  # person; its id stays so purchase records still point somewhere.
+  defp anonymize!(%User{id: user_id} = user) do
+    tag = String.slice(user_id, 0, 8)
+    now = DateTime.utc_now()
+
+    Repo.update_all(
+      from(e in Phxlive.Entitlements.Entitlement, where: e.user_id == ^user_id and is_nil(e.revoked_at)),
+      set: [revoked_at: now, revoked_reason: "account deleted", updated_at: now]
+    )
+
+    user
+    |> Ecto.Changeset.change(
+      email: "deleted-#{user_id}@deleted.invalid",
+      name: "deleted-#{tag}",
+      password_hash: Base.encode64(:crypto.strong_rand_bytes(48)),
+      status: "disabled",
+      role: "guest",
+      is_admin: false,
+      is_online: false,
+      bio: nil,
+      avatar_url: nil,
+      avatar_file: nil,
+      two_factor_secret: nil,
+      two_factor_enabled: false,
+      two_factor_backup_codes: [],
+      background_custom_data: %{},
+      blocked_user_ids: [],
+      channel_order: [],
+      email_verification_token: nil,
+      password_reset_token: nil,
+      registration_ip: nil,
+      last_login_ip: nil,
+      stripe_customer_id: nil
+    )
+    |> Repo.update!()
+  end
+
   def delete_user(%User{} = user) do
     Repo.transaction(fn ->
       import Ecto.Query
@@ -685,12 +702,6 @@ defmodule Phxlive.Accounts do
 
       # Game tables have been removed from the codebase
 
-      {orders_deleted, _} = Repo.delete_all(from(o in Phxlive.Commerce.Order, where: o.user_id == ^user_id))
-      Logger.debug("delete_user: deleted #{orders_deleted} orders")
-
-      {carts_deleted, _} = Repo.delete_all(from(c in Phxlive.Commerce.Cart, where: c.user_id == ^user_id))
-      Logger.debug("delete_user: deleted #{carts_deleted} carts")
-
       {files_deleted, _} = Repo.delete_all(from(f in Phxlive.Files.UserFile, where: f.user_id == ^user_id))
       Logger.debug("delete_user: deleted #{files_deleted} user files")
 
@@ -712,14 +723,22 @@ defmodule Phxlive.Accounts do
       {blocked_nullified, _} = Repo.update_all(from(bi in Phxlive.Security.BlockedIdentifier, where: bi.blocked_by_user_id == ^user_id), set: [blocked_by_user_id: nil])
       Logger.debug("delete_user: nullified blocked_by_user_id on #{blocked_nullified} blocked_identifiers")
 
-      case Repo.delete(user) do
-        {:ok, deleted_user} ->
-          Logger.debug("delete_user: user record deleted successfully user_id=#{user_id}")
-          deleted_user
+      if has_purchases?(user_id) do
+        # Store orders and the Gem ledger must outlive the account (sales
+        # records), so the row stays and everything personal goes.
+        anonymized = anonymize!(user)
+        Logger.info("delete_user: user_id=#{user_id} has purchases; anonymized instead of deleted")
+        anonymized
+      else
+        case Repo.delete(user) do
+          {:ok, deleted_user} ->
+            Logger.debug("delete_user: user record deleted successfully user_id=#{user_id}")
+            deleted_user
 
-        {:error, changeset} ->
-          Logger.error("delete_user: failed to delete user record user_id=#{user_id} error=#{inspect(changeset.errors)}")
-          Repo.rollback(changeset)
+          {:error, changeset} ->
+            Logger.error("delete_user: failed to delete user record user_id=#{user_id} error=#{inspect(changeset.errors)}")
+            Repo.rollback(changeset)
+        end
       end
     end)
     |> case do

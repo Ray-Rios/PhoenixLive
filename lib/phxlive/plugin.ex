@@ -80,6 +80,14 @@ defmodule Phxlive.Plugin do
     * `{:channel_updated, %Phxlive.Forum.Channel{} = new, %Phxlive.Forum.Channel{} = old}`
     * `{:channel_deleted, channel_id}` - before the channel's rows go
     * `{:channel_member_removed, channel_id, user_id}` - kicked, banned or left
+    * `{:entitlement_granted, %Phxlive.Entitlements.Entitlement{} = e}` - a
+      store purchase granted something (a game item of a kind this plugin
+      declares in `entitlement_kinds/0`, a download, a pass); after commit
+    * `{:entitlement_revoked, %Phxlive.Entitlements.Entitlement{} = e}` - a
+      timed grant ran out (`revoked_reason` "expired") or a chargeback took it
+      back ("chargeback"). Games should still check
+      `Phxlive.Entitlements.active?/3` when an item is used; events are a
+      convenience, not the source of truth
 
   Unknown events must be ignored, so the hub can add more.
   """
