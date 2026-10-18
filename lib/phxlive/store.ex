@@ -14,8 +14,10 @@ defmodule Phxlive.Store do
   Buying with Gems: `buy_with_gems/2` spends the Gems and delivers in one
   transaction; nothing is left half done.
 
-  Sales are final: there's no refund path. A chargeback the hub loses takes
-  back what the order delivered (`Fulfilment.revoke/2`).
+  Sales are final: there's no refund path. While the buyer's bank disputes a
+  payment, what the order delivered is taken away; it comes back if the hub
+  wins and is gone for good if it loses (`Fulfilment.revoke/3`,
+  `Fulfilment.reinstate/2`).
   """
 
   import Ecto.Query
@@ -411,12 +413,16 @@ defmodule Phxlive.Store do
     {:changed, order |> Ecto.Changeset.change(status: "failed", failure_reason: "checkout not completed") |> Repo.update!(), []}
   end
 
+  # The buyer's bank is disputing the payment: no access while it's open.
   defp transition(%Order{status: "fulfilled"} = order, %Event{type: :dispute_opened}) do
-    {:changed, order |> Ecto.Changeset.change(status: "disputed") |> Repo.update!(), []}
+    {:ok, events} = Fulfilment.revoke(order, Repo.get!(Product, order.product_id), "disputed")
+    {:changed, order |> Ecto.Changeset.change(status: "disputed") |> Repo.update!(), events}
   end
 
+  # The hub won: everything comes back.
   defp transition(%Order{status: "disputed"} = order, %Event{type: :dispute_won}) do
-    {:changed, order |> Ecto.Changeset.change(status: "fulfilled") |> Repo.update!(), []}
+    {:ok, events} = Fulfilment.reinstate(order, Repo.get!(Product, order.product_id))
+    {:changed, order |> Ecto.Changeset.change(status: "fulfilled") |> Repo.update!(), events}
   end
 
   # The bank took the money back; what it paid for goes too.

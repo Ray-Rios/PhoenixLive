@@ -31,6 +31,7 @@ defmodule PhxliveWeb.StoreLibraryLive do
   defp state_text({:until, dt}, tz), do: "Until #{local_date(dt, tz)}"
   defp state_text({:expired, dt}, tz), do: "Ended #{local_date(dt, tz)}"
   defp state_text(:revoked, _tz), do: "Taken back (chargeback)"
+  defp state_text(:on_hold, _tz), do: "On hold: your bank is disputing this payment"
 
   defp active?(state), do: state == :forever or match?({:until, _}, state)
 
@@ -91,7 +92,11 @@ defmodule PhxliveWeb.StoreLibraryLive do
               <div class="min-w-0">
                 <div class="text-sm text-gray-400">{k.product.name} · {local_date(k.sold_at, @tz)}</div>
                 <code id={"key-#{k.id}"} class={["select-all break-all font-mono text-white", k.revoked_at && "line-through opacity-50"]}>{k.code}</code>
-                <div :if={k.revoked_at} class="text-xs text-red-300">Revoked after a chargeback.</div>
+                <div :if={k.revoked_at} class="text-xs text-red-300">
+                  {if k.order && k.order.status == "disputed",
+                    do: "On hold: your bank is disputing this payment.",
+                    else: "Revoked after a chargeback."}
+                </div>
               </div>
               <button
                 :if={!k.revoked_at}

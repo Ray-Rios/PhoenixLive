@@ -218,6 +218,49 @@ defmodule Phxlive.StoreDigitalTest do
       assert [%{code: "SECOND"}] = Library.for_user(late).keys
     end
 
+    test "an open dispute takes away the download, the pass and the slots; winning gives them back" do
+      dl = product!(%{kind: "download", name: "DL", price_cents: 500})
+      {:ok, file} = Catalog.add_file(dl, "download", tmp_upload("y"), "y.zip")
+      channel = private_channel!()
+      pass = product!(%{kind: "access", name: "VIP", price_cents: 500, grant_kind: "channel", grant_key: channel.id})
+      slots = product!(%{kind: "access", name: "Slots", price_cents: 500, grant_kind: "channel_slots", grant_quantity: 2})
+      user = buyer()
+      base = Phxlive.Forum.channel_allowance(user.id)
+
+      orders =
+        for p <- [dl, pass, slots] do
+          {:ok, order, _} = Store.start_checkout(user, p)
+          :ok = Fake.complete(order.provider_ref, 500)
+          order
+        end
+
+      for o <- orders, do: :ok = Fake.dispute(o.provider_ref, :dispute_opened)
+      refute Library.can_download?(user, file)
+      refute Phxlive.Forum.is_channel_member?(channel.id, user.id)
+      assert Phxlive.Forum.channel_allowance(user.id) == base
+      assert Enum.any?(Library.for_user(user).grants, &(&1.state == :on_hold))
+      assert_received {:fixture_hub_event, {:entitlement_revoked, %{revoked_reason: "disputed"}}}
+
+      for o <- orders, do: :ok = Fake.dispute(o.provider_ref, :dispute_won)
+      assert Library.can_download?(user, file)
+      assert Phxlive.Forum.is_channel_member?(channel.id, user.id)
+      assert Phxlive.Forum.channel_allowance(user.id) == base + 2
+      assert_received {:fixture_hub_event, {:entitlement_granted, %{kind: "channel_access"}}}
+    end
+
+    test "a license key is on hold during a dispute and gone if it's lost" do
+      p = product!(%{kind: "license_key", name: "Key", price_cents: 500})
+      {:ok, _} = Catalog.add_license_keys(p, "HOLD-ME")
+      user = buyer()
+      {:ok, order, _} = Store.start_checkout(user, p)
+      :ok = Fake.complete(order.provider_ref, 500)
+
+      :ok = Fake.dispute(order.provider_ref, :dispute_opened)
+      assert [%{revoked_at: %DateTime{}, order: %{status: "disputed"}}] = Library.for_user(user).keys
+      :ok = Fake.dispute(order.provider_ref, :dispute_lost)
+      assert [%{revoked_at: %DateTime{}, order: %{status: "charged_back"}}] = Library.for_user(user).keys
+    end
+
     test "a lost chargeback takes back a download and channel slots" do
       dl = product!(%{kind: "download", name: "DL", price_cents: 500})
       {:ok, file} = Catalog.add_file(dl, "download", tmp_upload("x"), "x.zip")

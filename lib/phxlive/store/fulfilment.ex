@@ -20,6 +20,10 @@ defmodule Phxlive.Store.Fulfilment do
 
   Gem packs credit the wallet; license keys move from the pool to the buyer.
 
+  A bank dispute takes all of it away at once (`revoke(order, product,
+  "disputed")`, Gems included, even into a negative balance); a won dispute
+  gives it back (`reinstate/2`); a lost one makes it permanent.
+
   `deliver/2` and `revoke/2` return hub events for the caller to send to
   plugins (`Phxlive.Plugins.notify/1`) once the transaction has committed:
   `{:entitlement_granted, entitlement}` and `{:entitlement_revoked, entitlement}`.
@@ -220,18 +224,17 @@ defmodule Phxlive.Store.Fulfilment do
   end
 
   # ---------------------------------------------------------------------------
-  # Taking back (lost chargeback) and expiry
+  # Disputes, chargebacks and expiry
   # ---------------------------------------------------------------------------
 
-  @doc "Takes back what a charged-back order delivered. Returns `{:ok, hub_events}`."
-  def revoke(%Order{} = order, %Product{} = p) do
-    if p.kind == "gem_pack" and order.gems > 0 do
-      case Wallet.clawback(order.user_id, order.gems, order) do
-        {:ok, _} -> :ok
-        {:ok, _, :duplicate} -> :ok
-        {:error, reason} -> Repo.rollback({:clawback_failed, reason})
-      end
-    end
+  @doc """
+  Takes away what an order delivered: `reason` "disputed" when the buyer's
+  bank opens a dispute (undone by `reinstate/2` if the hub wins), or
+  "chargeback" when it's lost. Gems are held the same way. Returns
+  `{:ok, hub_events}`.
+  """
+  def revoke(%Order{} = order, %Product{} = p, reason \\ "chargeback") do
+    if p.kind == "gem_pack" and order.gems > 0, do: hold_gems(order)
 
     now = DateTime.utc_now()
 
@@ -242,9 +245,79 @@ defmodule Phxlive.Store.Fulfilment do
     events =
       from(e in Entitlement, where: e.source_type == @source and e.source_id == ^order.id and is_nil(e.revoked_at))
       |> Repo.all()
-      |> Enum.map(&end_entitlement(&1, "chargeback"))
+      |> Enum.map(&end_entitlement(&1, reason))
+
+    # A lost dispute makes the hold permanent.
+    if reason == "chargeback" do
+      Repo.update_all(
+        from(e in Entitlement, where: e.source_type == @source and e.source_id == ^order.id and e.revoked_reason == "disputed"),
+        set: [revoked_reason: "chargeback", updated_at: now]
+      )
+    end
 
     {:ok, events}
+  end
+
+  @doc "Gives back what `revoke(order, product, \"disputed\")` took, after a won dispute. Returns `{:ok, hub_events}`."
+  def reinstate(%Order{} = order, %Product{} = p) do
+    if p.kind == "gem_pack" and order.gems > 0, do: release_gems(order)
+
+    now = DateTime.utc_now()
+
+    Repo.update_all(from(k in LicenseKey, where: k.order_id == ^order.id and not is_nil(k.revoked_at)),
+      set: [revoked_at: nil, updated_at: now]
+    )
+
+    events =
+      from(e in Entitlement, where: e.source_type == @source and e.source_id == ^order.id and e.revoked_reason == "disputed")
+      |> Repo.all()
+      |> Enum.map(&restore_entitlement(&1, now))
+
+    {:ok, events}
+  end
+
+  # Gems are held once per dispute: only when they aren't already held.
+  defp hold_gems(order) do
+    %{clawbacks: c, restores: r} = Wallet.dispute_counts(order.id)
+
+    if c == r do
+      case Wallet.clawback(order.user_id, order.gems, order, c + 1) do
+        {:error, reason} -> Repo.rollback({:clawback_failed, reason})
+        _ -> :ok
+      end
+    end
+  end
+
+  defp release_gems(order) do
+    %{clawbacks: c, restores: r} = Wallet.dispute_counts(order.id)
+
+    if c > r do
+      case Wallet.restore_clawback(order.user_id, order.gems, order, r + 1) do
+        {:error, reason} -> Repo.rollback({:restore_failed, reason})
+        _ -> :ok
+      end
+    end
+  end
+
+  # A pass whose time ran out during the dispute comes back already ended;
+  # the sweeper marks it expired.
+  defp restore_entitlement(%Entitlement{} = e, now) do
+    {:ok, e} = e |> Ecto.Changeset.change(revoked_at: nil, revoked_reason: nil) |> Repo.update()
+    running? = is_nil(e.ends_at) or DateTime.compare(e.ends_at, now) == :gt
+
+    case e.kind do
+      @channel_access ->
+        # The channel may have been deleted meanwhile; nothing to rejoin then.
+        if running? and Catalog.channel_name(e.key), do: ensure_member(e.key, e.user_id)
+
+      @channel_slots ->
+        Repo.update_all(from(u in User, where: u.id == ^e.user_id), inc: [channel_allowance: e.quantity || 1])
+
+      _ ->
+        :ok
+    end
+
+    {:entitlement_granted, e}
   end
 
   @doc """

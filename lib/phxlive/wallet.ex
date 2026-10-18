@@ -116,16 +116,42 @@ defmodule Phxlive.Wallet do
   end
 
   @doc """
-  Takes back the Gems of a lost chargeback. May leave the balance negative,
-  which blocks spending until it's settled.
+  Takes back a Gem pack's Gems while its payment is disputed (and for good if
+  the dispute is lost). May leave the balance negative, which blocks spending
+  until it's settled. `n` counts disputes on the order (a won dispute can be
+  followed by another), so each hold has its own idempotency key.
   """
-  def clawback(user, gems, %{id: order_id}) when is_integer(gems) and gems > 0 do
+  def clawback(user, gems, %{id: order_id}, n \\ 1) when is_integer(gems) and gems > 0 do
     post(:chargeback, [{:user, user, -gems}, {:system, "gem_sales", gems}],
-      idempotency_key: "order:#{order_id}:clawback",
+      idempotency_key: "order:#{order_id}:clawback" <> if(n == 1, do: "", else: ":#{n}"),
       reference_type: "store_order",
       reference_id: order_id,
       allow_negative: true
     )
+  end
+
+  @doc "Gives back Gems held by `clawback/4` when the hub wins the dispute (the `n`th time)."
+  def restore_clawback(user, gems, %{id: order_id}, n) when is_integer(gems) and gems > 0 do
+    post(:chargeback_reversal, [{:user, user, gems}, {:system, "gem_sales", -gems}],
+      idempotency_key: "order:#{order_id}:restore:#{n}",
+      reference_type: "store_order",
+      reference_id: order_id
+    )
+  end
+
+  @doc "How many times an order's Gems were held and given back: %{clawbacks: n, restores: n}."
+  def dispute_counts(order_id) do
+    counts =
+      from(t in Transaction,
+        where: t.reference_type == "store_order" and t.reference_id == ^to_string(order_id),
+        where: t.kind in ["chargeback", "chargeback_reversal"],
+        group_by: t.kind,
+        select: {t.kind, count(t.id)}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    %{clawbacks: Map.get(counts, "chargeback", 0), restores: Map.get(counts, "chargeback_reversal", 0)}
   end
 
   # ---------------------------------------------------------------------------

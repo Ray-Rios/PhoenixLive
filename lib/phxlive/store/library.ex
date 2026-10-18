@@ -18,7 +18,7 @@ defmodule Phxlive.Store.Library do
           from k in LicenseKey,
             where: k.user_id == ^user_id and not is_nil(k.sold_at),
             order_by: [desc: k.sold_at],
-            preload: [:product]
+            preload: [:product, :order]
         ),
       grants: grants(user_id, now)
     }
@@ -73,6 +73,7 @@ defmodule Phxlive.Store.Library do
   defp label(%Entitlement{key: key}, _), do: key
 
   defp state(%Entitlement{revoked_at: r, revoked_reason: "expired", ends_at: ends}, _now) when not is_nil(r), do: {:expired, ends}
+  defp state(%Entitlement{revoked_at: r, revoked_reason: "disputed"}, _now) when not is_nil(r), do: :on_hold
   defp state(%Entitlement{revoked_at: r}, _now) when not is_nil(r), do: :revoked
   defp state(%Entitlement{ends_at: nil}, _now), do: :forever
 

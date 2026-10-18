@@ -83,6 +83,8 @@ defmodule Phxlive.StoreTest do
 
     :ok = Fake.dispute(order.provider_ref, :dispute_opened)
     assert %{status: "disputed"} = Store.get_user_order(user, order.id)
+    # Held while the bank decides.
+    assert Wallet.balance(user) == 0
     :ok = Fake.dispute(order.provider_ref, :dispute_won)
     assert %{status: "fulfilled"} = Store.get_user_order(user, order.id)
     assert Wallet.balance(user) == 500
