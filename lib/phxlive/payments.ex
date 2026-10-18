@@ -99,7 +99,7 @@ defmodule Phxlive.Payments do
 
     case result do
       :ok ->
-        mark(stored, processed_at: DateTime.utc_now())
+        mark(stored, processed_at: DateTime.utc_now(), error: nil)
         :ok
 
       {:error, reason} ->
@@ -112,6 +112,35 @@ defmodule Phxlive.Payments do
   defp mark(stored, fields) do
     Repo.update_all(from(p in PaymentEvent, where: p.id == ^stored.id), set: fields)
   end
+
+  @doc """
+  Re-applies stored dispute events for a payment that failed because they
+  arrived before the checkout completion that tells us the payment's id
+  (Stripe can send `charge.dispute.created` first). Called by
+  `Phxlive.Store` once an order has its `provider_payment_ref`.
+  """
+  def replay_waiting(provider_name, payment_ref) when is_binary(payment_ref) do
+    with {:ok, mod} <- provider(provider_name),
+         true <- Code.ensure_loaded?(mod) and function_exported?(mod, :event_from_payload, 1) do
+      from(p in PaymentEvent,
+        where: p.provider == ^provider_name and is_nil(p.processed_at),
+        where: p.event_type in ["dispute_opened", "dispute_won", "dispute_lost"],
+        where: fragment("?->'data'->'object'->>'payment_intent' = ?", p.payload, ^payment_ref),
+        order_by: [asc: p.inserted_at]
+      )
+      |> Repo.all()
+      |> Enum.each(fn stored ->
+        case mod.event_from_payload(stored.payload) do
+          {:ok, event} -> process(stored, event)
+          _ -> :ok
+        end
+      end)
+    end
+
+    :ok
+  end
+
+  def replay_waiting(_provider_name, _payment_ref), do: :ok
 
   @doc "Recent events, newest first (admin)."
   def recent_events(limit \\ 50) do

@@ -113,13 +113,20 @@ defmodule Phxlive.Payments.Stripe do
   def parse_webhook(raw_body, headers) do
     with {:ok, signature} <- header(headers, "stripe-signature"),
          :ok <- verify(raw_body, signature, webhook_secret(), System.system_time(:second)),
-         {:ok, %{"id" => event_id, "type" => type} = event} <- Jason.decode(raw_body) do
-      to_event(event_id, type, get_in(event, ["data", "object"]) || %{}, event)
+         {:ok, %{} = event} <- Jason.decode(raw_body) do
+      event_from_payload(event)
     else
       {:error, reason} -> {:error, reason}
       {:ok, _} -> {:error, :malformed_event}
     end
   end
+
+  @impl true
+  @doc "An event from its decoded JSON (a verified webhook, or one stored in payment_events)."
+  def event_from_payload(%{"id" => event_id, "type" => type} = event),
+    do: to_event(event_id, type, get_in(event, ["data", "object"]) || %{}, event)
+
+  def event_from_payload(_), do: {:error, :malformed_event}
 
   defp header(headers, name) do
     case Enum.find(headers, fn {k, _} -> String.downcase(k) == name end) do

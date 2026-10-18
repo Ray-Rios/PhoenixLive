@@ -29,5 +29,12 @@ defmodule Phxlive.Payments.Provider do
   @doc "Is it configured (keys present)? Assumed true when not implemented."
   @callback available?() :: boolean()
 
-  @optional_callbacks available?: 0
+  @doc """
+  Rebuilds an event from the payload stored in `payment_events` (no signature
+  check: it was checked when it arrived). Used to re-apply an event that came
+  before the event it depends on. Providers without it are never replayed.
+  """
+  @callback event_from_payload(payload :: map()) :: {:ok, Phxlive.Payments.Event.t()} | :ignore | {:error, term()}
+
+  @optional_callbacks available?: 0, event_from_payload: 1
 end

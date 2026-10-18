@@ -363,6 +363,12 @@ defmodule Phxlive.Store do
     |> case do
       {:ok, {:changed, order, events}} ->
         after_commit(order, events)
+
+        # A dispute can arrive before the completion that tells us the
+        # payment's id; now that we know it, apply any that are waiting.
+        if event.type == :checkout_completed and order.provider_payment_ref,
+          do: Phxlive.Payments.replay_waiting(order.provider, order.provider_payment_ref)
+
         :ok
 
       {:ok, :unchanged} ->

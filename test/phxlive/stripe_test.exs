@@ -134,6 +134,22 @@ defmodule Phxlive.Payments.StripeTest do
     assert %{status: "failed"} = Store.get_user_order(user, order.id)
   end
 
+  test "a dispute that arrives before the payment is applied as soon as the payment is" do
+    user = user_fixture()
+    order = stripe_order(user)
+
+    # Stripe sends the dispute first; we don't know the PaymentIntent yet.
+    opened = event("charge.dispute.created", %{"id" => "dp_race", "payment_intent" => "pi_race", "status" => "needs_response"})
+    assert webhook(opened, sign(opened)).status == 500
+
+    paid = event("checkout.session.completed", %{"id" => order.provider_ref, "payment_status" => "paid", "payment_intent" => "pi_race", "amount_total" => 1000, "currency" => "usd"})
+    assert webhook(paid, sign(paid)).status == 200
+
+    assert %{status: "disputed"} = Store.get_user_order(user, order.id)
+    assert Wallet.balance(user) == 0
+    assert Enum.all?(Phxlive.Payments.recent_events(), &(&1.processed_at && is_nil(&1.error)))
+  end
+
   test "disputes find the order by its PaymentIntent; a lost one takes the Gems back" do
     user = user_fixture()
     order = stripe_order(user)
